@@ -1,16 +1,21 @@
 # Guia de Uso das Tools
 
-Este guia explica como as tools entram no runtime agentic e como usar
-as famílias avançadas sem confundir catálogo builtin com registro por
-tenant.
+Este guia explica tools como capacidade operacional governada. O foco não é decorar nomes do catálogo. O foco é entender como uma capability sai do código, passa pelo YAML e chega ao runtime sem virar atalho inseguro.
 
 ## O que é tool neste projeto
 
-Aqui, tool significa ferramenta usada por supervisor, deepagent ou
-workflow.
+Tool aqui é uma capacidade que um supervisor, um DeepAgent ou um workflow pode invocar sob governança. O YAML declara a intenção de uso. O runtime decide se a capacidade realmente existe, se está permitida e qual implementação concreta será materializada.
 
-O YAML escolhe a tool.
-O runtime resolve a implementação real depois.
+Em linguagem simples: a tool não é apenas um nome. É um contrato entre autoria, catálogo e execução.
+
+## O problema que este guia resolve
+
+Sem separar as camadas certas, é fácil cometer dois erros.
+
+1. Confundir catálogo builtin com item concreto publicado para um tenant.
+2. Achar que basta citar uma tool no YAML para que ela rode.
+
+O sistema foi desenhado para bloquear exatamente esse tipo de atalho. A capability só entra em jogo quando catálogo, tenant, contexto e política de execução estão coerentes.
 
 ## Leitura relacionada
 
@@ -22,124 +27,59 @@ O runtime resolve a implementação real depois.
 
 ## Fonte de verdade do catálogo
 
-O catálogo builtin nasce no código.
-ToolsLibraryBuilder varre decorators @tool e @tool_factory e sincroniza
-o catálogo persistido.
-
-ConfigurationFactory só injeta esse catálogo quando o YAML chega com a
-chave tools_library presente e vazia.
-
-Uso prático:
-
-- tools_library ausente é erro;
-- tools_library preenchida no YAML recebido também é erro;
-- o catálogo builtin não deve ser editado manualmente no YAML.
+O catálogo builtin nasce no código e é sincronizado pelo builder oficial. Depois disso, o YAML não deveria tentar reescrever manualmente essa verdade. Pelo contrato observado, tools_library precisa existir e chegar vazia para receber o catálogo central. tools_library ausente ou já preenchida é erro porque o produto quer impedir desvios paralelos de governança.
 
 ## Como uma tool chega ao runtime
 
-```mermaid
-flowchart LR
-        A[YAML resolvido] --> B[ConfigurationFactory injeta tools_library]
-        B --> C[ToolsFactory indexa o catálogo]
-        C --> D[ToolLoader resolve sintaxe parametrizada]
-        D --> E[Factory específica constrói a tool]
-        E --> F[Tool executa recurso interno ou externo]
-```
+![Como uma tool chega ao runtime](assets/diagrams/docs-guia-usuario-tools-diagrama-01.svg)
 
 ## Duas camadas diferentes de cadastro
 
 ### Catálogo builtin
 
-Define a família técnica disponível para o runtime.
-
-Exemplos:
-
-- dyn_sql;
-- dyn_api;
-- proc_sql;
-- schema_rag_sql.
+O catálogo builtin responde a pergunta: que famílias técnicas o produto sabe materializar? É aqui que entram famílias como dyn_sql, dyn_api, proc_sql e schema_rag_sql.
 
 ### Registro governado por tenant
 
-Define quais queries e operações publicadas podem ser usadas por uma
-família dinâmica.
+O registro governado responde outra pergunta: qual item concreto daquela família está autorizado para este tenant? É aqui que entram tabelas como integrations.sql_query_registry e integrations.api_operation_registry.
 
-Tabelas observadas no código:
-
-- integrations.sql_query_registry;
-- integrations.api_operation_registry.
-
-Em linguagem simples: o catálogo builtin diz que a família existe.
-O registro por tenant diz qual item concreto dessa família pode rodar.
+Em termos práticos, o catálogo builtin diz que a família existe. O registro por tenant diz o que exatamente dessa família pode rodar em produção.
 
 ## Sintaxe parametrizada real
 
-As famílias dinâmicas usam sintaxe curta no YAML.
-
-- dyn_sql<query_id>
-- proc_sql<procedure_id>
-- dyn_api<endpoint_id>
-
-ToolLoader extrai base e parâmetro e entrega o payload para a factory
-certa.
+As famílias dinâmicas expõem uma sintaxe pública curta porque o autor do YAML precisa declarar intenção sem carregar todos os detalhes técnicos no documento. Os exemplos centrais são dyn_sql<query_id>, proc_sql<procedure_id> e dyn_api<endpoint_id>. O runtime extrai a base e o identificador e só então procura a factory correta.
 
 ## Famílias mais importantes
 
 ### dyn_sql
 
-Use quando a query já existe e o agente só precisa preencher
-parâmetros.
-
-Ordem de resolução:
-
-1. tools_config.sql_dynamic no próprio YAML.
-2. integrations.sql_query_registry por query_code.
+Use dyn_sql<query_id> quando a consulta já existe e o risco principal é governar parâmetros e autorização. É o caminho mais seguro quando o negócio conhece a query que quer executar.
 
 ### proc_sql
 
-Use quando a operação precisa passar por stored procedure aprovada.
+Use proc_sql<procedure_id> quando a empresa já homologou a procedure e quer manter a operação dentro desse contrato.
 
 ### dyn_api
 
-Use quando o endpoint HTTP já foi aprovado e descrito por contrato.
-
-Ordem de resolução:
-
-1. tools_config.api_dynamic no próprio YAML.
-2. integrations.api_operation_registry por operation_code.
-
-No registro persistido, dyn_api aceita apenas protocol_type igual a
-rest_json.
+Use dyn_api<endpoint_id> quando o alvo é uma operação HTTP previamente aprovada, com autenticação e comportamento controlados.
 
 ### schema_rag_sql
 
-Use quando a entrada é linguagem natural e a geração de SQL depende de
-metadados de schema.
-
-Esse caminho não substitui dyn_sql.
-Ele resolve outro problema: gerar SQL a partir de contexto estrutural.
+Use schema_rag_sql quando o problema exige gerar SQL a partir de metadados de schema. Esse caminho não substitui dyn_sql. Ele resolve outro caso: composição nova de consulta quando a pergunta não cabe numa query já homologada.
 
 ## Superfícies assistidas de produto
 
-As rotas abaixo ajudam a escolher ou montar tools, mas não são tools em
-si.
+As rotas de assembly ajudam o usuário a entender, escolher e montar tools, mas não substituem o runtime. Os pontos mais importantes são /config/assembly/catalog, /config/assembly/schema, /config/assembly/recommend-tools e /config/assembly/objective-to-yaml.
 
-- GET /config/assembly/catalog
-- GET /config/assembly/schema
-- POST /config/assembly/recommend-tools
-- POST /config/assembly/objective-to-yaml
-
-Na prática, elas servem para autoria assistida e revisão governada.
+Em linguagem simples: essas superfícies ajudam a autoria governada. A execução real continua dependendo do catálogo, do tenant e do contexto.
 
 ## Guardrails comprovados no código
 
 - referência local para tool inexistente gera diagnóstico semântico;
 - dyn_sql e dyn_api exigem identificador técnico;
 - consulta em registro persistido exige user_session.tenant_id;
-- item em tabela precisa estar ativo e com publish_to_agents igual a
-    true;
-- dyn_api usa autenticação gerenciada e cache de token quando houver
-    perfil de auth;
+- item em tabela precisa estar ativo e com publish_to_agents igual a true;
+- dyn_api usa autenticação gerenciada e cache de token quando houver perfil de auth;
 - dyn_sql usa retry para erro transitório de banco;
 - schema_rag_sql depende de schema metadata habilitado.
 

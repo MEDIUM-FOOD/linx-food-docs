@@ -93,22 +93,7 @@ O objetivo não é velocidade. O objetivo é sentir o ciclo inteiro.
 
 ## Mapa mental do novo desenvolvedor
 
-```mermaid
-flowchart TB
-  A[Recebi uma demanda] --> B{Existe erro com log?}
-  B -- sim --> C[Usar corrigir-erros-com-log]
-  B -- nao --> D{Sei onde mexer?}
-  D -- nao --> E[Usar investigar]
-  D -- sim --> F{Ha risco ou multiplas etapas?}
-  F -- sim --> G[Usar planejar]
-  F -- nao --> H[Usar implementar]
-  E --> G
-  G --> H
-  C --> H
-  H --> I[Rodar validacao]
-  I --> J[Documentar se necessario]
-  J --> K[Registrar tarefa]
-```
+![Mapa mental do novo desenvolvedor](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-onboarding-diagrama-01.svg)
 
 ## Como formular bons pedidos ao Copilot
 

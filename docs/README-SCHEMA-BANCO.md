@@ -682,101 +682,17 @@ Em linguagem simples: quando o agente para e pede ajuda humana, esta tabela vira
 - Check `agent_hil_approval_requests_resolved_requires_decision_check` exigindo `decision_type` e `decided_at` quando `status = 'resolved'`.
 - Check `agent_hil_approval_requests_expires_after_created_check` exigindo `expires_at > created_at`.
 
-#### DDL da tabela HIL
+#### Estrutura operacional da tabela HIL
 
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+Em termos práticos, o DDL formaliza cinco garantias estruturais:
 
-CREATE TABLE IF NOT EXISTS public.agent_hil_approval_requests (
-    approval_request_id UUID NOT NULL DEFAULT gen_random_uuid(),
-    correlation_id TEXT NOT NULL,
-    thread_id TEXT NOT NULL,
-    task_id TEXT NULL,
-    user_email TEXT NOT NULL,
-    user_code TEXT NOT NULL,
-    tenant_id TEXT NULL,
-    client_code TEXT NULL,
-    supervisor_id TEXT NOT NULL,
-    agent_mode TEXT NOT NULL DEFAULT 'deepagent',
-    protocol_version TEXT NOT NULL DEFAULT 'hil-http-v1',
-    action_requests JSONB NOT NULL DEFAULT '[]'::jsonb,
-    review_configs JSONB NOT NULL DEFAULT '[]'::jsonb,
-    allowed_decisions JSONB NOT NULL DEFAULT '["approve", "reject"]'::jsonb,
-    status TEXT NOT NULL DEFAULT 'pending',
-    notification_status TEXT NOT NULL DEFAULT 'not_started',
-    approval_token_hash TEXT NOT NULL,
-    approval_token_hint TEXT NULL,
-    expected_approver_email TEXT NULL,
-    expected_channel TEXT NULL,
-    expected_channel_user_id TEXT NULL,
-    notification_channel TEXT NULL,
-    notification_provider TEXT NULL,
-    provider_message_id TEXT NULL,
-    decision_type TEXT NULL,
-    decision_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-    decided_by_email TEXT NULL,
-    decided_by_user_code TEXT NULL,
-    decided_channel TEXT NULL,
-    decided_channel_user_id TEXT NULL,
-    decided_at TIMESTAMPTZ NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    CONSTRAINT agent_hil_approval_requests_pkey PRIMARY KEY (approval_request_id),
-    CONSTRAINT agent_hil_approval_requests_token_hash_unique UNIQUE (approval_token_hash),
-    CONSTRAINT agent_hil_approval_requests_agent_mode_check CHECK (agent_mode IN ('agent', 'deepagent', 'workflow')),
-    CONSTRAINT agent_hil_approval_requests_status_check CHECK (status IN ('pending', 'resolved', 'expired', 'failed', 'cancelled')),
-    CONSTRAINT agent_hil_approval_requests_notification_status_check CHECK (notification_status IN ('not_started', 'sent', 'partial', 'failed')),
-    CONSTRAINT agent_hil_approval_requests_expected_channel_check CHECK (
-        expected_channel IS NULL
-        OR expected_channel IN ('whatsapp', 'email', 'teams', 'slack', 'webchat', 'instagram')
-    ),
-    CONSTRAINT agent_hil_approval_requests_decision_type_check CHECK (
-        decision_type IS NULL
-        OR decision_type IN ('approve', 'edit', 'reject')
-    ),
-    CONSTRAINT agent_hil_approval_requests_action_requests_json_check CHECK (jsonb_typeof(action_requests) = 'array'),
-    CONSTRAINT agent_hil_approval_requests_review_configs_json_check CHECK (jsonb_typeof(review_configs) = 'array'),
-    CONSTRAINT agent_hil_approval_requests_allowed_decisions_json_check CHECK (jsonb_typeof(allowed_decisions) = 'array'),
-    CONSTRAINT agent_hil_approval_requests_decision_payload_json_check CHECK (jsonb_typeof(decision_payload) = 'object'),
-    CONSTRAINT agent_hil_approval_requests_metadata_json_check CHECK (jsonb_typeof(metadata) = 'object'),
-    CONSTRAINT agent_hil_approval_requests_resolved_requires_decision_check CHECK (
-        status <> 'resolved'
-        OR (
-            decision_type IS NOT NULL
-            AND decided_at IS NOT NULL
-        )
-    ),
-    CONSTRAINT agent_hil_approval_requests_expires_after_created_check CHECK (expires_at > created_at)
-);
+1. a tabela usa UUID com `pgcrypto` para `approval_request_id`;
+2. existe unicidade forte para `approval_token_hash` e para a pausa pendente por `correlation_id + thread_id`;
+3. `agent_mode`, `status`, `notification_status`, `expected_channel` e `decision_type` ficam limitados por checks explícitos;
+4. os blocos JSON operacionais, como `action_requests`, `review_configs`, `allowed_decisions`, `decision_payload` e `metadata`, são validados pelo banco para manter o tipo esperado;
+5. a tabela recebe índices separados para retomada por thread, expiração, aprovador esperado, canal esperado e operação multi-tenant.
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_agent_hil_approval_requests_active_pause
-    ON public.agent_hil_approval_requests (correlation_id, thread_id)
-    WHERE status = 'pending';
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_correlation_thread
-    ON public.agent_hil_approval_requests (correlation_id, thread_id);
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_task
-    ON public.agent_hil_approval_requests (task_id)
-    WHERE task_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_pending_expiration
-    ON public.agent_hil_approval_requests (expires_at)
-    WHERE status = 'pending';
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_expected_approver
-    ON public.agent_hil_approval_requests (expected_approver_email, status, expires_at)
-    WHERE expected_approver_email IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_channel_user
-    ON public.agent_hil_approval_requests (expected_channel, expected_channel_user_id, status)
-    WHERE expected_channel IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_agent_hil_approval_requests_tenant_status
-    ON public.agent_hil_approval_requests (tenant_id, client_code, status, created_at DESC);
-```
+Isso importa porque a integridade de HIL não depende só da aplicação. O banco também impede estados impossíveis, como duas pausas pendentes para a mesma execução ou uma aprovação resolvida sem decisão e sem timestamp final.
 
 ## Domínio Tenants e Segurança
 
@@ -1446,193 +1362,19 @@ Em linguagem simples: pense nesse schema como uma prateleira oficial de integrac
 - O domínio operacional de loja e entrega aparece em `pdv.lojas`, `pdv.tipos_entrega` e `pdv.meios_pagamento`.
 - O DDL recebido formaliza apenas a FK de `pdv.vendas.checkout_id` para `pdv.checkout_sessions(checkout_id)`. As demais relações de negócio aparecem pelo padrão dos campos `id_*`, mesmo quando a constraint não está declarada no script.
 
-### DDL de referência
+### Estrutura lógica de referência
 
-```sql
-CREATE TABLE pdv.categorias (
-    id_categorias int4 NOT NULL,
-    nome varchar(100) NULL
-);
+O schema demo de varejo está organizado em cinco blocos funcionais:
 
-CREATE TABLE pdv.checkout_sessions (
-    checkout_id varchar(100) NOT NULL,
-    ucp_version varchar(20) NOT NULL,
-    ucp_capabilities jsonb NOT NULL,
-    ucp_status varchar(50) NOT NULL,
-    currency varchar(10) NOT NULL,
-    buyer jsonb NULL,
-    line_items jsonb NOT NULL,
-    totals jsonb NOT NULL,
-    payment jsonb NOT NULL,
-    messages jsonb NULL,
-    links jsonb NULL,
-    fulfillment jsonb NULL,
-    fulfillment_options jsonb NULL,
-    fulfillment_option_id varchar(100) NULL,
-    expires_at timestamptz NULL,
-    continue_url varchar(1000) NULL,
-    order_id varchar(100) NULL,
-    order_permalink_url varchar(1000) NULL,
-    idempotency_key varchar(100) NULL,
-    risk_signals jsonb NULL,
-    created_at timestamptz DEFAULT now() NOT NULL,
-    updated_at timestamptz DEFAULT now() NOT NULL,
-    completed_at timestamptz NULL,
-    canceled_at timestamptz NULL,
-    CONSTRAINT pk_exemplo2_checkout_sessions PRIMARY KEY (checkout_id)
-);
-CREATE INDEX idx_exemplo2_checkout_sessions_created_at ON pdv.checkout_sessions USING btree (created_at);
-CREATE INDEX idx_exemplo2_checkout_sessions_status ON pdv.checkout_sessions USING btree (ucp_status);
+1. catálogo, com `categorias`, `subcategorias`, `marcas`, `cores` e `produtos`;
+2. cliente, com `clientes`, `cidade`, `genero` e `tipo_endereco`;
+3. operação comercial, com `lojas`, `tipos_entrega` e `meios_pagamento`;
+4. checkout UCP, com `checkout_sessions` e seus campos JSON de capacidade, itens, totais, pagamento, links, fulfillment e sinais de risco;
+5. vendas, com a tabela `vendas` concentrando compra, pagamento, entrega, metadados UCP e a FK explícita para `checkout_sessions`.
 
-CREATE TABLE pdv.cidade (
-    id_cidade int4 NOT NULL,
-    nome varchar(50) NULL
-);
+Os índices descritos no DDL reforçam principalmente lookup por status e data em `checkout_sessions` e consultas operacionais por checkout, data de venda, cliente, loja, produto e status UCP em `vendas`.
 
-CREATE TABLE pdv.clientes (
-    id_cliente int4 NOT NULL,
-    cpf varchar(20) NULL,
-    nome varchar(50) NULL,
-    data_nascimento date NOT NULL,
-    ddi int4 NULL,
-    ddd int4 NULL,
-    celular int4 NULL,
-    email varchar(50) NULL,
-    pais varchar(50) NULL,
-    cep int4 NULL,
-    bairro varchar(50) NULL,
-    endereco varchar(50) NULL,
-    numero int4 NULL,
-    data_cadastro date NULL,
-    id_cidade int4 NOT NULL,
-    id_genero int4 NULL,
-    id_tipo_endereco int4 NULL,
-    first_name varchar(50) NULL,
-    last_name varchar(50) NULL,
-    phone_number varchar(30) NULL
-);
-
-CREATE TABLE pdv.cores (
-    id_cores int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.datas_comemorativas (
-    id_data_comemorativa int4 NOT NULL,
-    data_comemorativa date NOT NULL,
-    nome_comemoracao varchar(100) NULL
-);
-
-CREATE TABLE pdv.genero (
-    id_genero int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.lojas (
-    id_lojas int4 NOT NULL,
-    cnpj varchar(20) NULL,
-    nome varchar(50) NULL,
-    pais varchar(50) NULL,
-    cidade varchar(50) NULL,
-    cep int4 NULL,
-    bairro varchar(50) NULL,
-    endereco varchar(50) NULL,
-    numero varchar(50) NULL,
-    data_cadastro varchar(50) NULL
-);
-
-CREATE TABLE pdv.marcas (
-    id_marcas int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.meios_pagamento (
-    id_meios_pagamento int4 NOT NULL,
-    nome varchar(50) NULL,
-    ucp_handler_id varchar(100) NULL,
-    ucp_handler_version varchar(50) NULL,
-    ucp_handler_spec varchar(500) NULL,
-    ucp_config_schema varchar(500) NULL,
-    ucp_instrument_schemas jsonb NULL
-);
-
-CREATE TABLE pdv.produtos (
-    id_produtos int4 NOT NULL,
-    nome varchar(150) NULL,
-    descricao varchar(1000) NULL,
-    preco numeric(12, 2) NOT NULL,
-    estoque int4 NOT NULL,
-    id_categorias int4 NOT NULL,
-    id_subcategorias int4 NOT NULL,
-    id_marcas int4 NOT NULL,
-    id_cores int4 NOT NULL,
-    imagem varchar(1000) NULL,
-    preco_oferta numeric(12, 2) NULL
-);
-
-CREATE TABLE pdv.subcategorias (
-    id_subcategorias int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.tipo_endereco (
-    id_tipo_endereco int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.tipos_entrega (
-    id_tipos_entrega int4 NOT NULL,
-    nome varchar(50) NULL
-);
-
-CREATE TABLE pdv.vendas (
-    id_compras int4 NOT NULL,
-    id_cliente int4 NOT NULL,
-    id_produtos int4 NOT NULL,
-    id_lojas int4 NOT NULL,
-    quantidade_vendida int4 NOT NULL,
-    data_venda timestamp NULL,
-    preco_total numeric(12, 2) NOT NULL,
-    desconto_concedido numeric(12, 2) NULL,
-    frete numeric(12, 2) NULL,
-    valor_pago numeric(12, 2) NOT NULL,
-    cupom varchar(50) NULL,
-    parcelas int4 NULL,
-    status varchar(50) NULL,
-    data_envio varchar(50) NULL,
-    data_entrega varchar(50) NULL,
-    id_meios_pagamento int4 NOT NULL,
-    id_tipos_entrega int4 NOT NULL,
-    checkout_id varchar(100) NULL,
-    ucp_version varchar(20) NULL,
-    ucp_capabilities jsonb NULL,
-    ucp_status varchar(50) NULL,
-    currency varchar(10) NULL,
-    line_items jsonb NULL,
-    totals jsonb NULL,
-    payment jsonb NULL,
-    messages jsonb NULL,
-    links jsonb NULL,
-    fulfillment jsonb NULL,
-    fulfillment_options jsonb NULL,
-    fulfillment_option_id varchar(100) NULL,
-    expires_at timestamptz NULL,
-    continue_url varchar(1000) NULL,
-    order_id varchar(100) NULL,
-    order_permalink_url varchar(1000) NULL,
-    idempotency_key varchar(100) NULL,
-    risk_signals jsonb NULL,
-    created_at timestamptz DEFAULT now() NULL,
-    updated_at timestamptz DEFAULT now() NULL,
-    CONSTRAINT fk_exemplo2_vendas_checkout_id FOREIGN KEY (checkout_id) REFERENCES pdv.checkout_sessions(checkout_id)
-);
-CREATE INDEX idx_exemplo2_vendas_checkout_id ON pdv.vendas USING btree (checkout_id);
-CREATE INDEX idx_exemplo2_vendas_data_venda ON pdv.vendas USING btree (data_venda);
-CREATE INDEX idx_exemplo2_vendas_id_cliente ON pdv.vendas USING btree (id_cliente);
-CREATE INDEX idx_exemplo2_vendas_id_lojas ON pdv.vendas USING btree (id_lojas);
-CREATE INDEX idx_exemplo2_vendas_id_produtos ON pdv.vendas USING btree (id_produtos);
-CREATE INDEX idx_exemplo2_vendas_ucp_status ON pdv.vendas USING btree (ucp_status);
-```
+Na prática, esta seção deve ser lida como mapa de domínio do banco demo, não como script de provisionamento. O objetivo operacional é orientar integrações, NL2SQL, SQL dinâmico, dashboards e troubleshooting sem manter blocos DDL extensos dentro do manual geral.
 
 ## Observações Finais
 

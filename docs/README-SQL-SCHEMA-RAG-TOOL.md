@@ -205,74 +205,11 @@ mesma capacidade com formas ligeiramente diferentes de nome.
 
 ## Arquitetura do fluxo
 
-```mermaid
-sequenceDiagram
-    participant O as Operador
-    participant API as Endpoint NL2SQL
-    participant TOOL as schema_rag_sql
-    participant VS as Vector Store de Schema
-    participant LLM as Modelo
-    participant G as Guardrail
+![Arquitetura do fluxo](assets/diagrams/docs-readme-sql-schema-rag-tool-diagrama-01.svg)
 
-    O->>API: Pergunta em linguagem natural
-    API->>API: Resolve YAML e correlation_id
-    API->>TOOL: Aciona geração dedicada
-    TOOL->>VS: Busca schema relevante
-    VS-->>TOOL: Documentos de schema
-    TOOL->>TOOL: Limita e formata contexto
-    TOOL->>LLM: Prompt com schema e dialeto
-    LLM-->>TOOL: SQL proposta
-    TOOL-->>API: Resposta bruta
-    API->>G: Valida somente leitura
-    G-->>API: Aprovada ou bloqueada
-    API-->>O: SQL, warnings, diagnostics e review_required
-```
+![Arquitetura do fluxo](assets/diagrams/docs-readme-sql-schema-rag-tool-diagrama-02.svg)
 
-```mermaid
-flowchart LR
-    A[Banco de origem] --> B[ETL de schema metadata]
-    B --> C[Catálogo dbschemas]
-    C --> D[Exportação de documentos de schema]
-    D --> E[Vector store de schema]
-    E --> F[Endpoint NL2SQL]
-    F --> G[LLM com dialeto fixo]
-    G --> H[Guardrail somente leitura]
-    H --> I[Proposta revisável]
-```
-
-```mermaid
-flowchart TB
-    subgraph Operacao
-        U[Operador faz a pergunta]
-        R[Operador revisa a SQL]
-    end
-
-    subgraph API
-        A1[Resolve YAML]
-        A2[Injeta correlation_id]
-        A3[Chama Nl2SqlService]
-    end
-
-    subgraph Geracao
-        G1[Seleciona vectorstore_id]
-        G2[Busca schema relevante]
-        G3[Trunca contexto]
-        G4[Gera SQL no dialeto certo]
-    end
-
-    subgraph Protecao
-        P1[Valida somente leitura]
-        P2[Marca review_required]
-        P3[Emite diagnostics]
-    end
-
-    subgraph Evolucao
-        E1[Consulta aprovada]
-        E2[Migra para dyn_sql quando recorrente]
-    end
-
-    U --> A1 --> A2 --> A3 --> G1 --> G2 --> G3 --> G4 --> P1 --> P2 --> P3 --> R --> E1 --> E2
-```
+![Arquitetura do fluxo](assets/diagrams/docs-readme-sql-schema-rag-tool-diagrama-03.svg)
 
 ## Endpoint dedicado e contrato HTTP
 

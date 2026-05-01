@@ -73,178 +73,23 @@ Quando AG-UI entra no jogo, ele nao substitui esse contrato de HIL. Ele muda a f
 
 ## 5) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart TD
-    U[Usuario ou Operador] --> API{Entrada HTTP}
-    API -->|DeepAgent| EXEC[/POST /agent/execute/]
-    API -->|Workflow| WEXEC[/POST /workflow/execute/]
-    API -->|AG-UI| AGEXEC[/POST /ag-ui/runs/]
-    EXEC --> CFG[Resolucao de YAML e autenticacao]
-    WEXEC --> CFG
-    AGEXEC --> AGCFG[Resolucao AG-UI + SSE]
-    CFG --> RT{Runtime}
-    AGCFG --> AGRT{Adapter AG-UI}
-    RT -->|Tool sensivel| DA[DeepAgentSupervisor]
-    RT -->|Node ou tool humana| WF[WorkflowOrchestrator e nodes]
-    AGRT -->|outcome interrupt| AGPAUSE[RUN_FINISHED com interrupts]
-    DA --> PAUSE[Pause HIL e envelope hil]
-    WF --> WPAUSE[Pause HIL em workflow]
-    PAUSE --> HUMAN[Humano revisa]
-    WPAUSE --> HUMAN
-    AGPAUSE --> HUMAN
-    HUMAN -->|DeepAgent| CONT[/POST /agent/continue/]
-    HUMAN -->|Workflow| WCONT[/POST /workflow/continue/]
-    HUMAN -->|AG-UI host faz a ponte| CONT
-    CONT --> RESUME[Retomada com thread_id e decisao]
-    WCONT --> RESUME
-    RESUME --> FINAL[Execucao finaliza ou rejeita]
-```
+![5) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-human-in-the-loop-diagrama-01.svg)
 
 ## 6) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant WC as WebChat
-    participant API as agent_router
-    participant CFG as config_resolution + auth
-    participant SUP as DeepAgentSupervisor
-    participant REG as normalize_hil_contract
-    participant H as Humano
-
-    U->>WC: envia pergunta
-    WC->>API: POST /agent/execute
-    API->>CFG: resolve_yaml_configuration + authenticate_with_yaml_config
-    CFG-->>API: yaml_config + contexto autenticado
-    API->>SUP: run(task, thread)
-    SUP-->>API: resultado pausado + interrupts
-    API->>REG: normalize_hil_interrupts / normalize_hil_contract
-    REG-->>API: envelope hil + thread_id + resume_endpoint
-    API-->>WC: response com hil.pending=true
-    WC->>WC: HilContract.normalizeResponse
-    WC-->>H: HilReviewPanel.create(...)
-    H->>WC: approve | edit | reject
-    WC->>WC: buildResumePayload(contract,...)
-    WC->>API: POST resume_endpoint
-    API->>SUP: run(Command(resume=...), mesmo thread_id)
-    SUP-->>API: resposta final
-    API-->>WC: execucao retomada
-    WC-->>U: mensagem final
-```
+![6) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-human-in-the-loop-diagrama-02.svg)
 
 ## 7) Mapa visual 3: camadas
 
-```mermaid
-flowchart LR
-    subgraph E[Entry points]
-        A1[agent_router]
-        A2[workflow_router]
-        A3[channel_router]
-    end
-
-    subgraph O[Orquestracao]
-        O1[AgentOrchestrator]
-        O2[WorkflowOrchestrator]
-        O3[WorkflowExecutionService]
-    end
-
-    subgraph G[Agents e Graphs]
-        G1[DeepAgentSupervisor]
-        G2[AgentWorkflow]
-        G3[BaseNodeHandler]
-    end
-
-    subgraph T[Tools e HIL]
-        T1[interrupt_on]
-        T2[human_gate]
-        T3[normalize_hil_contract]
-        T4[HilBackgroundApprovalService]
-    end
-
-    subgraph D[Persistencia e estado]
-        D1[checkpointer]
-        D2[HilPauseRegistry]
-        D3[agent_hil_approval_requests]
-    end
-
-    subgraph U[UI e contratos]
-        U1[Envelope hil]
-        U2[ui-webchat-hil-contract.js]
-        U3[hil-review-panel.js]
-        U4[admin-webchat/app.js e ui-webchat-v3.js]
-    end
-
-    A1 --> O1 --> G1 --> T1 --> D1 --> U1 --> U2 --> U3 --> U4
-    A2 --> O3 --> O2 --> G2 --> T2 --> D1
-    A3 --> T4 --> D3
-    G1 --> T3 --> U1
-```
+![7) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-human-in-the-loop-diagrama-03.svg)
 
 ## 8) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-    C1[docs/README-HUMAN-IN-THE-LOOP.md]
-    C2[src/api/routers/agent_router.py]
-    C3[src/agentic_layer/supervisor/deep_agent_supervisor.py]
-    C4[src/config/agentic_assembly/ast/deepagent.py]
-    C5[src/config/agentic_assembly/validators/deepagent_semantic_validator.py]
-    C6[src/agentic_layer/tools/system_tools/human_input.py]
-    C7[src/api/routers/workflow_router.py]
-    C8[src/agentic_layer/workflow/nodes/base.py]
-    C9[app/ui/static/js/shared/ui-webchat-hil-contract.js]
-    C10[app/ui/static/js/shared/hil-review-panel.js]
-    C11[app/ui/static/js/admin-webchat/app.js]
-    C12[app/ui/static/js/ui-webchat-v3.js]
-    C13[tests/integration/hil/test_hil_deepagent_flow.py]
-    C14[tests/frontend/ui_webchat_hil_contract.test.js]
-
-    C1 --> C2
-    C1 --> C3
-    C2 --> C3
-    C3 --> C4
-    C3 --> C5
-    C7 --> C8
-    C6 --> C8
-    C2 --> C9
-    C9 --> C10
-    C10 --> C11
-    C10 --> C12
-    C2 --> C13
-    C9 --> C14
-```
+![8) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-human-in-the-loop-diagrama-04.svg)
 
 ### Mapa visual 5: swimlane funcional
 
-```mermaid
-flowchart LR
-    subgraph L1[Raia 1 - Cliente e UI]
-        S1[Usuario envia pedido]
-        S2[UI detecta hil.pending]
-        S3[Humano decide]
-    end
-
-    subgraph L2[Raia 2 - API]
-        S4[Router resolve YAML e auth]
-        S5[API devolve thread_id e envelope hil]
-        S6[API recebe continue]
-    end
-
-    subgraph L3[Raia 3 - Runtime]
-        S7[DeepAgent pausa tool-call]
-        S8[Workflow pausa node ou human_gate]
-        S9[Runtime retoma com decisao]
-    end
-
-    subgraph L4[Raia 4 - Persistencia]
-        S10[Checkpointer salva estado]
-        S11[Registro HIL duravel opcional]
-    end
-
-    S1 --> S4 --> S7 --> S10 --> S5 --> S2 --> S3 --> S6 --> S9
-    S4 --> S8 --> S10
-    S5 --> S11
-```
+![Mapa visual 5: swimlane funcional](assets/diagrams/docs-tutorial-101-human-in-the-loop-diagrama-05.svg)
 
 ## 9) Onde isso aparece neste projeto
 

@@ -1,201 +1,93 @@
-# API HTTP e Boundary do Serviço
+# Boundary HTTP da Plataforma
 
-Este documento explica o papel do processo HTTP principal.
-Ele não tenta listar endpoint por endpoint.
-Para inventário de rotas, payloads e respostas, use
-API-ENDPOINTS-SWAGGER.md.
+Este manual explica a API como fronteira operacional do produto. O objetivo não é repetir Swagger. O objetivo é mostrar o que o processo HTTP realmente faz antes, durante e depois de entregar uma resposta ao cliente.
 
-## Leitura relacionada
+## 1. Visão geral
 
-- Visão macro do runtime: [README-ARQUITETURA.md](./README-ARQUITETURA.md)
-- Autenticação técnica e humana: [README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md)
-- MFA da sessão web: [README-AUTENTICACAO-MFA.md](./README-AUTENTICACAO-MFA.md)
-- Permissões por endpoint: [README-AUTORIZACAO.md](./README-AUTORIZACAO.md)
-- Inventário das rotas: [API-ENDPOINTS-SWAGGER.md](./API-ENDPOINTS-SWAGGER.md)
+O processo HTTP é a porta de entrada do sistema. Ele recebe a request, resolve identidade, aplica permissão, injeta correlation_id, escolhe se a resposta pode sair no mesmo request ou se precisa continuar de forma assíncrona e publica tanto a API JSON quanto a UI estática servida em /ui/static.
 
-## O que este processo sobe de verdade
+Em termos práticos, a API é o lugar onde o sistema deixa de ser intenção e vira operação observável. Se a borda está ruim, o resto do runtime herda contexto incompleto, autenticação inconsistente ou rota errada.
 
-O app principal nasce em src/api/service_api.py.
-Ele monta no mesmo processo:
+## 2. O problema que este boundary resolve
 
-- a API FastAPI;
-- a documentação em /docs, /redoc e /openapi.json;
-- os assets da UI em /ui/static;
-- o proxy HTTP em /mcp;
-- os routers públicos, administrativos e operacionais.
+Sem uma borda HTTP organizada, a plataforma cairia em um padrão perigoso: cada domínio resolveria autenticação, YAML, status, stream e contratos de resposta do seu próprio jeito. Isso parece rápido no início, mas destrói rastreabilidade e faz o mesmo tipo de erro reaparecer em vários pontos.
 
-Em linguagem simples: API e UI administrativa compartilham o mesmo
-boundary HTTP.
+O boundary existe para evitar isso. Ele centraliza o que toda request precisa saber antes de entrar em ingestão, RAG, workflows, assembly AST, canais, autenticação federada ou operação administrativa.
 
-## O que esse boundary faz
+## 3. Conceitos necessários para entender o módulo
 
-O processo HTTP recebe a request, autentica, aplica permissões,
-resolve YAML quando necessário, chama o service certo e devolve o
-resultado ou o aceite assíncrono.
+Boundary HTTP é a camada que protege o resto do sistema de detalhes de protocolo, cabeçalhos, sessão e formato de request.
 
-Ele não deve ser confundido com o worker nem com o scheduler.
+Aceite assíncrono significa receber um pedido agora e continuar o trabalho depois, normalmente devolvendo task_id e uma superfície de acompanhamento.
 
-## Famílias de superfície montadas no app
+SSE, ou Server-Sent Events, é um canal de streaming unidirecional usado aqui para acompanhar evolução de jobs. Um exemplo importante é /status/stream/{task_id}.
 
-Pelo wiring atual, o app inclui grupos como:
+Mount de UI significa publicar arquivos estáticos dentro do mesmo processo HTTP. Aqui isso aparece no serving da UI administrativa em /ui/static.
 
-- /agent e /workflow;
-- /rag, /status e /api/v1/status;
-- /config, /config/assembly, /config/nl2sql e /config/contract;
-- /admin, /client-portal e /api/auth;
-- /channels, /ingestion-runs e /interaction-runs;
-- /schema-metadata, /api/whatsapp, /api/instagram e /api/dnit.
+## 4. Como o boundary funciona por dentro
 
-Na prática, isso mostra que o boundary HTTP atende produto,
-observabilidade, portal, autenticação e operação administrativa.
+A request entra no app FastAPI montado em service_api. Antes de qualquer regra de domínio, o processo aplica middlewares de sessão federada, rate limit, correlation_id, logging de request e handlers globais de erro. Depois disso, a request cai no router do domínio certo.
 
-## UI administrativa no mesmo app
+Se o fluxo exigir YAML, a API passa pelo resolvedor central de configuração. Se o fluxo exigir permissão, a borda verifica a capacidade declarada. Se o fluxo for longo, a API não finge conclusão. Ela aceita o pedido, devolve contrato de acompanhamento e deixa a continuidade para worker ou runtime assíncrono.
 
-O mesmo processo que serve JSON também entrega páginas e JavaScript da
-UI.
+Esse mesmo processo HTTP também publica a UI administrativa. A interface que consome o assembly AST está em app/ui/static/js/admin-assembly-ast.js, mas ela não fala com um backend separado. Ela conversa com a mesma API que recebe as requests operacionais do produto.
 
-Isso importa por um motivo simples: problema de tela nem sempre é um
-problema só de front-end.
-Muitas vezes o defeito está no contrato HTTP do mesmo app.
+## 5. Pipeline principal do boundary
 
-## Autenticação e permissão
+1. Entrada da request.
+2. Resolução de autenticação, permissão e correlation_id.
+3. Enriquecimento de contexto, incluindo YAML quando necessário.
+4. Encaminhamento ao router e service corretos.
+5. Resposta curta no mesmo request ou aceite assíncrono com task_id.
+6. Exposição de canais de acompanhamento, como /status/stream/{task_id}.
 
-O boundary aceita mais de uma origem de identidade.
+O valor desse pipeline é previsibilidade. Em vez de cada domínio improvisar sua própria superfície, todos passam pela mesma porta de entrada.
 
-- X-API-Key no header.
-- access_key resolvida a partir do YAML.
-- sessão federada web.
+## 6. Decisões técnicas importantes
 
-Além disso, o app aplica controle de permissão por endpoint e protege o
-Swagger com verificação específica.
+A primeira decisão importante é manter API JSON e UI administrativa no mesmo app. Isso reduz divergência entre contrato e tela, porque a interface que o operador usa bebe da mesma superfície HTTP que o backend já expõe.
 
-## Middlewares e handlers que mudam o comportamento
+A segunda decisão é publicar o slice agentic por feature flag. Quando FEATURE_AGENTIC_AST_ENABLED está ativa, o app monta endpoints como /config/assembly/draft, /config/assembly/objective-to-yaml, /config/assembly/validate, /config/assembly/confirm, /config/assembly/catalog e /config/assembly/schema. Quando a flag está desligada, o app não deveria fingir suporte parcial.
 
-Os pontos mais relevantes do app são:
+A terceira decisão é tratar acompanhamento assíncrono como parte do boundary, não como apêndice. Por isso status, SSE e WebSocket vivem na borda pública, e não escondidos em outro processo.
 
-- FederatedSessionMiddleware para sessão web.
-- slowapi para rate limit.
-- enforce_registered_permissions para permissão declarada.
-- enforce_swagger_access para /docs, /redoc e /openapi.json.
-- logging de request com correlation_id e X-Correlation-Id.
-- handlers globais para erro e validação.
+## 7. O que acontece em caso de sucesso
 
-## Como o fluxo curto e o fluxo longo se separam
+No caminho feliz, a API recebe a request, valida contexto, chama o domínio certo e devolve uma resposta coerente com o tipo de trabalho. Para operações curtas, isso significa retorno imediato. Para operações longas, significa aceite com task_id, endpoints de status e stream aberto para o operador acompanhar.
 
-Quando a operação termina no mesmo request, a resposta sai direto do
-router ou do service.
+O sucesso operacional não é só HTTP 200 ou 202. É conseguir explicar qual rota respondeu, qual contexto entrou, qual correlation_id costurou a execução e qual canal oficial de acompanhamento o cliente deve usar.
 
-Quando a operação é longa, o boundary HTTP publica o trabalho e devolve
-um contrato de acompanhamento.
+## 8. O que acontece em caso de erro
 
-No código atual, isso aparece de forma clara em ingestão, ETL e status.
+Quando o erro acontece antes do aceite, normalmente ele está em autenticação, permissão, payload, rate limit ou resolução de YAML. Quando o erro acontece depois do aceite, a suspeita principal sai do boundary e entra no worker, na fila ou no domínio assíncrono.
 
-## Acompanhamento assíncrono
+No slice de assembly AST, um 404 pode significar ausência de feature e não ausência de código, porque a publicação depende da flag. Em situações assim, diagnosticar pela rota apenas não basta; é preciso conferir configuração de ambiente.
 
-O app expõe três formas de acompanhar task:
+## 9. Observabilidade e diagnóstico
 
-- polling em /status e /api/v1/status;
-- SSE em /status/stream e /api/v1/status/stream;
-- SSE por task em /status/stream/{task_id} e
-    /api/v1/status/stream/{task_id};
-- WebSocket em /status/ws e /api/v1/status/ws.
+A melhor forma de investigar a borda HTTP é seguir esta ordem.
 
-Em linguagem simples: o boundary HTTP não só aceita o job como também
-publica o canal oficial para seguir o progresso.
+1. Confirmar se a request entrou com correlation_id válido.
+2. Confirmar se a autenticação e a permissão foram resolvidas.
+3. Confirmar se o fluxo exigia YAML e se ele foi resolvido.
+4. Confirmar se a resposta era curta ou assíncrona.
+5. Em fluxo assíncrono, seguir por task_id e /status/stream/{task_id}.
 
-## Router AST e feature flag
+Em linguagem simples: descubra primeiro se a falha é de entrada. Só depois discuta domínio, fila ou worker.
 
-O grupo /config/assembly depende de FEATURE_AGENTIC_AST_ENABLED.
+## 10. Exemplo prático guiado
 
-Se a flag estiver desligada, o router não entra no app.
-Isso significa que 404 nesse slice pode ser configuração de ambiente e
-não ausência de implementação.
+Imagine uma operação agentic assistida pela UI administrativa. O operador usa a tela publicada em /ui/static. Essa interface, apoiada por app/ui/static/js/admin-assembly-ast.js, chama endpoints como /config/assembly/draft e /config/assembly/objective-to-yaml. A API recebe a intenção, passa pelo fluxo de autenticação, aplica a feature flag do assembly, resolve o contrato e devolve a resposta governada. Se a operação for só de autoria, a resposta sai ali mesmo. Se a operação seguinte envolver execução longa, o boundary muda de papel e entrega task_id para acompanhamento.
 
-O router montado em `src/api/routers/config_assembly_router.py` publica
-as seguintes rotas quando a feature está ativa:
+## 11. Explicação 101
 
-- POST /config/assembly/preflight
-- POST /config/assembly/draft
-- POST /config/assembly/objective-to-yaml
-- POST /config/assembly/validate
-- POST /config/assembly/confirm
-- GET /config/assembly/schema
-- GET /config/assembly/catalog
-- POST /config/assembly/recommend-tools
+Pense no boundary HTTP como a recepção de um hospital. A recepção não faz a cirurgia, mas decide se o paciente pode entrar, coleta identificação, abre a ficha, encaminha para a área certa e diz como acompanhar o caso. Se a recepção estiver desorganizada, até uma equipe clínica excelente vai trabalhar com informação errada.
 
-Em linguagem simples: `preflight` verifica se o ambiente consegue
-trabalhar com a montagem agentic; `draft` cria ou interpreta uma AST;
-`objective-to-yaml` transforma objetivo em YAML governado; `validate`
-valida a AST; `confirm` confirma a proposta; `schema` e `catalog`
-expõem metadados; e `recommend-tools` sugere tools para uma situação.
+## 12. Evidências no código
 
-A UI administrativa que consome esse fluxo fica em
-`app/ui/static/js/admin-assembly-ast.js`. Ela chama a mesma API HTTP do
-app principal; não existe backend paralelo para montagem AST.
-
-## Fluxo de referência do boundary
-
-```mermaid
-sequenceDiagram
-    participant C as Cliente
-    participant B as Boundary HTTP
-    participant Y as ResolvedConfig
-    participant S as Service
-    participant W as Worker ou execução direta
-
-    C->>B: request HTTP
-    B->>B: autentica e aplica permissões
-    B->>Y: resolve YAML quando necessário
-    Y-->>B: configuração resolvida
-    B->>S: chama caso de uso
-    alt operação longa
-        S->>W: publica job
-        W-->>B: task_id
-        B-->>C: resposta assíncrona
-    else operação curta
-        S-->>B: payload final
-        B-->>C: resposta síncrona
-    end
-```
-
-## Como validar
-
-1. Suba a API.
-2. Confirme acesso a /openapi.json com credencial autorizada.
-3. Valide uma rota curta.
-4. Valide uma rota longa.
-5. Em fluxo longo, acompanhe task_id pelo status.
-6. Se falhar antes do aceite, investigue boundary, autenticação e YAML.
-7. Se falhar depois do aceite, investigue worker, fila e dependências.
-
-## Leitura complementar sem duplicar assunto
-
-- Use API-ENDPOINTS-SWAGGER.md para inventário de endpoints.
-- Use README-CONFIGURACAO-YAML.md para entender a resolução do YAML.
-- Use README-INGESTAO.md, README-ETL.md e README-RAG.md para o runtime
-  de domínio.
-
-## Evidência no código
-
-- src/api/service_api.py
-- src/api/routers/agent_router.py
-- src/api/routers/workflow_router.py
-- src/api/routers/rag_router.py
-- src/api/routers/streaming_router.py
-- src/api/routers/config_assembly_router.py
-- src/api/routers/config_nl2sql_router.py
-- src/api/routers/client_portal_router.py
-- src/api/routers/ui_router.py
-- src/api/security/permissions.py
-- src/api/security/user_auth.py
-- app/runners/api_runner.py
-
-## Lacunas no código
-
-Não encontrado no código.
-
-Onde deveria estar:
-
-- um manifesto administrativo único do processo HTTP com middlewares,
-  routers, permissões e mounts já consolidados;
-- uma exportação automática do boundary HTTP pronta para auditoria.
+- [src/api/service_api.py](../src/api/service_api.py): montagem do app FastAPI, middlewares, routers e publicação da UI.
+- [src/api/routers/config_resolution.py](../src/api/routers/config_resolution.py): resolução central do YAML para fluxos HTTP.
+- [src/api/routers/config_assembly_router.py](../src/api/routers/config_assembly_router.py): publicação dos endpoints agentic governados, como /config/assembly/draft e /config/assembly/objective-to-yaml.
+- [src/api/routers/streaming_router.py](../src/api/routers/streaming_router.py): canais de acompanhamento como /status/stream/{task_id}.
+- [app/ui/static/js/admin-assembly-ast.js](../app/ui/static/js/admin-assembly-ast.js): UI real que consome a API de assembly AST.
+- [app/runners/api_runner.py](../app/runners/api_runner.py): bootstrap operacional do processo HTTP.

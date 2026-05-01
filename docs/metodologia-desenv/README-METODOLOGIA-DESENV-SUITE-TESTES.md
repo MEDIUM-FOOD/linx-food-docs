@@ -80,17 +80,7 @@ Isso conecta a suíte ao processo de regressão e aprendizado.
 
 ## Como a suíte colabora com Copilot
 
-```mermaid
-flowchart LR
-  E[Copilot executa mudança] --> S[Suite oficial]
-  S --> P{Passou?}
-  P -- sim --> R[Registrar tarefa]
-  P -- nao --> T[Telemetria]
-  T --> L[Logs por etapa]
-  L --> D[Diagnostico]
-  D --> C[Correcao]
-  C --> S
-```
+![Como a suíte colabora com Copilot](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-suite-testes-diagrama-01.svg)
 
 A colaboração acontece em ciclo:
 

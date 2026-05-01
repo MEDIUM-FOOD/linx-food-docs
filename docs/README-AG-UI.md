@@ -200,88 +200,11 @@ As peças comprovadas no código hoje são estas:
 
 ## Arquitetura do fluxo
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Operador
-    participant Tela as Tela AG-UI
-    participant Sidecar as Sidecar
-    participant API as POST /ag-ui/runs
-    participant Orq as AgUiRunOrchestrator
-    participant Adapter as RetailDemoAgUiAdapter
-    participant Deep as YAML DeepAgent
-    participant Mat as DashboardMaterializationService
-
-    Operador->>Tela: Abre a tela e informa contexto
-    Tela->>Sidecar: Anexa contexto da página
-    Operador->>Sidecar: Envia pedido
-    Sidecar->>API: POST com payload AG-UI
-    API->>Orq: Cria contexto e inicia run
-    Orq-->>Sidecar: RUN_STARTED
-    Orq->>Adapter: Resolve executionKind=retail_demo
-    alt Tela fixa
-        Adapter->>Deep: Usa capability governada
-        Deep-->>Adapter: Resultado autorizado
-        Adapter-->>Sidecar: TOOL_CALL_* + STATE_SNAPSHOT + TEXT_MESSAGE_*
-    else Dashboard dinâmico
-        Adapter->>Mat: Valida e materializa DashboardSpec
-        Mat-->>Sidecar: STATE_SNAPSHOT + CUSTOM + STATE_DELTA
-    end
-    Orq-->>Sidecar: RUN_FINISHED ou RUN_ERROR
-    Sidecar->>Tela: Atualiza store, timeline, mensagens e canvas
-```
+![Arquitetura do fluxo](assets/diagrams/docs-readme-ag-ui-diagrama-01.svg)
 
 ## Fluxo funcional cruzado
 
-```mermaid
-flowchart LR
-    subgraph R1[Operador]
-        A1[Escolhe a tela]
-        A2[Informa prompt ou aceita o prompt padrão]
-    end
-
-    subgraph R2[UI estática]
-        B1[Controller monta contexto da tela]
-        B2[Sidecar monta o payload do run]
-        B3[Cliente SSE abre POST /ag-ui/runs]
-        B4[Store atualiza mensagens, tools e estado]
-        B5[Renderer atualiza resultado ou canvas]
-    end
-
-    subgraph R3[API FastAPI]
-        C1[Router valida permissão e fonte de configuração]
-        C2[Router cria correlation id]
-        C3[Orquestrador resolve o adapter]
-    end
-
-    subgraph R4[Runtime AG-UI]
-        D1[Adapter interpreta capability]
-        D2[Consulta governada ou materialização do dashboard]
-        D3[Eventos canônicos são emitidos]
-    end
-
-    subgraph R5[Governança]
-        E1[YAML DeepAgent define supervisor e subagentes]
-        E2[Query ids dyn_sql aprovados]
-        E3[Validador bloqueia conteúdo inseguro]
-    end
-
-    A1 --> A2
-    A2 --> B1
-    B1 --> B2
-    B2 --> B3
-    B3 --> C1
-    C1 --> C2
-    C2 --> C3
-    C3 --> D1
-    D1 --> D2
-    D2 --> D3
-    D3 --> B4
-    B4 --> B5
-    E1 --> D1
-    E2 --> D2
-    E3 --> D2
-```
+![Fluxo funcional cruzado](assets/diagrams/docs-readme-ag-ui-diagrama-02.svg)
 
 ## Como a API funciona
 

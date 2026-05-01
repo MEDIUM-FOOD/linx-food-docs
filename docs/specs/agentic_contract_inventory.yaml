@@ -2,7 +2,7 @@ version: 1
 files:
   common: docs/README-AGENTIC-CONTRATO-COMUM.md
   workflow: docs/README-AGENTE-WORKFLOW.md
-  supervisor: docs/README-AGENTE-SUPERVISOR.md
+  supervisor: docs/README-DEEPAGENTS-SUPERVISOR.md
   deepagent: docs/README-DEEPAGENTS-SUPERVISOR.md
 
 workflow:

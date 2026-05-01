@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant UI as UI admin ou cliente
+    participant Crypto as /crypto/session-key
+    participant API as /rag/ingest
+    participant Prep as IngestionJobExecutor
+    participant Builder as IngestionRequestBuilder
+    participant Orch as ContentIngestionOrchestrator
+    participant PDF as PDFContentProcessor
+    participant Extract as PdfRuntimeCoordinator
+    participant Rich as PdfRichProcessingApplicationService
+    participant Multi as PdfMultimodalApplicationService
+
+    UI->>Crypto: solicita sessao de criptografia
+    Crypto-->>UI: session_id + public_key_pem
+    UI->>API: POST /rag/ingest com encrypted_data
+    API->>Prep: prepara execucao assincrona
+    Prep->>Builder: resolve YAML e fontes
+    Builder-->>Prep: IngestionRequest com pdf_file_paths
+    Prep->>Orch: inicia ingestao
+    Orch->>PDF: processa documento PDF
+    PDF->>Extract: build_extraction_pipeline()
+    Extract-->>PDF: bytes validados + OCR documental opcional + resultado da engine
+    PDF->>Rich: run(document, entrypoint)
+    Rich->>Rich: process_content e OCR basico opcional
+    Rich->>Multi: process_multimodal_document() quando habilitado
+    Multi-->>Rich: chunks multimodais ou fallback textual
+    Rich-->>PDF: chunks finais
+    PDF-->>Orch: documento pronto para indexacao

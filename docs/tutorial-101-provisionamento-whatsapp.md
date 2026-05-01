@@ -58,100 +58,19 @@ Guarda-corpos:
 
 ## 5) Mapa visual 1: fluxo macro (Flowchart)
 
-```mermaid
-flowchart TD
-    A[Cliente chama /api/whatsapp/provision/start] --> B[Valida permissao provision.whatsapp]
-    B --> C[Resolve client_code e tenant via ClientDirectory]
-    C --> D[MultiTenantWhatsAppManager.start_provision]
-    D --> E[WhatsAppProvisionerAsync register + request_verification]
-    E --> F[Telefone salvo local pending_verification]
-    F --> G[Cliente chama /verify com codigo_sms]
-    G --> H[finalize_provision ativa + webhook + template]
-    H --> I[Telefone salvo local active]
-```
+![5) Mapa visual 1: fluxo macro (Flowchart)](assets/diagrams/docs-tutorial-101-provisionamento-whatsapp-diagrama-01.svg)
 
 ## 6) Mapa visual 2: quem chama quem (Sequence)
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant API as whatsapp_provision_router
-    participant DIR as ClientDirectory
-    participant MGR as MultiTenantWhatsAppManager
-    participant META as WhatsAppProvisionerAsync
-
-    U->>API: POST /start
-    API->>DIR: list_client_codes_by_tenant + get_client_profile
-    API->>MGR: start_provision(client_code, profile)
-    MGR->>META: register_phone + request_verification
-    META-->>MGR: phone_number_id
-    MGR-->>API: pending_verification
-    API->>DIR: register_whatsapp_phone(status=pending)
-    API-->>U: success + phone_number_id
-
-    U->>API: POST /verify
-    API->>DIR: get_whatsapp_phone_by_e164
-    API->>MGR: finalize_provision(...)
-    MGR->>META: verify_code + activate_number + configure_webhook + create_template
-    META-->>MGR: active
-    MGR-->>API: payload final
-    API->>DIR: register_whatsapp_phone(status=active)
-    API-->>U: webhook_configured/template_created
-```
+![6) Mapa visual 2: quem chama quem (Sequence)](assets/diagrams/docs-tutorial-101-provisionamento-whatsapp-diagrama-02.svg)
 
 ## 7) Mapa visual 3: camadas (Layer Diagram)
 
-```mermaid
-flowchart LR
-    subgraph EntryPoints
-      EP1[src/api/service_api.py]
-      EP2[src/api/routers/whatsapp_provision_router.py]
-    end
-
-    subgraph Orchestration
-      OR1[MultiTenantWhatsAppManager]
-      OR2[validacao tenant/client_code/channel_id]
-    end
-
-    subgraph AgentsGraphs
-      AG1[Não encontrado no código]
-    end
-
-    subgraph ToolsIntegrations
-      TI1[WhatsAppProvisionerAsync]
-      TI2[Meta Graph API]
-    end
-
-    subgraph DataLayer
-      DL1[src/security/client_directory.py]
-      DL2[tenant_profile + channel mapping + whatsapp phones]
-    end
-
-    EP1 --> EP2 --> OR2 --> OR1 --> TI1 --> TI2
-    EP2 --> DL1 --> DL2
-```
+![7) Mapa visual 3: camadas (Layer Diagram)](assets/diagrams/docs-tutorial-101-provisionamento-whatsapp-diagrama-03.svg)
 
 ## 8) Mapa visual 4: componentes (Component Diagram)
 
-```mermaid
-flowchart TB
-    C1[service_api]
-    C2[whatsapp_provision_router]
-    C3[permissions PROVISION_WHATSAPP]
-    C4[ClientDirectory]
-    C5[MultiTenantWhatsAppManager]
-    C6[WhatsAppProvisionerAsync]
-    C7[channel_router webhook ingest]
-    C8[testes unitarios whatsapp]
-
-    C1 --> C2
-    C2 --> C3
-    C2 --> C4
-    C2 --> C5
-    C5 --> C6
-    C2 --> C7
-    C2 --> C8
-```
+![8) Mapa visual 4: componentes (Component Diagram)](assets/diagrams/docs-tutorial-101-provisionamento-whatsapp-diagrama-04.svg)
 
 ## 9) Onde isso aparece neste projeto (visão rápida)
 

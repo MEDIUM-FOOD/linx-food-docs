@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant UI as objective-yaml-studio ou admin-assembly-ast
+    participant R as config_assembly_router
+    participant S as AgenticAssemblyService
+    participant I as IntentParser
+    participant L as LlmAstDraftGenerator ou heuristica
+    participant V as DocumentSemanticValidator
+    participant C as DocumentCompiler
+
+    U->>UI: Descreve objetivo em linguagem natural
+    alt Caminho direto
+        UI->>R: POST /config/assembly/objective-to-yaml
+        R->>S: objective_to_yaml(request)
+        S->>S: preflight()
+        S->>S: draft()
+        S->>I: resolve target
+        S->>L: gerar AST inicial
+        alt Draft bloqueado
+            S-->>R: questions + diagnostics + blocking_stage=draft
+            R-->>UI: response model serializado
+        else Draft valido
+            S->>S: validate()
+            S->>V: validar AST
+            S->>S: confirm(apply=false)
+            S->>C: merge no YAML base
+            S-->>R: final_yaml + final_yaml_text + decision_trace
+            R-->>UI: preview final
+        end
+    else Caminho guiado
+        UI->>R: POST /config/assembly/preflight
+        R->>S: preflight(request)
+        S-->>R: checks + diagnostics
+        UI->>R: POST /config/assembly/draft
+        R->>S: draft(request)
+        UI->>R: POST /config/assembly/validate
+        R->>S: validate(request)
+        UI->>R: POST /config/assembly/confirm
+        R->>S: confirm(request)
+    end

@@ -3,11 +3,13 @@
 ## 1. Para quem é este guia
 
 Este material foi escrito para desenvolvedores iniciantes que precisam trabalhar com:
+
 1. Geração de configuração em YAML (inclusive por LLM).
 2. Validação estrutural e semântica antes de colocar em produção.
 3. Fluxo `draft -> validate -> confirm` da montagem assistida.
 
 Objetivo prático:
+
 1. Entender os termos técnicos sem depender de conhecimento prévio.
 2. Evitar os erros mais comuns de modelagem.
 3. Ter um roteiro claro para evoluir configurações com segurança.
@@ -19,6 +21,7 @@ No projeto, o YAML é a configuração que descreve comportamento de agentes e w
 A AST (Abstract Syntax Tree) é a versão tipada e validada dessa configuração.
 
 Pipeline mental:
+
 1. Você escreve (ou pede para a LLM escrever) YAML.
 2. O sistema faz parse e transforma em AST.
 3. O contrato estrutural rejeita campos inválidos, tipos errados e formatos fora do padrão.
@@ -26,6 +29,7 @@ Pipeline mental:
 5. Só então a configuração é confirmada e aplicada.
 
 Resumo:
+
 1. YAML é entrada humana.
 2. AST é o contrato técnico canônico do módulo de assembly; o YAML final continua sendo o contrato executado no runtime.
 3. Diagnósticos são feedback objetivo para correção.
@@ -33,7 +37,7 @@ Resumo:
 ## 3. Glossário de termos e jargões
 
 | Termo | Significado simples | Exemplo prático |
-|---|---|---|
+| --- | --- | --- |
 | `YAML` | Formato de texto para configuração | Definir `workflows`, `nodes` e `tools_library` |
 | `AST` | Representação tipada da configuração | `AgenticDocumentAST`, `WorkflowAST`, `ToolDefinitionAST` |
 | `Contrato estrutural` | Regras de forma e tipo dos campos | `strategy` obrigatório em `tools_library` |
@@ -48,12 +52,14 @@ Resumo:
 ## 4. Estratégia recomendada para iniciantes
 
 Trabalhe sempre em ciclos curtos e verificáveis:
+
 1. Comece pequeno: monte um caso mínimo funcional.
 2. Rode `validate` cedo para receber diagnósticos rápidos.
 3. Corrija erros estruturais antes dos semânticos.
 4. Só use `confirm` com `apply=true` quando `is_valid=true`.
 
 Sequência prática:
+
 1. Escolha o `target`.
 2. Defina IDs estáveis e únicos (`workflow`, `node`, `agent`, `tool`).
 3. Adicione `tools_library` com contrato novo (`strategy`).
@@ -66,20 +72,24 @@ Sequência prática:
 ### 5.1 `draft`
 
 Uso:
+
 1. Gerar rascunho AST com ajuda da LLM.
 2. Obter perguntas pendentes para completar campos obrigatórios.
 
 Saída importante:
+
 1. `ast_draft`
 2. `diagnostics`
 3. `questions`
 
 Estratégias de geração (`generation_mode`):
+
 1. `auto`: tenta primeiro LLM estruturado. Se esse ramo falhar, vier inválido ou insuficiente, o fluxo pode tentar reparo conservador e cair para a heurística local quando o fallback estiver habilitado.
 2. `llm_schema`: obriga LLM estruturado (sem fallback).
 3. `heuristic`: usa apenas heurística local.
 
 Ajuste fino de retries:
+
 1. `constraints.llm_schema_max_attempts` define quantas tentativas o LLM estruturado fará (`1` a `5`, padrão `2`).
 2. `constraints.auto_heuristic_fallback_enabled` liga ou desliga a queda automática para heurística dentro do modo `auto`.
 3. `constraints.assembly_repair_max_attempts` define quantas tentativas de reparo conservador serão feitas antes de encerrar o ramo atual.
@@ -87,10 +97,12 @@ Ajuste fino de retries:
 ### 5.2 `validate`
 
 Uso:
+
 1. Validar AST final com regras estruturais e semânticas.
 2. Garantir que o runtime consiga executar.
 
 Saída importante:
+
 1. `validation_report.is_valid`
 2. `validation_report.diagnostics`
 3. `error_count` e `warning_count`
@@ -98,15 +110,18 @@ Saída importante:
 ### 5.3 `confirm`
 
 Uso:
+
 1. Compilar AST.
 2. Mesclar no YAML base.
 3. Aplicar no arquivo final (quando `apply=true`).
 
 Boa prática:
+
 1. Primeiro rodar com `apply=false` para revisar preview/diff.
 2. Depois aplicar.
 
 Regra importante:
+
 1. O `confirm` bloqueia aplicação quando existe qualquer erro no consolidado (parse + semântico), exceto com `force=true`.
 
 ## 6. Contrato de `tools_library` explicado
@@ -114,6 +129,7 @@ Regra importante:
 Hoje o contrato é estrito e sem formato legado.
 
 Regras centrais:
+
 1. Toda tool precisa de `strategy`.
 2. `strategy: direct` exige `impl`.
 3. `strategy: factory` exige `factory_impl`, `tool_name`, `factory_function`, `factory_returns`.
@@ -121,72 +137,36 @@ Regras centrais:
 
 ### 6.1 Exemplo `direct` (simples)
 
-```yaml
-tools_library:
-  - strategy: direct
-    id: calculator
-    description: "Calculadora básica"
-    category: custom_tools
-    status: active
-    tags: ["math"]
-    aliases: []
-    config: {}
-    metadata: {}
-    impl: src.agentic_layer.tools.custom_tools.calculator_tool.calculator
-```
+Leitura prática do formato `direct`:
+
+1. A tool entra em `tools_library` com `strategy=direct`.
+2. Ela precisa expor `id`, `description` e `category`.
+3. Campos de catálogo como `status`, `tags`, `aliases`, `config` e `metadata` complementam a publicação.
+4. O campo decisivo é `impl`, que aponta para o callable real da calculadora.
 
 ### 6.2 Exemplo `factory` (avançado)
 
-```yaml
-tools_library:
-  - strategy: factory
-    id: qa_rag
-    description: "QA com contexto vetorial"
-    category: vector_store_tools
-    status: active
-    tags: ["qa"]
-    aliases: []
-    config: {}
-    metadata: {}
-    factory_impl: src.agentic_layer.tools.vector_store_tools.vectorstore_toolkit.create_vectorstore_toolkit_tools
-    tool_name: qa_rag
-    factory_function: create_vectorstore_toolkit_tools
-    factory_returns: list
-```
+Leitura prática do formato `factory`:
+
+1. A tool continua em `tools_library`, mas usa `strategy=factory`.
+2. `factory_impl` aponta para a implementação que monta a tool ou o conjunto de tools.
+3. `tool_name` identifica a tool lógica publicada.
+4. `factory_function` informa qual função da fábrica será chamada.
+5. `factory_returns` declara o formato do retorno esperado.
 
 ## 7. Exemplo mínimo fim a fim
 
-```yaml
-target: workflow
-selected_workflow: wf_triagem_basica
-tools_library:
-  - strategy: direct
-    id: json_parse
-    description: "Parse de JSON"
-    category: utility_tools
-    status: active
-    tags: []
-    aliases: []
-    config: {}
-    metadata: {}
-    impl: src.agentic_layer.tools.utility_tools.json_parse.json_parse
-workflows:
-  - id: wf_triagem_basica
-    enabled: true
-    nodes:
-      - id: n1
-        mode: agent
-        prompt:
-          system: "Classifique a mensagem do usuário"
-        tools: ["json_parse"]
-    edges:
-      - from: START
-        to: n1
-      - from: n1
-        to: END
-```
+Leitura prática do exemplo mínimo fim a fim:
+
+1. O `target` aponta para `workflow`.
+2. `selected_workflow` escolhe um fluxo básico, como `wf_triagem_basica`.
+3. `tools_library` publica uma tool direta chamada `json_parse`.
+4. Em `workflows`, o fluxo habilitado declara um node `n1` em modo `agent`.
+5. O node recebe um prompt de sistema simples e usa a tool `json_parse`.
+6. As arestas ligam `START` ao node e o node a `END`, fechando o grafo mínimo válido.
 
 O que validar neste exemplo:
+
 1. `json_parse` existe em `tools_library`.
 2. IDs são únicos.
 3. Fluxo tem entrada e saída válidas (`START` e `END`).
@@ -220,6 +200,7 @@ Como evitar: padronizar prefixos (`wf_`, `sup_`, `ag_`, `tool_`).
 ## 10. Arquivos e classes que validam de verdade
 
 Os pontos reais do código para validar mudanças no assembly agentic são:
+
 1. `src/config/agentic_assembly/assembly_service.py` -> `AgenticAssemblyService`.
 2. `src/config/agentic_assembly/ast/document.py` -> `AgenticDocumentAST`.
 3. `src/config/agentic_assembly/ast/workflow.py` -> `WorkflowAST`, `WorkflowNodeAST`, `WorkflowEdgeAST`.
@@ -235,16 +216,12 @@ Os pontos reais do código para validar mudanças no assembly agentic são:
 
 ## 11. O que rodar antes de aplicar
 
-```bash
-uv run python scripts/docs/verify_agentic_ast_docs_sync.py
-uv run env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/docs/test_agentic_ast_docs_sync.py tests/unit/test_agentic_assembly_service.py tests/unit/test_agentic_assembly_draft_llm_e2e.py tests/unit/test_agentic_assembly_quality_gate.py -q
-```
+1. Rode `uv run python scripts/docs/verify_agentic_ast_docs_sync.py` para confirmar sincronização entre documentação e AST.
+2. Depois execute `uv run env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/docs/test_agentic_ast_docs_sync.py tests/unit/test_agentic_assembly_service.py tests/unit/test_agentic_assembly_draft_llm_e2e.py tests/unit/test_agentic_assembly_quality_gate.py -q` para validar o fluxo principal.
 
 Se a mudança tocar catálogo de tools, schema estruturado ou recomendação de tools:
 
-```bash
-uv run env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_agentic_assembly_tools_contract.py tests/unit/test_agentic_assembly_tool_recommendation.py tests/unit/test_agentic_assembly_structured_llm_client.py -q
-```
+1. Execute também `uv run env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_agentic_assembly_tools_contract.py tests/unit/test_agentic_assembly_tool_recommendation.py tests/unit/test_agentic_assembly_structured_llm_client.py -q` para cobrir contrato de tools, recomendação e cliente estruturado.
 
 ## 12. Próximas leituras recomendadas
 

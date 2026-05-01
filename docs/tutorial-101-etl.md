@@ -44,78 +44,19 @@ Pense no ETL como uma esteira de fábrica de dados. A matéria-prima entra (extr
 
 ## 5) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart LR
-  U[Cliente] --> API[/POST /rag/etl/]
-  API --> CFG[resolve_yaml_configuration]
-  API --> AUTH[authenticate_with_yaml_config]
-  API --> EX[execute_etl]
-  EX --> SVC[ExtractTransformLoadService]
-  SVC --> ORCH[ExtractTransformLoadOrchestrator]
-  ORCH --> P1[Apify pipelines]
-  ORCH --> P2[Schema metadata]
-  ORCH --> U
-```
+![5) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-etl-diagrama-01.svg)
 
 ## 6) Mapa visual 2: sequência
 
-```mermaid
-sequenceDiagram
-  participant U as Usuario
-  participant API as rag_router.etl
-  participant SVC as ExtractTransformLoadService
-  participant ORCH as ETL Orchestrator
-  participant AP as Apify Pipelines
-  participant SM as Schema Metadata
-
-  U->>API: POST /rag/etl
-  API->>API: resolve_yaml_configuration + auth
-  API->>SVC: execute(...)
-  SVC->>ORCH: run(progress_callback)
-  alt apify habilitado
-    ORCH->>AP: run()
-  end
-  alt schema_metadata habilitado
-    ORCH->>SM: run()
-  end
-  ORCH-->>SVC: root_result
-  SVC-->>API: ETL response
-  API-->>U: 202 ou resultado
-```
+![6) Mapa visual 2: sequência](assets/diagrams/docs-tutorial-101-etl-diagrama-02.svg)
 
 ## 7) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-  subgraph Entry
-    E[rag_router /rag/etl]
-  end
-  subgraph Service
-    S[etl_service]
-  end
-  subgraph Orchestration
-    O[etl_layer.orchestrator]
-  end
-  subgraph Providers
-    P1[apify providers]
-    P2[schema metadata processor]
-  end
-
-  E --> S --> O --> P1
-  O --> P2
-```
+![7) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-etl-diagrama-03.svg)
 
 ## 8) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-  A[rag_router.py] --> B[execute_etl]
-  B --> C[ExtractTransformLoadService.execute]
-  C --> D[_ensure_etl_ready]
-  C --> E[ExtractTransformLoadOrchestrator.run]
-  E --> F[Booking/Hotels/Tripadvisor]
-  E --> G[Schema metadata]
-```
+![8) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-etl-diagrama-04.svg)
 
 ## 9) Onde isso aparece no projeto
 
@@ -151,7 +92,7 @@ No estado atual:
 ## 12) Status: está pronto? quanto está pronto?
 
 | Área | Evidência | Status | Impacto prático | Próximo passo mínimo |
-|---|---|---|---|---|
+| ---- | --------- | ------ | ---------------- | -------------------- |
 | Endpoint ETL | `rag_router.py` | pronto | entrada HTTP disponível | manter contrato |
 | Serviço ETL | `etl_service.py` | pronto | validação e resposta padronizada | ampliar cobertura de erro |
 | Orquestrador ETL | `etl_layer/orchestrator.py` | pronto | pipelines executáveis | revisão de retries por provider |
@@ -182,7 +123,7 @@ Passo 4:
 ## 14) ELI5: onde colocar cada parte da feature
 
 | Pergunta | Resposta | Camada | Onde |
-|---|---|---|---|
+| -------- | -------- | ------ | ---- |
 | Quero novo provider ETL | Implementar no etl_layer/providers | Provider | `src/etl_layer/providers` |
 | Quero regra de readiness ETL | Ajustar validação do serviço | Service | `src/services/etl_service.py` |
 | Quero mudar endpoint ETL | Ajustar router | Entry | `src/api/routers/rag_router.py` |

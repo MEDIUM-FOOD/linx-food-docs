@@ -194,26 +194,7 @@ precisa copiar linhas reais para gerar essa planta.
 7. ExtractTransformLoadOrchestrator roda os pipelines habilitados.
 8. O progresso e o estado terminal aparecem em /status.
 
-```mermaid
-sequenceDiagram
-    participant Cliente
-    participant API as API /rag/etl
-    participant Queue as RabbitMQ
-    participant Worker as Worker oficial
-    participant Service as ExtractTransformLoadService
-    participant Orch as ExtractTransformLoadOrchestrator
-    participant Pipelines as Pipelines ETL
-    participant Status as /status
-
-    Cliente->>API: POST /rag/etl
-    API->>Queue: publica job
-    API-->>Cliente: 202 com task_id
-    Queue->>Worker: entrega mensagem
-    Worker->>Service: execute
-    Service->>Orch: run
-    Orch->>Pipelines: executa pipelines habilitados
-    Pipelines-->>Status: progresso e estado final
-```
+![Fluxo ponta a ponta](assets/diagrams/docs-readme-etl-diagrama-01.svg)
 
 ## Cancelamento e acompanhamento
 
@@ -300,34 +281,7 @@ contrato operacional.
 
 ## Fluxo arquitetural do ETL dedicado
 
-```mermaid
-flowchart LR
-        subgraph API
-                A1[/rag/etl]
-                A2[ExtractTransformLoadService]
-        end
-
-        subgraph Worker
-                W1[ExtractTransformLoadOrchestrator]
-                W2[BaseApifyETLPipeline]
-                W3[Booking ou Hotels.com ou TripAdvisor]
-                W4[TableSchemaMetadataETLProcessor]
-        end
-
-        subgraph Infra
-                I1[RabbitMQ]
-                I2[Redis]
-                I3[Hospitality DB]
-                I4[Schema DB]
-                I5[Providers externos]
-        end
-
-        A1 --> I1 --> A2 --> W1
-        W1 --> W2 --> W3 --> I5
-        W3 --> I3
-        W1 --> W4 --> I4
-        I2 --> A1
-```
+![Fluxo arquitetural do ETL dedicado](assets/diagrams/docs-readme-etl-diagrama-02.svg)
 
 ## Como validar que o ETL funcionou
 
@@ -340,37 +294,7 @@ flowchart LR
 
 ## Fluxograma funcional cruzado
 
-```mermaid
-flowchart LR
-    subgraph Cliente
-        C1[Cliente ou UI]
-    end
-
-    subgraph API
-        A1[/rag/etl]
-        A2[/status]
-    end
-
-    subgraph Worker
-        W1[WorkerProcessRuntime]
-        W2[ExtractTransformLoadService]
-        W3[ExtractTransformLoadOrchestrator]
-        W4[Pipelines habilitados]
-    end
-
-    subgraph Infra
-        I1[RabbitMQ]
-        I2[Redis]
-        I3[PostgreSQL]
-        I4[Providers externos]
-    end
-
-    C1 --> A1 --> I1 --> W1 --> W2 --> W3 --> W4
-    W4 --> I3
-    W4 --> I4
-    I2 --> A2
-    I3 --> A2
-```
+![Fluxograma funcional cruzado](assets/diagrams/docs-readme-etl-diagrama-03.svg)
 
 ## Como rodar e validar
 

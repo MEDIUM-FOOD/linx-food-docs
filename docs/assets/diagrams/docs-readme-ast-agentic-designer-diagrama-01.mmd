@@ -1,0 +1,12 @@
+flowchart LR
+   P1["Objetivo em linguagem natural"]
+   P2["Preflight"]
+   P3["Draft AST"]
+   P4["Questions ou Diagnostics"]
+   P5["Validate"]
+   P6["Confirm dry-run"]
+   P7["YAML final"]
+
+   P1 --> P2 --> P3
+   P3 --> P4
+   P3 --> P5 --> P6 --> P7

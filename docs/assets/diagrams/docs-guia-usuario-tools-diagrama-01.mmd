@@ -1,0 +1,6 @@
+flowchart LR
+        A["YAML resolvido"] --> B["ConfigurationFactory injeta tools_library"]
+        B --> C["ToolsFactory indexa o catálogo"]
+        C --> D["ToolLoader resolve sintaxe parametrizada"]
+        D --> E["Factory específica constrói a tool"]
+        E --> F["Tool executa recurso interno ou externo"]

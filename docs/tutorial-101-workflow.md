@@ -46,81 +46,19 @@ Imagine uma linha de produção com etapas. Cada etapa é um node. As setas são
 
 ## 5) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart LR
-  U[Cliente] --> API[/POST /workflow/execute/]
-  API --> CFG[resolve_yaml_configuration]
-  API --> AUTH[authenticate_with_yaml_config]
-  API --> SVC[WorkflowExecutionService]
-  SVC --> ORCH[WorkflowOrchestrator]
-  ORCH --> AW[AgentWorkflow]
-  AW --> SG[StateGraph compile]
-  SG --> RUN[ainvoke]
-  RUN --> U
-```
+![5) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-workflow-diagrama-01.svg)
 
 ## 6) Mapa visual 2: sequência
 
-```mermaid
-sequenceDiagram
-  participant U as Usuario
-  participant API as workflow_router
-  participant SVC as WorkflowExecutionService
-  participant ORCH as WorkflowOrchestrator
-  participant AW as AgentWorkflow
-  participant G as StateGraph
-
-  U->>API: POST /workflow/execute
-  API->>API: resolve_yaml_configuration + auth
-  API->>SVC: execute_sync ou schedule_async
-  SVC->>ORCH: execute(message,thread)
-  ORCH->>AW: initialize()
-  AW->>G: add_node/add_edge + compile
-  ORCH->>AW: run(...)
-  AW->>G: ainvoke(initial_state)
-  G-->>AW: result state
-  AW-->>ORCH: final_response
-  ORCH-->>API: payload
-  API-->>U: 200/202
-```
+![6) Mapa visual 2: sequência](assets/diagrams/docs-tutorial-101-workflow-diagrama-02.svg)
 
 ## 7) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-  subgraph Entry
-    E1[workflow_router]
-  end
-  subgraph Orchestration
-    O1[WorkflowExecutionService]
-    O2[WorkflowOrchestrator]
-  end
-  subgraph Graph
-    G1[AgentWorkflow]
-    G2[StateGraph]
-  end
-  subgraph Contracts
-    C1[WorkflowState]
-    C2[WorkflowConfigResolver]
-  end
-
-  E1 --> O1 --> O2 --> G1 --> G2
-  G1 --> C1
-  G1 --> C2
-```
+![7) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-workflow-diagrama-03.svg)
 
 ## 8) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-  A[workflow_router.py] --> B[WorkflowExecutionService]
-  B --> C[WorkflowOrchestrator]
-  C --> D[AgentWorkflow.initialize]
-  D --> E[_create_dynamic_workflow]
-  E --> F[NodeFactory]
-  E --> G[EdgeCompiler]
-  D --> H[compiled workflow]
-```
+![8) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-workflow-diagrama-04.svg)
 
 ## 9) Onde isso aparece no projeto
 
@@ -160,7 +98,7 @@ No estado atual:
 ## 12) Status: está pronto? quanto está pronto?
 
 | Área | Evidência | Status | Impacto prático | Próximo passo mínimo |
-|---|---|---|---|---|
+| ---- | --------- | ------ | ---------------- | -------------------- |
 | Endpoint workflow | `workflow_router.py` | pronto | execução HTTP operante | manter testes de contrato |
 | Serviço sync/async | `workflow_execution_service.py` | pronto | robustez de execução | reforçar testes de cancelamento |
 | Runtime LangGraph | `agent_workflow.py` | pronto | grafo dinâmico funcional | ampliar telemetria de edges |
@@ -192,7 +130,7 @@ Passo 4:
 ## 14) ELI5: onde colocar cada parte da feature
 
 | Pergunta | Resposta | Camada | Onde |
-|---|---|---|---|
+| -------- | -------- | ------ | ---- |
 | Quero novo tipo de node | Registrar no NodeFactory e criar handler | Graph | `agent_workflow.py` + `workflow/nodes` |
 | Quero mudar seleção de workflow | Resolver de contexto ativo | Contracts | `workflow/config_resolver.py` |
 | Quero mudar execução async | Serviço de execução | Orchestration | `workflow_execution_service.py` |

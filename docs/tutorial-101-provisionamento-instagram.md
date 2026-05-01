@@ -1,437 +1,192 @@
 # Tutorial 101: Provisionamento Instagram
 
-Este guia ensina, do zero, como provisionar Instagram no projeto de forma prática e segura, com base no que está implementado hoje.
+Este tutorial explica o fluxo real de provisionamento Instagram com base no backend atual.
 
-## 1) Para quem é este tutorial
+## 1. Para quem é este tutorial
 
-Público:
-- Iniciante
-- Desenvolvedor de negócio
-- Desenvolvedor de plataforma
+Público-alvo:
 
-Ao final você vai conseguir:
-- Entender o fluxo real de provisionamento Instagram no backend.
-- Saber onde ficam validações, permissões e integração com Meta Graph API.
-- Saber como o registro fica persistido no diretório multi-tenant.
-- Validar webhook e envio operacional do canal Instagram.
-- Identificar o que já está pronto e o que ainda falta para robustez de produção.
+- iniciante;
+- desenvolvedor de negócio;
+- desenvolvedor de plataforma.
 
-## 2) Dicionário rápido (glossário obrigatório)
+Ao final, você deve conseguir:
 
-- `Provisionamento`: ligar uma conta Instagram Business ao sistema.
-- `instagram_business_account_id`: ID da conta de negócio no Meta.
-- `page_id`: ID da página Facebook associada.
-- `callback_url`: URL pública para receber webhook.
+- entender o fluxo do endpoint de provisionamento;
+- localizar validações, permissão e integração com a Graph API;
+- entender onde o vínculo do canal é persistido;
+- validar o pós-provisionamento no canal.
+
+## 2. Glossário rápido
+
+- `provisionamento`: etapa que liga uma conta Instagram Business ao sistema.
+- `instagram_business_account_id`: identificador da conta de negócio no Meta.
+- `page_id`: identificador da página Facebook associada.
+- `callback_url`: URL pública usada para webhook.
 - `verify_token`: segredo de validação do webhook.
-- `ClientDirectory`: fachada de dados de tenant, canais, credenciais e registros.
-- `InstagramProvisionerAsync`: serviço assíncrono que chama a Graph API.
-- `provision.instagram`: permissão necessária para executar o provisionamento.
+- `ClientDirectory`: camada que registra o vínculo local da conta provisionada.
+- `InstagramProvisionerAsync`: serviço que conversa com a Graph API.
+- `provision.instagram`: permissão exigida pelo endpoint.
 - `channel_id`: identificador lógico do canal no sistema.
-- `correlation_id`: identificador de rastreio de ponta a ponta.
+- `correlation_id`: identificador de rastreio do fluxo.
 
-## 3) Conceito em linguagem simples (regra da analogia)
+## 3. Explicação simples
 
-Pense no provisionamento Instagram como cadastrar uma nova loja no shopping e ligar o interfone dela à central.
+Pense no provisionamento como cadastrar uma nova linha telefônica na central.
 
-- Você informa documentos da loja (IDs e tokens).
-- O sistema valida se isso é coerente.
-- Ele registra a loja na central e configura o interfone (webhook).
-- Depois disso, mensagens começam a chegar para atendimento.
+Primeiro, o sistema valida se os dados da conta fazem sentido. Depois, tenta conversar com a Meta para confirmar perfil, inscrição de página e configuração de webhook. Por fim, grava localmente o vínculo dessa conta com o tenant.
 
-Em termos práticos: sem provisionamento, o Instagram existe, mas não conversa com a plataforma. Com provisionamento, o canal passa a receber e responder eventos corretamente.
+Sem esse passo, o canal Instagram existe no mundo externo, mas não está operacional dentro da plataforma.
 
-## 4) Mapa de navegação do repo
+## 4. Onde o fluxo mora no código
 
-- `src/api/service_api.py` -> inclui o router de provisionamento Instagram.
-- `src/api/routers/instagram_provision_router.py` -> endpoint de provisionamento (`/start`) e validações de entrada.
-- `src/channel_layer/services/instagram_onboarding.py` -> cliente assíncrono para Graph API e operações de onboarding.
-- `src/security/client_directory.py` -> registro e consulta da conta Instagram provisionada.
-- `src/api/security/permissions.py` -> permissão `PROVISION_INSTAGRAM` (`provision.instagram`).
-- `src/api/routers/channel_router.py` -> operação de mensagens do canal (`messages`, `send`, `history`, `webhook/test`).
-- `tests/unit/test_instagram_provision_router.py` -> cobertura do endpoint de provisionamento.
-- `tests/unit/test_instagram_onboarding.py` -> cobertura do serviço de onboarding.
-- `docs/README-INSTAGRAM-PROVISIONING.md` -> manual funcional consolidado.
+Os pontos principais observados no código são:
 
-Guarda-corpos:
-- Não remover validações de URL/token/email no request de provisionamento.
-- Não persistir token em claro no metadata do registro local.
+- `src/api/routers/instagram_provision_router.py`: recebe a requisição, valida e persiste o registro.
+- `src/channel_layer/services/instagram_onboarding.py`: encapsula chamadas para a Graph API.
+- `src/security/client_directory.py`: registra e consulta a conta Instagram provisionada.
+- `src/api/security/permissions.py`: define a permissão `provision.instagram`.
+- `src/api/routers/channel_router.py`: expõe as operações do canal depois do provisionamento.
 
-## 5) Mapa visual 1: fluxo macro (Flowchart)
+## 5. Fluxo real do endpoint
 
-```mermaid
-flowchart TD
-    A[POST /api/instagram/provision/start] --> B[Valida permissão provision.instagram]
-    B --> C[Valida payload IDs/tokens/url]
-    C --> D[InstagramProvisionerAsync]
-    D --> E[fetch_business_profile]
-    E --> F[subscribe_page_to_messages]
-    F --> G[configure_webhook]
-    G --> H[ClientDirectory.register_instagram_account]
-    H --> I[Resposta success active]
-```
+O caminho confirmado no backend é este:
 
-## 6) Mapa visual 2: quem chama quem (Sequence)
+1. o cliente chama `POST /api/instagram/provision/start`;
+2. o endpoint exige a permissão `provision.instagram`;
+3. o payload é validado antes de qualquer chamada externa;
+4. o `client_code` é extraído da autenticação, não do corpo da requisição;
+5. o router cria `InstagramProvisionerAsync`;
+6. o serviço consulta o perfil da conta de negócio;
+7. o serviço inscreve a página para mensagens;
+8. o serviço configura o webhook;
+9. o router calcula hashes de segredos e grava o vínculo no `ClientDirectory`;
+10. a resposta volta com `success=true`, `status=active`, `ig_username` e `page_id`.
 
-```mermaid
-sequenceDiagram
-    participant U as Usuário
-    participant API as instagram_provision_router
-    participant PROV as InstagramProvisionerAsync
-    participant META as Meta Graph API
-    participant DIR as ClientDirectory
+## 6. Configurações e decisões importantes
 
-    U->>API: POST /api/instagram/provision/start
-    API->>API: validar request + permissão
-    API->>PROV: fetch_business_profile(account_id)
-    PROV->>META: GET /{instagram_business_account_id}
-    META-->>PROV: perfil
-    API->>PROV: subscribe_page_to_messages(page_id)
-    PROV->>META: POST /{page_id}/subscribed_apps
-    META-->>PROV: ok
-    API->>PROV: configure_webhook(callback_url, verify_token)
-    PROV->>META: POST /{app_id}/subscriptions
-    META-->>PROV: ok
-    API->>DIR: register_instagram_account(...)
-    DIR-->>API: record
-    API-->>U: InstagramProvisionResponse
-```
+No comportamento atual:
 
-## 7) Mapa visual 3: camadas (Layer Diagram)
+- `graph_api_version` pode ser enviado no request;
+- se esse campo vier ausente, o fluxo usa `v20.0`;
+- não existe endpoint dedicado de `verify` no router de provisionamento;
+- não existe endpoint dedicado de `takeover` no router de provisionamento.
 
-```mermaid
-flowchart LR
-    subgraph EntryPoints
-      EP1[src/api/service_api.py]
-      EP2[src/api/routers/instagram_provision_router.py]
-    end
-
-    subgraph Orchestration
-      OR1[validação request e permissão]
-      OR2[montagem metadata e persistência]
-    end
-
-    subgraph AgentsGraphs
-      AG1[Não encontrado no código]
-    end
-
-    subgraph ToolsIntegrations
-      TI1[src/channel_layer/services/instagram_onboarding.py]
-      TI2[Meta Graph API]
-    end
-
-    subgraph DataLayer
-      DL1[src/security/client_directory.py]
-      DL2[registro instagram account]
-    end
-
-    EP1 --> EP2 --> OR1 --> TI1 --> TI2
-    EP2 --> OR2 --> DL1 --> DL2
-```
-
-## 8) Mapa visual 4: componentes (Component Diagram)
-
-```mermaid
-flowchart TB
-    C1[service_api]
-    C2[instagram_provision_router]
-    C3[PermissionKeys.PROVISION_INSTAGRAM]
-    C4[InstagramProvisionerAsync]
-    C5[ClientDirectory]
-    C6[channel_router instagram messages/send]
-    C7[test_instagram_provision_router]
-    C8[test_instagram_onboarding]
-
-    C1 --> C2
-    C2 --> C3
-    C2 --> C4
-    C2 --> C5
-    C2 --> C6
-    C2 --> C7
-    C4 --> C8
-```
-
-## 9) Onde isso aparece neste projeto (visão rápida)
-
-- Include do router Instagram em `src/api/service_api.py:1557`.
-- Permissão de provisionamento em `src/api/security/permissions.py:89`.
-- Endpoint `POST /start` em `src/api/routers/instagram_provision_router.py:207`.
-- Serviço de onboarding em `src/channel_layer/services/instagram_onboarding.py`.
-- Registro da conta provisionada em `src/security/client_directory.py:492`.
-- Consulta de conta registrada em `src/security/client_directory.py:513`.
-- Operação de mensagens do canal em `src/api/routers/channel_router.py:1713`.
-- Envio manual no canal em `src/api/routers/channel_router.py:1757`.
-- Histórico do canal em `src/api/routers/channel_router.py:1931`.
-
-## 10) Caminho real no código (onde olhar)
-
-- `src/api/routers/instagram_provision_router.py`: valida request, chama provisioner e persiste registro.
-- `src/channel_layer/services/instagram_onboarding.py`: operações Graph API (`fetch`, `subscribe`, `webhook`).
-- `src/security/client_directory.py`: grava e consulta `instagram_business_account_id` local.
-- `src/api/routers/channel_router.py`: endpoints para consumo/envio operacional após provisionamento.
-- `tests/unit/test_instagram_provision_router.py`: valida fluxo de sucesso e erros HTTP.
-- `tests/unit/test_instagram_onboarding.py`: valida token/page/app token e resposta da API.
-
-## 11) Fluxo passo a passo (o que acontece de verdade)
-
-1. Cliente chama `POST /api/instagram/provision/start`.
-2. O endpoint exige permissão `provision.instagram`.
-3. O payload é validado para IDs, URL, email, token e versão de API.
-4. `client_code` é extraído do `user_data` autenticado.
-5. O router cria `InstagramProvisionerAsync` e executa:
-6. `fetch_business_profile(instagram_business_account_id)`.
-7. `subscribe_page_to_messages(page_id)`.
-8. `configure_webhook(callback_url, verify_token)`.
-9. O router monta metadata com hashes dos segredos e registra conta em `ClientDirectory`.
-10. Retorna `success=true`, `status=active`, `ig_username`, `page_id`.
-
-Com config ativa:
-- `graph_api_version` pode ser informado no request; se ausente, usa `v20.0`.
-
-No estado atual:
-- Não existe endpoint separado de `verify` para Instagram no router de provisionamento.
-- Não existe endpoint de `takeover` Instagram no router de provisionamento.
-
-## 12) Status: está pronto? quanto está pronto?
+## 7. O que já está pronto
 
 | Área | Evidência | Status | Impacto prático | Próximo passo mínimo |
-|---|---|---|---|---|
-| Endpoint de provisionamento Instagram | `instagram_provision_router.py:207` | pronto | Provisiona com validação e persistência | manter contrato OpenAPI atualizado |
-| Permissão dedicada | `permissions.py:89` | pronto | restringe uso a perfis autorizados | revisar papéis por tenant |
-| Integração Graph API | `instagram_onboarding.py` | pronto | executa onboarding essencial | adicionar métricas por chamada externa |
-| Persistência local da conta | `client_directory.py:492` | pronto | mantém vínculo tenant x conta Instagram | validar campos obrigatórios em migração |
-| Hash de segredos no metadata | `instagram_provision_router.py` | pronto | reduz exposição de segredo em storage | manter política sem token em claro |
-| Rotina de retry explícito | não encontrado no serviço | parcial | risco maior em intermitência de rede | aplicar retry/backoff central do projeto |
-| Fluxo de verify/takeover dedicado | não encontrado no router | ausente | reduz flexibilidade de migração incremental | criar endpoints separados quando necessário |
-| Testes unitários de provisionamento | `test_instagram_provision_router.py`, `test_instagram_onboarding.py` | pronto | reduz regressão de contrato | incluir integração com stub HTTP realista |
+| ---- | --------- | ------ | ---------------- | -------------------- |
+| Endpoint de provisionamento | `instagram_provision_router.py` | pronto | provisiona com validação e persistência | manter contrato do request consistente |
+| Permissão dedicada | `permissions.py` | pronto | restringe o uso a perfis autorizados | revisar papéis por tenant |
+| Integração com Graph API | `instagram_onboarding.py` | pronto | executa o onboarding essencial | ampliar métricas por chamada externa |
+| Persistência local | `client_directory.py` | pronto | mantém vínculo tenant x conta Instagram | revisar obrigatoriedade de campos |
+| Hash de segredos | `instagram_provision_router.py` | pronto | evita salvar segredo em claro | manter política de segurança |
+| Retry explícito | não encontrado no serviço | parcial | aumenta risco em falha transitória de rede | aplicar helper central de retry |
+| Fluxos verify e takeover | não encontrados | ausente | limita migração incremental | criar endpoints separados quando fizer sentido |
 
-## 13) Como colocar para funcionar (hands-on end-to-end)
+## 8. Como colocar para funcionar
 
-Passo 0: pré-requisitos
-- Python 3.11 (`pyproject.toml`).
-- Dependências do projeto instaladas.
+Passo 1. Ative o ambiente virtual.
 
-Passo 1: ambiente
-- `source .venv/bin/activate`.
+- `source .venv/bin/activate`
 
-Passo 2: subir API
-- `python main.py`.
+Passo 2. Suba a API.
 
-Passo 3: credencial com permissão
-- Use `X-API-Key` que tenha `provision.instagram`.
+- `python main.py`
 
-Passo 4: chamar provisionamento
-- Endpoint: `POST /api/instagram/provision/start`.
-- Campos obrigatórios: `instagram_business_account_id`, `page_id`, `display_name`, `email`, `access_token`, `app_id`, `app_secret`, `callback_url`, `verify_token`.
+Passo 3. Use uma credencial com a permissão correta.
 
-Passo 5: validar persistência
-- Confirme registro no diretório via métodos de consulta de conta Instagram.
+- `X-API-Key` precisa carregar `provision.instagram`.
 
-Passo 6: validar operação do canal
-- Teste endpoint de mensagem do canal em `channel_router` (`/instagram/{channel_id}/messages` e `/send`).
+Passo 4. Chame o endpoint de provisionamento.
 
-Passo 7: validar testes
-- `source .venv/bin/activate && PROMETEU_RUNNING_TESTS=1 pytest tests/unit/test_instagram_provision_router.py tests/unit/test_instagram_onboarding.py -q`.
+- `POST /api/instagram/provision/start`
 
-O que espero ver
-- Resposta `200` com `success=true` no `/start`.
-- `status=active` no retorno do provisionamento.
-- Logs com correlação do fluxo de provisionamento e, depois, do canal.
+Campos obrigatórios esperados pelo fluxo:
 
-## 14) ELI5: onde coloco cada parte da feature neste projeto?
+- `instagram_business_account_id`;
+- `page_id`;
+- `display_name`;
+- `email`;
+- `access_token`;
+- `app_id`;
+- `app_secret`;
+- `callback_url`;
+- `verify_token`.
 
-- Entrada HTTP de provisionamento: `instagram_provision_router.py`.
-- Regras de validação de dados de entrada: no próprio request model do router.
-- Integração com Meta: `instagram_onboarding.py`.
-- Registro local de estado: `client_directory.py`.
-- Operação de mensagens pós-provisionamento: `channel_router.py`.
-- Testes de segurança e contrato: `tests/unit/test_instagram_provision_router.py`.
+Passo 5. Valide a persistência local.
 
-| Pergunta | Resposta | Camada | Onde no repo |
-|---|---|---|---|
-| Onde criar campo novo de request de provisionamento? | No model de request do router | Contrato HTTP | `src/api/routers/instagram_provision_router.py` |
-| Onde chamar endpoint novo da Meta? | No serviço assíncrono de onboarding | Integração | `src/channel_layer/services/instagram_onboarding.py` |
-| Onde persistir dado derivado do provisionamento? | No registro de conta Instagram do diretório | Dados | `src/security/client_directory.py` |
-| Onde validar permissão da chave? | No endpoint via dependency/decorator | Segurança | `src/api/routers/instagram_provision_router.py` |
-| Onde testar webhook sem produção? | Endpoint de teste no channel router | Operação | `src/api/routers/channel_router.py` |
+- confirme o registro da conta no `ClientDirectory`.
 
-## 15) Template de mudança (preenchido com padrões do repo)
+Passo 6. Valide o pós-provisionamento.
 
-1) entrada: qual endpoint/job dispara?
-- paths: `src/api/routers/instagram_provision_router.py`
-- contrato de entrada: `InstagramProvisionStartRequest`
+- teste as rotas do canal em `channel_router`, como mensagens e envio manual.
 
-2) config: qual YAML/env controla?
-- keys: `graph_api_version` no request; credenciais de canal no diretório/tenant
-- onde é lido: router + `InstagramProvisionerAsync`
+Passo 7. Rode os testes focados.
 
-3) execução: qual grafo ou nó entra?
-- builder/factory: não aplicável neste fluxo
-- state: não usa stategraph neste ponto
+- `source .venv/bin/activate && PROMETEU_RUNNING_TESTS=1 pytest tests/unit/test_instagram_provision_router.py tests/unit/test_instagram_onboarding.py -q`
 
-4) ferramentas: quais tools são usadas?
-- registro: não aplicável no provisionamento
-- chamadas: integração direta por serviço Python (`InstagramProvisionerAsync`)
+## 9. O que esperar no caminho feliz
 
-5) dados: onde persiste/cache/indexa?
-- MySQL: indireto via repositórios do diretório multi-tenant
-- Redis: não encontrado no escopo de provisionamento Instagram
-- Qdrant/outros: não encontrado no escopo de provisionamento Instagram
+Quando tudo funciona:
 
-6) observabilidade: onde loga/traça?
-- logs: `create_logger_with_correlation(...)` no serviço
-- correlation/trace: token de correlação normalizado no serviço
+- o endpoint responde com HTTP 200;
+- `success=true` aparece no retorno;
+- o status vem como `active`;
+- a conta fica registrada para o tenant;
+- o canal pode seguir para rotas operacionais de mensagem.
 
-7) testes: onde validar?
-- unit: `test_instagram_provision_router.py` e `test_instagram_onboarding.py`
-- integration: não encontrado no escopo analisado
+## 10. Erros comuns
 
-## 16) CUIDADO: o que NÃO fazer (guarda-corpos)
+Sintoma: erro 400 no endpoint.
 
-- Não aceitar `callback_url` sem esquema/host válido.
-- Não persistir `access_token` e `app_secret` em claro.
-- Não provisionar sem `client_code` vindo da autenticação.
-- Não remover validação de `graph_api_version`.
-- Não pular testes do router ao alterar o contrato do request.
+- hipótese mais provável: payload inválido, como URL, email, token ou ID malformado.
 
-## 17) Anti-exemplos (obrigatório)
+Sintoma: erro 400 por `client_code` ausente.
 
-Erro comum: colocar chamada HTTP da Meta direto no endpoint.
-- por que é ruim: acopla contrato HTTP com integração externa.
-- correção: manter chamada encapsulada em `InstagramProvisionerAsync`.
+- hipótese mais provável: a credencial autenticada não traz o vínculo de tenant esperado.
 
-Erro comum: salvar token puro no metadata.
-- por que é ruim: risco de segurança grave.
-- correção: persistir apenas hash e dados não sensíveis.
+Sintoma: erro 502.
 
-Erro comum: usar `client_code` vindo do corpo da requisição.
-- por que é ruim: pode abrir brecha de tenant crossing.
-- correção: usar `client_code` do `user_data` autenticado.
+- hipótese mais provável: a Graph API respondeu com falha HTTP.
 
-Erro comum: ignorar erro HTTP da Graph API.
-- por que é ruim: cliente recebe falso sucesso.
-- correção: mapear erro para status apropriado no endpoint.
+Sintoma: erro 503.
 
-## 18) Exemplos guiados (2 a 4)
+- hipótese mais provável: falha de rede na chamada externa.
 
-Exemplo 1: falha por token curto
-- siga os validadores do request no router.
-- confirme teste que valida token/URL/email inválidos.
+Sintoma: canal provisionado não recebe eventos.
 
-Exemplo 2: erro HTTP da Graph API
-- siga o `except httpx.HTTPStatusError` no endpoint.
-- confirme teste com provisioner que simula falha HTTP.
+- hipótese mais provável: webhook, callback ou vínculo do canal está incompleto.
 
-Exemplo 3: persistência segura
-- siga bloco que calcula hashes (`access_token`, `app|secret`, `verify_token`).
-- confirme no teste que metadata não contém token em claro.
+## 11. O que não fazer
 
-Exemplo 4: pós-provisionamento operacional
-- siga rotas Instagram no `channel_router` (`messages`, `send`, `history`).
-- confirme como o canal já provisionado passa a operar mensagens.
+- não aceite `callback_url` sem validação adequada;
+- não persista `access_token` nem `app_secret` em claro;
+- não use `client_code` vindo do corpo da requisição;
+- não mova chamadas da Meta para dentro do endpoint sem encapsulamento;
+- não altere o request model sem atualizar os testes.
 
-## 19) Erros comuns e como reconhecer (debugging)
+## 12. Explicação 101
 
-sintoma observável: `400` no `/start` com validação.
-- hipótese: campo de entrada inválido (url/email/token/id).
-- como confirmar: validadores do model no router.
-- correção segura: corrigir payload conforme contrato.
+Se você estiver começando agora, guarde esta versão curta:
 
-sintoma observável: `400` dizendo client_code ausente.
-- hipótese: chave autenticada sem `client_code` associado.
-- como confirmar: extração de `client_code` do `user_data` no endpoint.
-- correção segura: ajustar cadastro da credencial no diretório.
+o router recebe os dados da conta, o serviço fala com a Meta, e o diretório salva o vínculo local. O objetivo do provisionamento não é só testar token. É deixar o canal realmente pronto para operar dentro da plataforma.
 
-sintoma observável: `502` após chamada externa.
-- hipótese: Meta Graph API retornou erro HTTP.
-- como confirmar: bloco de tratamento `httpx.HTTPStatusError`.
-- correção segura: validar IDs/tokens/permissões no app Meta.
+## 13. Checklist final
 
-sintoma observável: `503` no provisionamento.
-- hipótese: falha de rede para Graph API.
-- como confirmar: bloco de tratamento `httpx.RequestError`.
-- correção segura: repetir com conectividade estável e, idealmente, retry.
+- sei qual endpoint provisiona Instagram;
+- sei qual permissão é exigida;
+- sei onde a Graph API é chamada;
+- sei onde o vínculo local é persistido;
+- sei que segredos não devem ser salvos em claro;
+- sei quais testes cobrem o fluxo principal;
+- sei diferenciar erro de validação, erro HTTP externo e erro de rede.
 
-sintoma observável: canal provisionado não recebe eventos.
-- hipótese: webhook/canal não configurado corretamente no fluxo operacional.
-- como confirmar: revisar callbacks e rotas do `channel_router`.
-- correção segura: revisar callback_url, verify_token e vínculo de channel_id.
+## 14. Evidências no código
 
-sintoma observável: regressão após alteração no request model.
-- hipótese: contrato mudou sem atualizar testes.
-- como confirmar: falhas em `test_instagram_provision_router.py`.
-- correção segura: alinhar contrato e testes no mesmo PR.
-
-## 20) Exercícios guiados (obrigatório)
-
-Exercício 1
-- objetivo: mapear o caminho de erro 502.
-- passos: simular exceção HTTP no provisioner e observar resposta do endpoint.
-- como verificar no código: `instagram_provision_router.py` + testes unitários.
-- gabarito: endpoint converte erro Graph API para `HTTP 502`.
-
-Exercício 2
-- objetivo: validar persistência de hash de segredo.
-- passos: executar teste de sucesso e inspecionar metadata salvo.
-- como verificar no código: `test_instagram_provision_router.py`.
-- gabarito: existem hashes, não existe token em claro.
-
-Exercício 3
-- objetivo: confirmar uso de app token em webhook config.
-- passos: seguir `configure_webhook` até `_request(... use_app_token=True)`.
-- como verificar no código: `instagram_onboarding.py` + testes.
-- gabarito: token usado é `app_id|app_secret` nessa chamada.
-
-## 21) Checklist final
-
-- Sei qual endpoint provisiona Instagram.
-- Sei qual permissão é necessária.
-- Sei onde ficam as validações de payload.
-- Sei onde são feitas as chamadas para Graph API.
-- Sei onde a conta provisionada é persistida.
-- Sei que segredos são salvos como hash no metadata.
-- Sei como identificar erros de rede e de HTTP externo.
-- Sei onde estão os testes unitários principais.
-- Sei as rotas de operação do canal depois do provisionamento.
-- Sei o que ainda falta para robustez máxima.
-
-## 22) Checklist de PR quando mexer nisso (obrigatório)
-
-- Manteve `@endpoint_permission(PermissionKeys.PROVISION_INSTAGRAM)`.
-- Não quebrou contrato de `InstagramProvisionStartRequest`.
-- Manteve validação de URL, email e tokens.
-- Não introduziu persistência de segredo em claro.
-- Manteve mapeamento de erro HTTP externo para status apropriado.
-- Atualizou testes unitários impactados.
-- Revisou fluxo operacional no `channel_router` quando aplicável.
-- Atualizou documentação funcional se houver mudança de comportamento.
-
-## 23) Referências
-
-Referências internas:
-- `src/api/service_api.py`
-- `src/api/security/permissions.py`
-- `src/api/routers/instagram_provision_router.py`
-- `src/channel_layer/services/instagram_onboarding.py`
-- `src/security/client_directory.py`
-- `src/api/routers/channel_router.py`
-- `tests/unit/test_instagram_provision_router.py`
-- `tests/unit/test_instagram_onboarding.py`
-- `docs/README-INSTAGRAM-PROVISIONING.md`
-
-Referências externas consultadas:
-- FastAPI Documentation, Tutorial/User Guide.
-- Meta Developers, Instagram/Graph API e configuração de webhook (referência normativa).
-
-## 24) Avaliação objetiva: está pronto?
-
-Status funcional:
-- Pronto para provisionar conta Instagram via endpoint único `/start` com persistência local.
-
-Status de qualidade:
-- Parcialmente pronto para ambientes com alta intermitência externa, pois não há evidência de retry explícito no serviço de onboarding.
-
-Status de produção:
-- Pronto para uso com controle de permissão e validações essenciais, desde que credenciais Meta e callback estejam corretos.
-
-Recomendação pragmática:
-- Próximo ganho técnico de maior impacto é adicionar retry/backoff explícito no `InstagramProvisionerAsync` e teste de integração para falhas transitórias.
+- `src/api/routers/instagram_provision_router.py`: entrada HTTP e persistência do registro.
+- `src/channel_layer/services/instagram_onboarding.py`: integração com a Graph API.
+- `src/security/client_directory.py`: registro da conta provisionada.
+- `src/api/security/permissions.py`: permissão `provision.instagram`.
+- `tests/unit/test_instagram_provision_router.py`: validação do endpoint.
+- `tests/unit/test_instagram_onboarding.py`: validação do serviço.

@@ -41,25 +41,7 @@ processo autorizado pode mexer nesse despertador para evitar duplicidade.
 
 ## Fluxo resumido
 
-```mermaid
-sequenceDiagram
-  participant PROC as Processo scheduler
-  participant BOOT as RuntimeBootstrap
-  participant REDIS as Liderança Redis
-  participant MAIN as Scheduler de manutenção
-  participant ING as Scheduler de ingestão
-  participant REPO as tenant_scheduler_jobs
-
-  PROC->>BOOT: inicia bootstrap compartilhado
-  BOOT->>REDIS: decide liderança quando habilitada
-  alt Liderança ativa
-    BOOT->>MAIN: agenda log GC e reconciliação de ingestão
-    BOOT->>REPO: restaura jobs persistidos
-    BOOT->>ING: inicia scheduler de ingestão
-  else Sem liderança
-    BOOT-->>PROC: sobe sem jobs críticos ativos
-  end
-```
+![Fluxo resumido](assets/diagrams/docs-readme-scheduler-diagrama-01.svg)
 
 ## Relação entre API, scheduler e worker
 

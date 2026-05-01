@@ -105,22 +105,7 @@ Os detalhes desse fluxo ficam em README-AUTENTICACAO-MFA.md.
 
 ## Fluxo resumido do runtime
 
-```mermaid
-flowchart TD
-    A[Requisição] --> B{Entrada}
-    B -->|X-API-Key ou YAML access_key| C[user_auth]
-    B -->|Login federado| D[auth_router]
-    B -->|Login local| D
-    C --> E[ClientDirectory]
-    D --> E
-    D --> F{MFA exigido?}
-    F -->|Sim| G[TOTP]
-    F -->|Não| H[Sessão web final]
-    G --> H
-    E --> I[tenant_id, user_account_id,
-    tenant_user_id, permissoes]
-    H --> I
-```
+![Fluxo resumido do runtime](assets/diagrams/docs-readme-sistema-autenticacao-diagrama-01.svg)
 
 ## Como o usuário recebe essa feature
 

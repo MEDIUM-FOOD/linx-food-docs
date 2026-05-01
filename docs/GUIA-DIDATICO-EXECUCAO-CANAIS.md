@@ -14,17 +14,7 @@ Hoje a topologia operacional correta e esta: a API atende HTTP, o scheduler roda
 
 ## Visao rapida
 
-```mermaid
-flowchart LR
-    U[Operador ou cliente] --> API[API]
-    API --> HTTP[Endpoints HTTP]
-    API --> STATUS[Consulta de status e historico]
-    SCHED[Scheduler dedicado] --> JOBS[Jobs por tempo]
-    WORKER[Worker oficial] --> CHANNELS[Plano de controle multicanal]
-    WORKER --> ASYNC[Runtime assincrono RabbitMQ + Dramatiq]
-    ASYNC --> ING[Ingestao assincrona]
-    ASYNC --> ETL[ETL assincrono]
-```
+![Visao rapida](assets/diagrams/docs-guia-didatico-execucao-canais-diagrama-01.svg)
 
 Em termos praticos:
 

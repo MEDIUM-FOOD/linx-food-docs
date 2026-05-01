@@ -59,147 +59,25 @@ A analogia do mundo real é esta: auto_config é o resumo editorial de uma cole�
 
 ## 6) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart TD
-    A[Documento ingerido] --> B[DbPayloadBuilder]
-    B --> C[Manifesto com auto_config_signals e auto_config_domain_key]
-    C --> D[Persistencia SQL do manifesto]
-    D --> E[DomainAutoConfigAggregator]
-    E --> F[auto_config consolidado por dominio]
-    A --> G[Indexacao de chunks no vector store]
-    G --> H[BM25IndexManager update_index]
-    H --> I[Snapshot BM25 persistido por vectorstore_id]
-    F --> J[DomainConfigurationService]
-    I --> K[RetrievalEngine ou IntelligentOrchestrator]
-    J --> L[Runtime domain_specific_rag enriquecido]
-    K --> L
-    L --> M[QueryAnalyzer]
-    L --> N[AdaptiveRouter]
-    L --> O[Query Expansion]
-    M --> P[RAG responde melhor a pergunta]
-    N --> P
-    O --> P
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant Ingestao as Pipeline de Ingestao
-    participant Payload as DbPayloadBuilder
-    participant SQL as Persistencia SQL
-    participant AutoAgg as DomainAutoConfigAggregator
-    participant Repo as DomainConfigRepository
-    participant BM25 as BM25IndexManager
-    participant Orq as IntelligentOrchestrator
-    participant DomainSvc as DomainConfigurationService
-    participant Query as QueryAnalyzer
-    participant Router as AdaptiveRouter
-
-    Ingestao->>Payload: monta manifesto e chunks
-    Payload->>Payload: adiciona auto_config_domain_key
-    Payload->>Payload: adiciona auto_config_signals
-    Payload->>SQL: persiste manifesto
-    SQL->>AutoAgg: pos-persistencia chama agregacao
-    AutoAgg->>SQL: le manifestos do dominio
-    AutoAgg->>Repo: update_auto_config
-    Ingestao->>BM25: update_index(vectorstore_id, chunks)
-    BM25->>BM25: grava snapshot e cache
-    Orq->>DomainSvc: apply_runtime_overrides
-    DomainSvc-->>Orq: runtime com auto_config aplicado
-    Orq->>Orq: merge_bm25_vocabulary_config
-    Orq->>BM25: load_vocabulary_snapshot
-    BM25-->>Orq: snapshot BM25
-    Orq->>Query: analisa pergunta com keywords enriquecidas
-    Orq->>Router: decide estrategia com indicadores
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart LR
-    subgraph EntryPoints
-        A1[src/api/routers/rag_router.py]
-        A2[Pipeline de ingestao]
-    end
-    subgraph Orchestration
-        B1[src/ingestion_layer/document_persistence_manager.py]
-        B2[src/domain_configuration/service.py]
-        B3[src/qa_layer/rag_engine/intelligent_orchestrator.py]
-    end
-    subgraph AgentsGraphs
-        C1[QueryAnalyzer]
-        C2[AdaptiveRouter]
-        C3[RetrievalEngine]
-    end
-    subgraph ToolsIntegrations
-        D1[DomainAutoConfigAggregator]
-        D2[BM25IndexManager]
-        D3[DomainConfigRepository]
-    end
-    subgraph DataLayer
-        E1[Postgres manifests e dominios]
-        E2[Redis cache BM25]
-        E3[Payload BM25 persistido]
-        E4[Vector store chunks]
-    end
-    subgraph ContractsConfigs
-        F1[app/yaml/system/rag-config-modelo.yaml]
-        F2[domain_specific_processing]
-        F3[domain_specific_rag]
-        F4[rag_system.retriever.hybrid.bm25]
-    end
-
-    A2 --> B1 --> D1 --> D3 --> E1
-    A2 --> D2 --> E2
-    A2 --> D2 --> E3
-    A2 --> E4
-    A1 --> B3 --> B2
-    B2 --> C1
-    B2 --> C2
-    B3 --> C3 --> D2
-    F1 --> F2
-    F1 --> F3
-    F1 --> F4
-    F2 --> D1
-    F3 --> B2
-    F4 --> D2
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart TD
-    P1[DomainSignalProcessor]
-    P2[DbPayloadBuilder]
-    P3[DocumentPersistenceManagerMixin]
-    P4[DomainAutoConfigAggregator]
-    P5[DomainConfigRepository]
-    P6[BM25IndexManager]
-    P7[DomainConfigurationService]
-    P8[QueryAnalyzer]
-    P9[AdaptiveRouter]
-    P10[RetrievalEngine]
-    P11[IntelligentOrchestrator]
-
-    P1 --> P2
-    P2 --> P3
-    P3 --> P4
-    P4 --> P5
-    P6 --> P10
-    P7 --> P11
-    P7 --> P8
-    P7 --> P9
-    P10 --> P11
-    P11 --> P8
-    P11 --> P9
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag-diagrama-04.svg)
 
 ## 10) Onde isso aparece neste projeto
 
 - src/ingestion_layer/telemetry/db_payload_builder.py adiciona o marcador canônico auto_config_domain_key no manifesto.
 - src/ingestion_layer/telemetry/db_payload_builder.py calcula auto_config_signals a partir de pages_info e conteúdo.
-- src/ingestion_layer/document_persistence_manager.py dispara _maybe_aggregate_auto_config logo após a persistência do documento.
+- src/ingestion_layer/document_persistence_manager.py dispara `_maybe_aggregate_auto_config` logo após a persistência do documento.
 - src/ingestion_layer/telemetry/domain_signal_processor.py consolida sinais dos manifestos em um auto_config por domínio.
 - src/ingestion_layer/processors/domain_plugins/domain_config_repository.py grava o auto_config na persistência configurada para domínio.
 - src/qa_layer/rag_engine/bm25_index_manager.py atualiza o índice BM25 sempre que chunks são indexados.
@@ -212,19 +90,19 @@ flowchart TD
 
 ## 11) Caminho real no código
 
-- src/ingestion_layer/telemetry/db_payload_builder.py -> _ensure_auto_config_domain_marker(): decide qual domínio o manifesto representa.
-- src/ingestion_layer/telemetry/db_payload_builder.py -> _enrich_with_signals(): grava auto_config_signals no metadata do manifesto.
-- src/ingestion_layer/document_persistence_manager.py -> _persist_document(): persiste manifesto e depois tenta agregar auto_config.
-- src/ingestion_layer/document_persistence_manager.py -> _maybe_aggregate_auto_config(): chama o agregador com preferred_mode incremental.
+- src/ingestion_layer/telemetry/db_payload_builder.py -> `_ensure_auto_config_domain_marker()`: decide qual domínio o manifesto representa.
+- src/ingestion_layer/telemetry/db_payload_builder.py -> `_enrich_with_signals()`: grava auto_config_signals no metadata do manifesto.
+- src/ingestion_layer/document_persistence_manager.py -> `_persist_document()`: persiste manifesto e depois tenta agregar auto_config.
+- src/ingestion_layer/document_persistence_manager.py -> `_maybe_aggregate_auto_config()`: chama o agregador com preferred_mode incremental.
 - src/ingestion_layer/telemetry/domain_signal_processor.py -> aggregate_and_persist(): escolhe incremental ou full scan.
-- src/ingestion_layer/telemetry/domain_signal_processor.py -> _collect_manifest_signals(): lê sinais salvos nos manifestos do domínio.
-- src/ingestion_layer/telemetry/domain_signal_processor.py -> _build_auto_config(): transforma contadores em detection e vocabulary.
+- src/ingestion_layer/telemetry/domain_signal_processor.py -> `_collect_manifest_signals()`: lê sinais salvos nos manifestos do domínio.
+- src/ingestion_layer/telemetry/domain_signal_processor.py -> `_build_auto_config()`: transforma contadores em detection e vocabulary.
 - src/ingestion_layer/processors/domain_plugins/domain_config_repository.py -> update_auto_config(): persiste o snapshot no backend de domínio, com versionamento e hash.
 - src/ingestion_layer/vector_stores/base.py -> manager.update_index(vectorstore_id, chunks): dispara atualização BM25 após indexação.
 - src/qa_layer/rag_engine/bm25_index_manager.py -> update_index(): atualiza entries, documents e o bloco de vocabulário do BM25.
 - src/qa_layer/rag_engine/bm25_index_manager.py -> load_vocabulary_snapshot(): carrega snapshot BM25 e exige cache Redis materializado.
-- src/domain_configuration/service.py -> _apply_auto_config_runtime_hints(): injeta auto_config em auto_detection_keywords, query_expansion e adaptive_router_indicators.
-- src/qa_layer/rag_engine/query_analyzer.py -> _load_auto_detection_keywords(): lê keywords já enriquecidas no runtime.
+- src/domain_configuration/service.py -> `_apply_auto_config_runtime_hints()`: injeta auto_config em auto_detection_keywords, query_expansion e adaptive_router_indicators.
+- src/qa_layer/rag_engine/query_analyzer.py -> `_load_auto_detection_keywords()`: lê keywords já enriquecidas no runtime.
 - src/qa_layer/rag_engine/retrieval_engine.py -> merge_bm25_vocabulary_config(): carrega o snapshot BM25 e injeta na configuração ativa do RAG.
 - src/qa_layer/rag_engine/intelligent_orchestrator.py -> __init__(): primeiro aplica runtime overrides de domínio, depois mescla o snapshot BM25.
 
@@ -269,7 +147,7 @@ flowchart TD
 ## 13) Status: está pronto? quanto está pronto?
 
 | Área | Evidência | Status | Impacto prático | Próximo passo mínimo |
-|---|---|---|---|---|
+| ---- | --------- | ------ | ---------------- | -------------------- |
 | Geração de auto_config_signals na ingestão | src/ingestion_layer/telemetry/db_payload_builder.py | pronto | manifesto já sai com sinais úteis para consolidação posterior | manter cobertura por tipo documental relevante |
 | Marcação canônica do domínio no manifesto | src/ingestion_layer/telemetry/db_payload_builder.py | pronto | o agregador consegue separar manifestos por domínio | garantir domínio único quando chunks são heterogêneos |
 | Agregação automática após persistência | src/ingestion_layer/document_persistence_manager.py | pronto | o auto_config pode se atualizar sem endpoint manual | monitorar custo em cargas muito grandes |
@@ -349,7 +227,7 @@ Se você precisar mexer nesse assunto, pense em quatro gavetas diferentes.
 A primeira gaveta é a captura de sinais na ingestão. A segunda é a consolidação por domínio. A terceira é o índice lexical BM25 por vectorstore. A quarta é a aplicação desses aprendizados no runtime do RAG.
 
 | Pergunta | Resposta | Camada | Onde no repo |
-|---|---|---|---|
+| -------- | -------- | ------ | ------------ |
 | Onde nascem os sinais que depois viram auto_config? | No metadata do manifesto durante a construção do payload de persistência | ingestão | src/ingestion_layer/telemetry/db_payload_builder.py |
 | Onde o auto_config consolidado é calculado? | No agregador que lê vários manifestos do mesmo domínio | consolidação | src/ingestion_layer/telemetry/domain_signal_processor.py |
 | Onde o auto_config é gravado? | No repositório de domínio, normalmente em Postgres | persistência | src/ingestion_layer/processors/domain_plugins/domain_config_repository.py |

@@ -45,17 +45,7 @@ depois, seja no disco local, na Northflank, no CloudWatch ou no Azure.
 
 ## Fluxo resumido
 
-```mermaid
-flowchart LR
-        A[Requisição ou tarefa] --> B[correlation_id]
-        B --> C[create_logger_with_correlation]
-        C --> D[Evento sanitizado]
-        D --> E[Arquivo dedicado quando aplicável]
-        D --> F[Logger compartilhado quando aplicável]
-        E --> G[Provider canônico]
-        F --> G
-        G --> H[Listagem download análise]
-```
+![Fluxo resumido](assets/diagrams/docs-readme-logging-diagrama-01.svg)
 
 ## O contrato do correlation_id
 

@@ -49,25 +49,7 @@ segue direto e o navegador recebe o cookie final.
 
 ## Onde o TOTP entra no fluxo
 
-```mermaid
-sequenceDiagram
-  participant U as Usuario
-  participant API as auth_router
-  participant SESS as SessionRepository
-  participant TOTP as TotpService
-
-  U->>API: Login web federado ou local
-  API->>SESS: issue(session)
-  API->>TOTP: get_status(email)
-
-  alt TOTP ja habilitado
-    API-->>U: status mfa_challenge + session_token temporario
-  else Politica global exige MFA
-    API-->>U: status mfa_setup_required + session_token temporario
-  else Sem MFA pendente
-    API-->>U: cookie final da sessao web
-  end
-```
+![Onde o TOTP entra no fluxo](assets/diagrams/docs-readme-autenticacao-mfa-diagrama-01.svg)
 
 ## Estados observados na resposta
 

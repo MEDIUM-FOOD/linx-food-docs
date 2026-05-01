@@ -1,99 +1,36 @@
-**Produto:** Plataforma de Agentes de IA
-
 # Pipeline de Ingestão e RAG — compêndio definitivo
+
+Produto: Plataforma de Agentes de IA
 
 ## Visão geral
 
-Este documento consolida, em um único lugar, o pipeline de ingestão e o
-pipeline de RAG da Plataforma de Agentes de IA. Ele descreve a ordem real de execução,
-as técnicas implementadas, os componentes responsáveis e os fluxogramas
-operacionais. O conteúdo foi construído a partir de leitura direta do
-codebase e de documentação interna existente.
+Este documento explica a engrenagem completa entre preparar acervo e responder com evidência. O objetivo não é servir como inventário do codebase. O objetivo é deixar claro por que a plataforma separa ingestão e RAG, que tipo de decisão cada pipeline toma e onde o operador deve olhar quando algo sai errado.
 
-### Explicação conceitual
+### Conceito da ingestão
 
-A ingestão transforma fontes diversas em chunks normalizados e indexados.
-O RAG, por sua vez, recupera esses chunks com estratégias múltiplas e
-monta uma resposta com evidências rastreáveis. Os dois pipelines são
-complementares: sem ingestão consistente não há recuperação confiável,
-e sem recuperação inteligente o conteúdo ingerido não gera respostas
-precisas.
+A ingestão existe para transformar fontes heterogêneas em um acervo pesquisável, coerente e rastreável. O RAG existe para consultar esse acervo sem tratar a pergunta como simples chamada ao modelo. Os dois pipelines precisam conversar, mas não podem ser confundidos. Um prepara o terreno. O outro decide como usar esse terreno para responder.
 
-### Explicação for dummies
+### Explicação 101 da ingestão
 
-Pense em uma linha de montagem. A ingestão pega documentos e organiza em
-"cartões" menores. O RAG é a parte que procura os cartões certos e monta
-uma resposta com base neles. Se a linha de montagem estiver ruim, o RAG
-não encontra nada bom. Se o RAG estiver ruim, mesmo cartões bons não
-viram respostas úteis.
+Pense em uma biblioteca. A ingestão é quem recebe livros novos, limpa, organiza, etiqueta e guarda nas estantes certas. O RAG é o bibliotecário que entende a pergunta e procura os trechos certos para responder. Se a biblioteca foi organizada mal, o bibliotecário sofre. Se o bibliotecário procura mal, até uma boa biblioteca parece inútil.
 
 ---
 
 ## Escopo, método e fonte de verdade
 
-A fonte de verdade é o código. Os módulos auditados que embasam o
-conteúdo estão listados abaixo. Se um módulo não aparece nesta lista,
-ele não está descrito aqui e precisa de auditoria adicional para uma
-cobertura total.
+A fonte de verdade continua sendo o código executável. Este documento foi reescrito para explicar o fluxo como sistema, não como lista de módulos lidos. Por isso as evidências ficam espalhadas ao longo das seções e são retomadas no fechamento da auditoria, em vez de abrir o texto como um inventário de classes e arquivos.
 
-### Módulos auditados na ingestão
+O que importa para o leitor é entender três pontos.
 
-- src/ingestion_layer/main_orchestrator.py
-- src/ingestion_layer/core/factories.py
-- src/ingestion_layer/processors/base.py
-- src/ingestion_layer/processors/pdf_processor.py
-- src/ingestion_layer/processors/pdf_pipeline/pipeline_contracts.py
-- src/ingestion_layer/processors/pdf_pipeline/pdf_extraction_stages.py
-- src/ingestion_layer/processors/pdf_pipeline/pdf_text_processing_stages.py
-- src/ingestion_layer/processors/pdf_ocr_service.py
-- src/ingestion_layer/processors/pdf_table_service.py
-- src/ingestion_layer/processors/pdf_pages_info_builder.py
-- src/ingestion_layer/processors/pdf_reference_detector.py
-- src/ingestion_layer/processors/pdf_metadata_builder.py
-- src/ingestion_layer/pdf_tools/pdf_parsing_engine_contract.py
-- src/ingestion_layer/pdf_tools/docling_pdf_parsing_engine.py
-- src/ingestion_layer/pdf_tools/table_extractors/gmft_extractor.py
-- src/ingestion_layer/processors/html_processor.py
-- src/ingestion_layer/processors/web_processor.py
-- src/ingestion_layer/processors/json_processor.py
-- src/ingestion_layer/processors/excel_processor.py
-- src/ingestion_layer/processors/docx_processor.py
-- src/ingestion_layer/processors/ppt_processor.py
-- src/ingestion_layer/processors/txt_processor.py
-- src/ingestion_layer/processors/image_processor.py
-- src/ingestion_layer/clients/web_scraping_client.py
-- src/ingestion_layer/vector_stores/base.py
-- src/ingestion_layer/core/metadata_reducer.py
-- src/ingestion_layer/core/chunk_normalizer.py
-
-### Módulos auditados no RAG
-
-- src/qa_layer/content_qa_system.py
-- src/qa_layer/rag_engine/intelligent_orchestrator.py
-- src/qa_layer/rag_engine/processor.py
-- src/qa_layer/rag_engine/query_analyzer.py
-- src/qa_layer/rag_engine/query_rewriter.py
-- src/qa_layer/rag_engine/adaptive_router.py
-- src/qa_layer/rag_engine/retrievers.py
-- src/qa_layer/rag_engine/fusion_algorithms.py
-- src/qa_layer/rag_engine/reranker.py
-- src/qa_layer/rag_engine/fts_postgres_retriever.py
-- src/qa_layer/rag_engine/semantic_cache.py
-- src/qa_layer/domain_specific_rag/domain_specific_rag.py
-- src/qa_layer/json_rag/query_detector.py
-- src/qa_layer/json_rag/specialized_rag.py
-- src/qa_layer/json_rag/specialized_rag_excel.py
-
----
+1. Como o acervo nasce.
+2. Como a consulta escolhe evidência.
+3. Como as duas metades permanecem sincronizadas operacionalmente.
 
 ## Cobertura atual e pontos de atenção
 
-- Conteúdos cobertos: PDFs técnicos com OCR e tabelas, sites técnicos/HTML,
-  JSON estruturado e planilhas Excel.
-- Recuperação: busca híbrida, BM25, FTS PostgreSQL, reranking neural e
-  self-query por domínio.
-- Limitações atuais: parsing layout-aware profundo, chunking hierárquico e
-  tabelas estruturadas consolidadas.
+Hoje o pipeline cobre bem documentos como PDFs técnicos, páginas web, JSON e planilhas, com recuperação híbrida e uso combinado de busca vetorial, BM25 e estratégias de rerank. O ponto crítico não é apenas quantos formatos entram. É se o conteúdo entra com qualidade suficiente para depois ser recuperado com sentido.
+
+As limitações mais relevantes continuam aparecendo quando a extração estrutural perde semântica importante, quando o particionamento exagera ou quando o acervo cresce sem disciplina operacional suficiente para manter stores e índices coerentes.
 
 ## Regra de integridade do dataset vivo
 
@@ -120,103 +57,7 @@ Leitura 101: pense nesses três componentes como o gerente, o livro-caixa e o í
 
 ## Fluxograma principal
 
-```mermaid
-flowchart TB
-  Start([Inicio: Requisicao do Usuario]) --> Mode{Modo?}
-
-  Mode -->|Ingestao| IngestionStart[ContentIngestionOrchestrator]
-  IngestionStart --> DataSource[DataSource Factory]
-  DataSource --> |Confluence/Web/TXT/DOCX/PDF/JSON/Excel/YouTube| Content[Conteudo Bruto]
-  Content --> Processor[ContentProcessor]
-
-  Processor --> ChunkStrategy{Estrategia de Chunking}
-  ChunkStrategy -->|Adaptativo| AdaptiveChunk[Chunking Adaptativo]
-  ChunkStrategy -->|Semantico| SemanticChunk[Chunking Semantico]
-  ChunkStrategy -->|Estrutural| StructuralChunk[Chunking Estrutural]
-
-  AdaptiveChunk --> Metadata[Metadados Enriquecidos]
-  SemanticChunk --> Metadata
-  StructuralChunk --> Metadata
-
-  Metadata --> Embedding[Embedding Generation]
-  Embedding --> VectorStore[Vector Store]
-  VectorStore -->|Qdrant/Azure Search| BM25Index[BM25 Index]
-  BM25Index --> IngestionEnd([Ingestao Completa])
-
-  Mode -->|Consulta| QAStart[ContentQASystem]
-  QAStart --> IntelligentOrch[IntelligentRAGOrchestrator]
-
-  IntelligentOrch --> Rewrite{Reescrita habilitada?}
-  Rewrite -->|Sim| QueryRewrite[QueryRewriter]
-  Rewrite -->|Nao| Pipeline[Pipeline Inteligente]
-  QueryRewrite --> Pipeline
-
-  Pipeline --> Step1[1. Query Analysis]
-  Step1 --> Analyzer[QueryAnalyzer]
-  Analyzer -->|Features| Features[QueryFeatures: tipo, dominio, complexidade]
-
-  Features --> Step2[2. Adaptive Routing]
-  Step2 --> Router[AdaptiveQueryRouter]
-  Router -->|RoutingDecision| Decision{Decisao de Roteamento}
-
-  Decision -->|JSON_TOOLKIT| JSONProc[JSON Processor]
-  Decision -->|HYBRID_SEARCH| HybridProc[Hybrid Processor]
-  Decision -->|SELF_QUERY| SelfQueryProc[Self-Query Processor]
-  Decision -->|MULTI_QUERY| MultiQueryProc[Multi-Query Processor]
-  Decision -->|TRADITIONAL_RAG| TraditionalProc[Traditional Processor]
-
-  JSONProc --> Step3[3. Query Expansion]
-  HybridProc --> Step3
-  SelfQueryProc --> Step3
-  MultiQueryProc --> Step3
-  TraditionalProc --> Step3
-
-  Step3 -->|Sim| Expansion[DNIT Query Expansion]
-  Step3 -->|Nao| Step4[4. Retrieval Execution]
-  Expansion --> Step4
-
-  Step4 --> CacheLookup{Cache Semantico por retriever?}
-  CacheLookup -->|HIT| CachedDocs[Documentos em cache]
-  CacheLookup -->|MISS| RetrievalType{Tipo de Retrieval}
-
-  RetrievalType -->|Vector (texto/visao)| VectorRet[VectorStoreRetriever]
-  RetrievalType -->|BM25| BM25Ret[BM25Retriever]
-  RetrievalType -->|Hybrid| HybridRet[HybridRetriever]
-  RetrievalType -->|FTS| FTSRet[FTSPostgresRetriever]
-
-  VectorRet --> Docs[Documentos Recuperados]
-  BM25Ret --> Docs
-  HybridRet --> FusionStep[Fusion Processing]
-  FTSRet --> Docs
-  CachedDocs --> Docs
-
-  FusionStep --> FusionAlgo{Algoritmo de Fusao}
-  FusionAlgo -->|RRF| RRF[Reciprocal Rank Fusion]
-  FusionAlgo -->|Weighted RRF| WRRF[Weighted RRF]
-  FusionAlgo -->|Linear| Linear[Linear Combination]
-  FusionAlgo -->|Interleaved| Interleaved[Interleaving]
-
-  RRF --> Docs
-  WRRF --> Docs
-  Linear --> Docs
-  Interleaved --> Docs
-
-  Docs --> Step5[5. Access Control]
-  Step5 --> ACL[AccessControlEvaluator]
-  ACL --> FilteredDocs[Documentos Filtrados]
-
-  FilteredDocs --> Step6[6. Reranking]
-  Step6 --> Reranker[NeuralReranker]
-  Reranker -->|Cross-Encoder| RankedDocs[Documentos Ranqueados]
-
-  RankedDocs --> Step7[7. Generation]
-  Step7 --> LLM[LLM Generation]
-  LLM --> Answer[Resposta Final]
-
-  Answer --> Telemetry[Telemetria e Metricas]
-  Telemetry --> CacheUpdate[Atualizar Cache Semantico]
-  CacheUpdate --> QAEnd([Consulta Completa])
-```
+![Fluxograma principal](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-01.svg)
 
 ---
 
@@ -319,39 +160,44 @@ cria um identificador numérico que ajuda a encontrar aquela imagem depois.
 Isso é essencial quando as informações importantes estão em desenhos, tabelas
 renderizadas como imagem ou fotos de obra.
 
-**Onde configura**
+### Como decidir o que configurar no PDF
 
-- Habilitação do overlay multimodal do PDF: `ingestion.content_profiles.type_specific.pdf.multimodal.enabled`.
-- Habilitação do OCR multimodal do PDF: `ingestion.content_profiles.type_specific.pdf.multimodal.ocr.enabled`.
-- Habilitação da descrição visual do PDF: `ingestion.content_profiles.type_specific.pdf.multimodal.image_description.enabled`.
-- Parsing principal do PDF: `ingestion.content_profiles.type_specific.pdf.processing.parsing.base.options`.
-- OCR document-level: `ingestion.content_profiles.type_specific.pdf.processing.ocr.document_preprocessing.base.options`.
-- OCR por página: `ingestion.content_profiles.type_specific.pdf.processing.ocr.base.options`.
-- Tabelas: `ingestion.content_profiles.type_specific.pdf.processing.tables.base.options`.
-- Extração de imagens: `ingestion.content_profiles.type_specific.pdf.multimodal.image_extraction.base.options`.
-- OCR: `ingestion.content_profiles.type_specific.pdf.multimodal.ocr.base.options`.
-- Descrição: `ingestion.content_profiles.type_specific.pdf.multimodal.image_description.base.options`.
-- Embedding visual: `ingestion.content_profiles.type_specific.pdf.multimodal.vision_embedding.base.options`.
+O erro do leitor aqui era obrigar a pessoa a decorar nomes de chave sem antes entender a decisao. O jeito certo de pensar esse bloco e por pergunta operacional:
 
-**Regra de escopo que o runtime segue hoje**
+- O PDF precisa ser tratado apenas como texto corrido? Entao o foco principal e o parsing base em `ingestion.content_profiles.type_specific.pdf.processing.parsing.base.options`. Esse bloco controla a fila principal que tenta extrair texto normal, estrutura e tabelas do documento.
+- O documento inteiro veio como scan ruim, quase sem texto util? Entao o ajuste mais importante e o OCR documental em `ingestion.content_profiles.type_specific.pdf.processing.ocr.document_preprocessing.base.options`. Esse caminho tenta recuperar o PDF inteiro antes do parsing principal.
+- So algumas paginas vieram pobres em texto, mas o restante do PDF esta bom? Nesse caso o ajuste certo costuma ser o OCR por pagina em `ingestion.content_profiles.type_specific.pdf.processing.ocr.base.options`. Ele e um socorro pontual, nao uma segunda ingestao completa do arquivo.
+- O valor do PDF esta em diagramas, fotos, plantas ou screenshots? A partir daqui voce entra no trilho multimodal local do PDF. A chave mestre e `ingestion.content_profiles.type_specific.pdf.multimodal.enabled`. Sem ela, o runtime nao abre o fluxo de imagem para esse tipo de documento.
+- Alem de enxergar a imagem, o sistema precisa ler texto dentro dela? Entao habilite o OCR multimodal em `ingestion.content_profiles.type_specific.pdf.multimodal.ocr.enabled` e ajuste os parametros reais em `ingestion.content_profiles.type_specific.pdf.multimodal.ocr.base.options`.
+- O sistema precisa explicar o que a imagem mostra, e nao apenas ler texto dela? Entao o recurso certo e a descricao visual em `ingestion.content_profiles.type_specific.pdf.multimodal.image_description.enabled`, com detalhes em `ingestion.content_profiles.type_specific.pdf.multimodal.image_description.base.options`.
+- O objetivo e recuperar imagens parecidas depois, por semelhanca visual? Entao o componente relevante e o embedding visual em `ingestion.content_profiles.type_specific.pdf.multimodal.vision_embedding.base.options`.
+- O PDF tem muitas figuras que precisam virar ativos individuais no pipeline? Entao revise a extracao de imagens em `ingestion.content_profiles.type_specific.pdf.multimodal.image_extraction.base.options`.
+- O problema esta em tabelas que o parser principal nao esta entendendo direito? Antes de mexer no resto, revise `ingestion.content_profiles.type_specific.pdf.processing.tables.base.options`, porque tabela ruim quase sempre e problema de extracao estrutural, nao de OCR multimodal.
+
+Em resumo: primeiro decida se o problema e texto do documento inteiro, pagina ruim isolada, tabela mal extraida ou imagem relevante. So depois disso faz sentido abrir a chave YAML correspondente. Isso evita o erro comum de ativar tudo ao mesmo tempo sem saber qual fila do runtime estava falhando.
+
+#### Regra de escopo que o runtime segue hoje
 
 - PDF e imagem extraída de PDF usam apenas `ingestion.content_profiles.type_specific.pdf.multimodal.*`.
 - Imagem avulsa, DOCX, PPT, Web e Confluence usam `ingestion.multimodal_ai.*`.
 - Quando os dois blocos existem para PDF, o local vence; o global só completa o que estiver omitido.
 - Não existe chave global `ingestion.content_processing.multimodal.enabled` controlando esse contrato.
 
-**Regra prática importante**
+#### Regra prática importante
+
 Cada uma dessas filas é local e independente. A fila que lê o texto principal do PDF não é compartilhada com o OCR por página, com o OCR multimodal, com a descrição visual nem com o embedding visual.
 
-**O que `preprocess_images` faz de verdade hoje**
+#### O que `preprocess_images` faz de verdade hoje
 
-**Explicação conceitual**
+##### Conceito do pré-processamento
+
 No runtime atual, `multimodal.ocr.preprocess_images` controla um pré-tratamento simples aplicado antes do OCR multimodal por imagem. Esse tratamento existe na implementação do `TesseractOCRProcessor` e não representa uma pipeline avançada de visão computacional. Quando a flag está ativa, o código tenta preparar a imagem para melhorar legibilidade antes de chamar o Tesseract. Se o pré-processamento falhar, o pipeline não aborta por isso: ele volta para a imagem original e segue o OCR.
 
-**Explicação for dummies**
+##### Explicação 101 do pré-processamento
+
 Pense nessa flag como um “ajeitar a foto antes de tentar ler”. O sistema não redesenha a imagem nem faz milagre. Ele só tenta deixá-la mais amigável para leitura automática. Se a figura vier pequena ou colorida demais, isso pode ajudar o OCR a enxergar melhor as letras. Se não ajudar, o sistema usa a imagem do jeito que ela veio, sem quebrar o pipeline.
 
-**Comportamento real observado no código**
+#### Comportamento real observado no código
 
 - Se `preprocess_images: true`, o `TesseractOCRProcessor` chama `_preprocess_image(...)` antes do OCR.
 - Esse método converte a imagem para escala de cinza quando ela não está em modo `L`.
@@ -359,23 +205,23 @@ Pense nessa flag como um “ajeitar a foto antes de tentar ler”. O sistema nã
 - Se der erro nesse tratamento, o código registra debug e usa a imagem original.
 - No estado atual do código, esse pré-tratamento está implementado explicitamente no caminho do Tesseract multimodal. `EasyOCR` e `RapidOCR` processam os bytes recebidos sem usar essa mesma rotina.
 
-**Impacto prático**
+#### Impacto prático
 
 - Ajuda mais quando a imagem contém texto pequeno, screenshot compacta ou recorte reduzido do PDF.
 - Não significa deskew, remoção avançada de ruído, binarização pesada nem correção semântica da imagem no OCR multimodal.
 - Se o time ativar essa flag esperando “OCR inteligente completo”, a expectativa fica errada. O ganho aqui é incremental, não milagroso.
 
-**Quando vale deixar `true`**
+#### Quando vale deixar `true`
 
 - PDFs técnicos com screenshots, diagramas com rótulos pequenos ou figuras recortadas.
 - Casos em que o OCR visual já é importante e o custo extra de pré-tratamento é aceitável.
 
-**Quando vale revisar com mais cuidado**
+#### Quando vale revisar com mais cuidado
 
 - Se o tenant usa majoritariamente `EasyOCR`, `RapidOCR` ou OCR cloud no multimodal e o time acha que essa flag altera igualmente todas as engines.
 - Se o time precisa de pré-processamento mais pesado, porque o comportamento atual é deliberadamente simples.
 
-**Exemplo completo de YAML canônico do bloco PDF**
+#### Exemplo completo de YAML canônico do bloco PDF
 
 Fonte real usada como referência: `app/yaml/system/rag-config-modelo.yaml`.
 
@@ -567,7 +413,7 @@ content_profiles:
         max_concurrent_images: 5
 ```
 
-**Material dono do assunto**
+#### Material dono do assunto
 
 - O manual consolidado do mecanismo de engines, com explicação 101, filas possíveis, credenciais por engine e diagramas, está em [README-INGESTAO.md](README-INGESTAO.md).
 - O tutorial guiado de ponta a ponta do pipeline PDF está em [tutorial-101-ingestao-pdf.md](tutorial-101-ingestao-pdf.md).
@@ -632,76 +478,20 @@ faixa. O payload persiste `page_range`, `provider`, `model`, `dimensions` e
 
 ## Pipeline de ingestão detalhado
 
-```mermaid
-flowchart LR
-  subgraph "1. ACQUISITION"
-    DS[DataSource] -->|Confluence| ConfDS[ConfluenceDataSource]
-    DS --> Client[IContentClient]
-    Client -->|Web| WebClient[WebScrapingDatasourceMultimodalAdapterClient]
-    Client -->|File| FileClient[FileClient]
-    Client -->|YouTube| YTClient[YouTubeClient]
-  end
-
-  subgraph "2. PROCESSING"
-    ConfDS --> Proc[IContentProcessor]
-    WebClient --> Proc
-    FileClient --> Proc
-    YTClient --> Proc
-
-    Proc -->|HTML| HTMLProc[HtmlProcessor]
-    Proc -->|PDF| PDFProc[PdfProcessor]
-    Proc -->|DOCX| DOCXProc[DocxProcessor]
-    Proc -->|JSON| JSONProc[JsonProcessor]
-    Proc -->|Excel| ExcelProc[ExcelProcessor]
-    Proc -->|TXT| TXTProc[TxtProcessor]
-  end
-
-  subgraph "3. CHUNKING"
-    HTMLProc --> Chunk[BaseContentProcessor._split_into_chunks]
-    PDFProc --> Chunk
-    DOCXProc --> Chunk
-    JSONProc --> Chunk
-    ExcelProc --> Chunk
-    TXTProc --> Chunk
-
-    Chunk --> Adaptive[_compute_adaptive_chunk_params]
-    Adaptive --> |chunk_size, overlap| Split[RecursiveCharacterTextSplitter]
-  end
-
-  subgraph "4. ENRICHMENT"
-    Split --> Meta[Metadata Builder]
-    Meta --> Hash[ContentHashGenerator]
-    Hash --> Keywords[RAKE Keyword Extractor]
-  end
-
-  subgraph "5. VECTORIZATION"
-    Keywords --> Embed[Embeddings]
-    Embed -->|OpenAI/Azure| Vector[Vector Embeddings]
-  end
-
-  subgraph "6. STORAGE"
-    Vector --> VS{Vector Store Type}
-    VS -->|Qdrant| Qdrant[(Qdrant VectorDB)]
-    VS -->|Azure| Azure[(Azure AI Search)]
-
-    Qdrant --> BM25[BM25 Vocabulary Builder]
-    Azure --> BM25
-    BM25 --> Postgres[(PostgreSQL)]
-  end
-```
+![Pipeline de ingestão detalhado](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-02.svg)
 
 ---
 
 ## Pipeline de RAG — ordem de execução e técnicas
 
-### Explicação conceitual
+### Conceito do RAG
 
 O pipeline de RAG analisa a pergunta, escolhe a melhor estratégia de
 recuperação e monta uma resposta com evidências. Ele combina sinais
 semânticos e lexicais, aplica reranking e registra métricas para
 observabilidade.
 
-### Explicação for dummies
+### Explicação 101 do RAG
 
 O RAG lê a pergunta, decide como buscar, encontra as partes certas dos
 documentos e monta a resposta com base no que encontrou.
@@ -767,230 +557,25 @@ documentos e monta a resposta com base no que encontrou.
 
 ## Pipeline de QA/Retrieval detalhado
 
-```mermaid
-flowchart TB
-  subgraph "ETAPA 0: REESCRITA DA QUERY"
-    Q[Query do Usuario] --> RewriteCheck{Reescrita habilitada?}
-    RewriteCheck -->|Sim| Rewriter[QueryRewriter]
-    RewriteCheck -->|Nao| QA
-    Rewriter --> QA
-  end
-
-  subgraph "ETAPA 1: ANALISE DA QUERY"
-    QA[QueryAnalyzer] --> Features{Query Features}
-    Features -->|QueryType| Type[factual/procedural/conceptual/comparative]
-    Features -->|DataType| Data[structured_json/unstructured_text/mixed]
-    Features -->|Domain| Domain[technical/operational/regulatory]
-    Features -->|Complexity| Complex[0.0-1.0]
-  end
-
-  subgraph "ETAPA 2: ROTEAMENTO ADAPTATIVO"
-    Type --> AR[AdaptiveQueryRouter]
-    Data --> AR
-    Domain --> AR
-    Complex --> AR
-
-    AR --> Rules[Routing Rules]
-    Rules --> Strategy{Retrieval Strategy}
-    Strategy -->|Alta Complexidade| Hybrid[HYBRID_SEARCH]
-    Strategy -->|JSON Query| JSONTool[JSON_TOOLKIT]
-    Strategy -->|Filtros Estruturados| SelfQ[SELF_QUERY]
-    Strategy -->|Multiplas Perspectivas| MultiQ[MULTI_QUERY]
-    Strategy -->|Simples| Trad[TRADITIONAL_RAG]
-  end
-
-  subgraph "ETAPA 3: EXPANSAO DE QUERY"
-    Hybrid --> Expand{Expansao Necessaria?}
-    JSONTool --> Expand
-    SelfQ --> Expand
-    MultiQ --> Expand
-    Trad --> Expand
-    Expand -->|Sim - DNIT| DNIT[DnitQueryExpansionStep]
-    Expand -->|Nao| Retrieve[Retrieval]
-    DNIT --> Retrieve
-  end
-
-  subgraph "ETAPA 4: RETRIEVAL EXECUTION"
-    Retrieve --> Cache{Cache Semantico por retriever?}
-    Cache -->|HIT| CachedDocs[Documentos em cache]
-    Cache -->|MISS| RetType{Tipo de Retriever}
-
-    RetType -->|Vector (texto/visao)| VSRet[VectorStoreRetriever]
-    RetType -->|BM25| BM25Ret[BM25Retriever]
-    RetType -->|Hybrid| HybRet[HybridRetriever]
-    RetType -->|FTS| FTSRet[FTSPostgresRetriever]
-
-    VSRet -->|Similarity Search| VSDocs[Vector Documents]
-    BM25Ret -->|Lexical Search| BM25Docs[BM25 Documents]
-    HybRet --> Fusion[HybridFusion]
-    FTSRet -->|Full-Text Search| FTSDocs[FTS Documents]
-
-    Fusion -->|RRF/Weighted RRF/Linear| HybDocs[Hybrid Documents]
-  end
-
-  subgraph "ETAPA 5: ACCESS CONTROL"
-    VSDocs --> ACL[AccessControlEvaluator]
-    BM25Docs --> ACL
-    HybDocs --> ACL
-    FTSDocs --> ACL
-    CachedDocs --> ACL
-
-    ACL -->|Filtrar por Permissoes| Filtered[Documentos Autorizados]
-  end
-
-  subgraph "ETAPA 6: RERANKING"
-    Filtered --> Rerank{Reranking Habilitado?}
-    Rerank -->|Sim| NeuralRerank[NeuralReranker]
-    Rerank -->|Nao| Final[Documentos Finais]
-
-    NeuralRerank -->|Cross-Encoder| Scored[Documents + Scores]
-    Scored -->|Feedback Score| Combined[Combined Score]
-    Combined --> TopK[Top-K Selection]
-    TopK --> Final
-  end
-
-  subgraph "ETAPA 7: GENERATION"
-    Final --> Context[Build Context]
-    Context --> Prompt[Prompt Template]
-    Prompt --> LLM[LLM Invoke]
-    LLM --> Response[Resposta Gerada]
-  end
-
-  subgraph "ETAPA 8: TELEMETRIA"
-    Response --> Metrics[PipelineTelemetryRecorder]
-    Metrics --> Record[Record Metrics]
-    Record --> Token[Token Billing]
-    Token --> Log[Structured Logging]
-    Log --> UpdateCache[Update Semantic Cache]
-  end
-```
+![Pipeline de QA/Retrieval detalhado](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-03.svg)
 
 ---
 
 ## Detalhamento: hybrid retrieval e fusao
 
-```mermaid
-flowchart LR
-  subgraph "PARALLEL RETRIEVAL"
-    Q[Query] --> V[Vector Retriever]
-    Q --> B[BM25 Retriever]
-    Q --> F[FTS Retriever]
-
-    V -->|top_k=20| VDocs[20 docs - Vector]
-    B -->|top_k=20| BDocs[20 docs - BM25]
-    F -->|top_k=20| FDocs[20 docs - FTS]
-  end
-
-  subgraph "FUSION PROCESSING"
-    VDocs --> Fusion[HybridFusion]
-    BDocs --> Fusion
-    FDocs --> Fusion
-
-    Fusion --> Dedup[1. Deduplicacao]
-    Dedup -->|document_key| Unique[Documentos Unicos]
-
-    Unique --> Normalize[2. Normalizacao de Scores]
-    Normalize -->|min-max/z-score| NormScores[Scores Normalizados]
-
-    NormScores --> Algo{Algoritmo}
-
-    Algo -->|RRF| RRFCalc[score = 1/(k + rank)]
-    Algo -->|Weighted RRF| WRRFCalc[score = w1/(k+r1) + w2/(k+r2)]
-    Algo -->|Linear| LinearCalc[score = w1*s1 + w2*s2]
-    Algo -->|Interleaved| IntCalc[alternating docs]
-
-    RRFCalc --> Combined[Combined Scores]
-    WRRFCalc --> Combined
-    LinearCalc --> Combined
-    IntCalc --> Combined
-
-    Combined --> Sort[3. Ordenacao]
-    Sort --> TopK[4. Top-K Selection]
-    TopK --> Result[Documentos Fusionados]
-  end
-```
+![Detalhamento: hybrid retrieval e fusao](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-04.svg)
 
 ---
 
 ## Detalhamento: reranking com feedback
 
-```mermaid
-flowchart TB
-  subgraph "INPUT"
-    Docs[Documentos Recuperados] --> Extract[Extrair Texto]
-    Query[Query] --> Extract
-  end
-
-  subgraph "NEURAL RERANKING"
-    Extract --> Pairs[Criar Pares query-doc]
-    Pairs --> Model[Cross-Encoder Model]
-    Model -->|sentence-transformers| NeuralScore[Neural Scores 0-1]
-  end
-
-  subgraph "FEEDBACK INTEGRATION"
-    Docs --> Metadata[Extrair Metadata]
-    Metadata --> FeedbackField{feedback_score existe?}
-
-    FeedbackField -->|Sim| FeedbackScore[Feedback Score]
-    FeedbackField -->|Nao| DefaultFB[Default: 0.0]
-
-    FeedbackScore --> Combine
-    DefaultFB --> Combine
-  end
-
-  subgraph "SCORE COMBINATION"
-    NeuralScore --> Combine[Combinar Scores]
-    Combine -->|weighted avg| Formula[final = (1-w)*neural + w*feedback]
-    Formula --> FinalScore[Final Score]
-  end
-
-  subgraph "FILTERING"
-    FinalScore --> Threshold{Score >= threshold?}
-    Threshold -->|Sim| Keep[Manter Documento]
-    Threshold -->|Nao| Discard[Descartar]
-
-    Keep --> TopK[Selecionar Top-K]
-    TopK --> Ranked[Documentos Ranqueados]
-  end
-```
+![Detalhamento: reranking com feedback](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-05.svg)
 
 ---
 
 ## Detalhamento: cache semantico
 
-```mermaid
-flowchart LR
-  subgraph "CACHE LOOKUP"
-    Q[Query] --> Embed[Embeddings.embed_query]
-    Embed --> Vector[Query Vector]
-    Vector --> Redis[Redis HNSW Index]
-
-    Redis --> Search[Similarity Search]
-    Search --> Distance{Distance < threshold?}
-
-    Distance -->|Sim| Hit[CACHE HIT]
-    Distance -->|Nao| Miss[CACHE MISS]
-  end
-
-  subgraph "CACHE HIT"
-    Hit --> Retrieve[Retrieve Cached Docs]
-    Retrieve --> Filters{Filters Match?}
-
-    Filters -->|Sim| Return[Retornar Docs em Cache]
-    Filters -->|Nao| Invalid[Invalidar Cache]
-    Invalid --> Pipeline[Executar Pipeline]
-    Return --> Continue[Continuar Pipeline]
-  end
-
-  subgraph "CACHE MISS"
-    Miss --> Pipeline
-    Pipeline --> Result[Resultado do Pipeline]
-    Result --> Store[Armazenar no Cache]
-    Store --> TTL[TTL: 3600s]
-    TTL --> RedisSet[Redis SET]
-    RedisSet --> Continue
-  end
-```
+![Detalhamento: cache semantico](assets/diagrams/docs-pipeline-ingestao-rag-diagrama-06.svg)
 
 ---
 
@@ -999,7 +584,7 @@ flowchart LR
 ### Camada de ingestao
 
 | Componente | Arquivo | Responsabilidade |
-|---|---|---|
+| --- | --- | --- |
 | ContentIngestionOrchestrator | src/ingestion_layer/main_orchestrator.py | Orquestrador principal do pipeline de ingestao |
 | DataSource Factory | src/ingestion_layer/datasources/ | Criacao de clientes para diferentes fontes |
 | Content Processors | src/ingestion_layer/processors/ | Processamento especifico por tipo de conteudo |
@@ -1010,7 +595,7 @@ flowchart LR
 ### Camada de QA/Retrieval
 
 | Componente | Arquivo | Responsabilidade |
-|---|---|---|
+| --- | --- | --- |
 | ContentQASystem | src/qa_layer/content_qa_system.py | Sistema principal de Q&A |
 | IntelligentRAGOrchestrator | src/qa_layer/rag_engine/intelligent_orchestrator.py | Pipeline inteligente com etapas de decisao |
 | QueryRewriter | src/qa_layer/rag_engine/query_rewriter.py | Reescrita opcional de consultas |
@@ -1026,7 +611,7 @@ flowchart LR
 ### Componentes auxiliares
 
 | Componente | Arquivo | Responsabilidade |
-|---|---|---|
+| --- | --- | --- |
 | MultiQueryRetriever | src/qa_layer/rag_engine/multi_query_retriever.py | Multiplas variacoes da query |
 | FTSPostgresRetriever | src/qa_layer/rag_engine/fts_postgres_retriever.py | Full-text search PostgreSQL |
 | JSONSpecializedRAGExcel | src/qa_layer/json_rag/specialized_rag_excel.py | Queries estruturadas em Excel |
@@ -1066,7 +651,7 @@ flowchart LR
 ### Metricas coletadas
 
 | Categoria | Metricas |
-|---|---|
+| --- | --- |
 | Pipeline | decision_time, retrieval_time, reranking_time, generation_time, total_time |
 | Retrieval | docs_retrieved, docs_deduplicated, fusion_algorithm, retriever_usage |
 | Cache | cache_hits, cache_misses, cache_hit_rate |

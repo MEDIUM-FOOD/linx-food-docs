@@ -37,15 +37,12 @@ O modo só ativa quando o supervisor certo junta estas três condições:
 
 Exemplo base:
 
-```yaml
-selected_supervisor: "sup_deep"
-multi_agents:
-  - id: "sup_deep"
-    enabled: true
-    execution:
-      type: "deepagent"
-      default_mode: "direct_async"
-```
+Leitura prática do exemplo base:
+
+1. `selected_supervisor` aponta para `sup_deep`.
+2. Em `multi_agents`, o item `sup_deep` precisa estar habilitado.
+3. `execution.type=deepagent` liga o runtime correto.
+4. `execution.default_mode=direct_async` define o modo inicial de execução.
 
 ## 3. A nova regra mais importante
 
@@ -73,29 +70,13 @@ Isso importa porque:
 
 ## 5. O bloco recomendado no YAML
 
-```yaml
-middlewares:
-  filesystem:
-    enabled: true
-  shell:
-    enabled: false
-  memory:
-    enabled: true
-    sources: []
-  subagents:
-    enabled: true
-  human_in_the_loop:
-    enabled: false
-  summarization:
-    enabled: false
-  pii:
-    enabled: true
-    rules: []
-  todo_list:
-    enabled: true
-  skills:
-    enabled: false
-```
+Leitura prática do bloco recomendado:
+
+1. `filesystem` ligado e `shell` desligado formam o baseline mais seguro para começar.
+2. `memory` e `subagents` ligados mantêm memória e especialistas ativos.
+3. `human_in_the_loop` e `summarization` podem começar desligados quando o caso ainda não exige pausa humana nem resumo de contexto.
+4. `pii` e `todo_list` ligados reforçam proteção de dados e disciplina operacional.
+5. `skills` pode permanecer desligado até existir necessidade real e bloco `skills` top-level coerente.
 
 ## 6. O que cada middleware faz, sem jargão
 
@@ -239,61 +220,15 @@ Ele já inclui:
 4. HIL ligado de verdade,
 5. uma tool real do catálogo central para você testar a pausa.
 
-```yaml
-memory:
-  checkpointer:
-    enabled: true
-    backend: "postgresql"
-    postgres:
-      connection_string: "${USER_MEMORY_DATABASE_DSN}"
+Leitura prática do exemplo mínimo com HIL e checkpointer:
 
-selected_supervisor: "sup_deep_hil_minimo"
-
-multi_agents:
-  - id: "sup_deep_hil_minimo"
-    name: "DeepAgent HIL mínimo"
-    description: "Exemplo mínimo para pausa e retomada humana no DeepAgent."
-    enabled: true
-    execution:
-      type: "deepagent"
-      default_mode: "direct_sync"
-    prompt: |
-      Você coordena um especialista em cálculos.
-      Antes de executar a tool calculator, a decisão precisa passar por revisão humana.
-    middlewares:
-      filesystem:
-        enabled: false
-      shell:
-        enabled: false
-      memory:
-        enabled: false
-        sources: []
-      subagents:
-        enabled: true
-      human_in_the_loop:
-        enabled: true
-      summarization:
-        enabled: false
-      pii:
-        enabled: true
-        rules: []
-      todo_list:
-        enabled: true
-      skills:
-        enabled: false
-    interrupt_on:
-      calculator:
-        allowed_decisions: ["approve", "edit", "reject"]
-    agents:
-      - id: "especialista_calculo"
-        name: "Especialista em cálculo"
-        description: "Resolve contas simples usando a tool calculator."
-        tools:
-          - "calculator"
-        system_prompt: |
-          Quando precisar calcular, proponha a tool calculator.
-          Nunca invente o resultado do cálculo.
-```
+1. A raiz ativa `memory.checkpointer` com backend PostgreSQL e connection string via placeholder `${USER_MEMORY_DATABASE_DSN}`.
+2. `selected_supervisor` escolhe `sup_deep_hil_minimo` como supervisor ativo.
+3. O supervisor fica habilitado com `execution.type=deepagent` e `default_mode=direct_sync`.
+4. O prompt do supervisor deixa explícito que a tool `calculator` depende de revisão humana.
+5. Em `middlewares`, filesystem e shell ficam desligados, subagents, pii e todo_list ficam ligados, e `human_in_the_loop` também fica ligado.
+6. `interrupt_on.calculator` aceita as decisões `approve`, `edit` e `reject`.
+7. O agente `especialista_calculo` usa a tool `calculator` e recebe instrução explícita para não inventar resultado.
 
 Leitura simples:
 
@@ -336,73 +271,22 @@ Se estiver usando a API do produto:
 
 ## 8. Exemplo de shell ligado
 
-```yaml
-middlewares:
-  filesystem:
-    enabled: true
-  shell:
-    enabled: true
-    workspace_root: "/workspace"
-    tool_name: "execute"
-    startup_commands: ["pwd"]
-    shutdown_commands: []
-    execution_policy:
-      type: "host"
-  memory:
-    enabled: true
-    sources: []
-  subagents:
-    enabled: true
-  human_in_the_loop:
-    enabled: false
-  summarization:
-    enabled: false
-  pii:
-    enabled: true
-    rules: []
-  todo_list:
-    enabled: true
-  skills:
-    enabled: false
-permissions:
-  - operations: ["read"]
-    paths: ["/memories/**"]
-    mode: "allow"
-```
+Leitura prática do exemplo com shell ligado:
+
+1. `filesystem` e `shell` ficam ligados ao mesmo tempo.
+2. O shell usa `workspace_root=/workspace`, expõe a tool `execute` e pode subir com `startup_commands` simples, como `pwd`.
+3. A policy de execução fica em `execution_policy.type=host`.
+4. `permissions` precisa liberar explicitamente as operações e caminhos necessários, como leitura em `/memories/**`.
+5. Os demais middlewares podem seguir no baseline seguro: memory, subagents, pii e todo_list ligados; HIL, summarization e skills desligados.
 
 ## 9. Exemplo de skills no agente principal
 
-```yaml
-middlewares:
-  filesystem:
-    enabled: true
-  shell:
-    enabled: false
-  memory:
-    enabled: true
-    sources: []
-  subagents:
-    enabled: true
-  human_in_the_loop:
-    enabled: false
-  summarization:
-    enabled: false
-  pii:
-    enabled: true
-    rules: []
-  todo_list:
-    enabled: true
-  skills:
-    enabled: true
-skills:
-  - "/skills/main/"
-response_format:
-  type: "object"
-  properties:
-    summary:
-      type: "string"
-  required: ["summary"]
-```
+Leitura prática do exemplo com skills:
+
+1. `middlewares.skills.enabled=true` liga o middleware de skills no agente principal.
+2. A lista top-level `skills` precisa existir e pode apontar para um diretório como `/skills/main/`.
+3. O `response_format` pode exigir resposta estruturada, por exemplo um objeto com campo obrigatório `summary`.
+4. Os outros middlewares podem continuar no arranjo padrão, com filesystem, memory, subagents, pii e todo_list ativos, e shell, HIL e summarization desligados.
 
 ## 10. O que aparece no log quando o agente nasce
 

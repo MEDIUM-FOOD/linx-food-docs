@@ -1,0 +1,15 @@
+sequenceDiagram
+        participant Y as YAML
+        participant G as Registro governado
+        participant L as ToolLoader
+        participant F as DynamicSqlToolFactory
+        participant D as Banco SQL
+
+        Y->>L: dyn_sql<query_id>
+        L->>F: tool_config resolvido
+        F->>F: tenta tools_config.sql_dynamic
+        alt não encontrou no YAML
+                F->>G: resolve query por tenant
+        end
+        F->>D: executa SQL parametrizada
+        D-->>F: resultado ou erro

@@ -26,24 +26,7 @@ Em linguagem simples: `.github` é o manual de conduta da IA dentro do projeto.
 
 ## Mapa conceitual
 
-```mermaid
-flowchart TB
-  C[copilot-instructions.md] --> A[agents]
-  C --> I[instructions]
-  C --> S[skills]
-  I --> PY[Python]
-  I --> UI[HTML e JS]
-  I --> Y[YAML]
-  I --> SH[Shell]
-  A --> F[Fluxos de trabalho]
-  S --> F
-  F --> T[Suite oficial]
-  F --> E[Error backlog]
-  E --> R[Regression logs]
-  F --> L[Lessons]
-  L --> C
-  B[bad-instructions] --> C
-```
+![Mapa conceitual](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-artefatos-github-diagrama-01.svg)
 
 ## `copilot-instructions.md`
 

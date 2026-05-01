@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Cliente
+    participant API as API FastAPI
+    participant Auth as Auth e Permissões
+    participant Config as Resolução de YAML
+    participant Service as Service de Aplicação
+    participant Queue as RabbitMQ ou Execução Direta
+    participant Worker as Worker
+    participant Obs as Logs e Stores
+
+    Cliente->>API: Request HTTP
+    API->>Auth: valida principal
+    Auth-->>API: contexto autorizado
+    API->>Config: resolve YAML
+    Config-->>API: yaml_config resolvido
+    API->>Service: monta comando
+    alt síncrono
+        Service->>Obs: registra estado e logs
+        Service-->>API: resultado final
+    else assíncrono
+        Service->>Queue: publica job
+        Queue->>Worker: entrega envelope
+        Worker->>Obs: continua execução
+    end
+    API-->>Cliente: resposta com X-Correlation-Id

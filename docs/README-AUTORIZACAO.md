@@ -56,29 +56,7 @@ o login tenha dado certo.
 
 ## Fluxo real de autorização
 
-```mermaid
-sequenceDiagram
-  participant C as Cliente
-  participant API as FastAPI
-  participant REG as endpoint_permission
-  participant AUTH as user_auth
-  participant DIR as Diretorio ou sessao
-
-  C->>API: Chama endpoint protegido
-  API->>REG: Descobre permissao declarada
-
-  alt Access key tecnica
-    REG->>AUTH: resolve_access_key_from_request_sources
-    AUTH->>DIR: consulta access key
-  else Sessao web humana
-    REG->>AUTH: refresh do membership quando necessario
-    AUTH->>DIR: consulta grants efetivos
-  end
-
-  AUTH->>AUTH: valida permissao
-  AUTH-->>API: user_data autorizado
-  API-->>C: resposta
-```
+![Fluxo real de autorização](assets/diagrams/docs-readme-autorizacao-diagrama-01.svg)
 
 ## Ordem de precedência aplicada
 

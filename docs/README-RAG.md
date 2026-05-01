@@ -1,683 +1,191 @@
 # Pipeline RAG
 
-Este documento cobre o caminho atual de pergunta e resposta do RAG.
-O foco é mostrar o boundary HTTP real, a montagem obrigatória do
-runtime moderno e os pontos práticos de depuração.
+## 1. Visão geral
 
-## Entry point principal
+O RAG desta plataforma não foi desenhado como um chat que simplesmente busca alguns chunks e envia tudo ao modelo. O runtime atual separa preparação do contexto, análise da pergunta, escolha de estratégia de retrieval, recuperação de evidência e geração final.
 
-O boundary público principal do RAG fica em POST /rag/execute.
-Esse dispatcher unificado aceita operações diferentes e, no caso de
-consulta, roteia para o fluxo de pergunta.
+Essa separação existe porque responder bem não depende apenas do modelo. Depende principalmente de entender que tipo de pergunta chegou, qual evidência é mais útil, que estratégia de recuperação faz sentido e como transformar essa evidência em uma resposta auditável.
 
-Em linguagem simples: a entrada pública principal não é uma rota ask
-isolada. O contrato principal observado no código é /rag/execute.
+## 2. O problema que este módulo resolve
 
-## Escopo deste documento
+O problema real do RAG corporativo não é “achar texto parecido”. É produzir resposta útil quando a pergunta pode exigir sinais vetoriais, texto exato, filtros de domínio, múltiplas consultas, reescrita controlada e geração final coerente com a evidência encontrada.
 
-Este documento é o dono do pipeline moderno de consulta.
-Ele cobre a montagem do runtime de QA, a análise da pergunta, o
-retrieval, os caches, a fusão e a geração da resposta.
+Se esse problema fosse tratado como uma única chamada simples, o sistema perderia capacidade de diagnóstico. Quando a resposta viesse ruim, ninguém saberia se a falha aconteceu na compreensão da pergunta, na recuperação do contexto ou na geração.
 
-Para evitar sobreposição com outros documentos:
+O runtime moderno tenta resolver isso separando essas responsabilidades em etapas observáveis.
 
-- README-ARQUITETURA.md cobre a topologia macro da plataforma e a
-    separação entre API, worker e scheduler;
-- README-INGESTAO.md cobre como o acervo documental é produzido e
-    indexado;
-- README-ETL.md cobre o domínio ETL assíncrono.
-- tutorial-101-processo-completo-de-ingestao-e-rag.md junta produção do
-    acervo e consulta em uma narrativa única, do request ao efeito final.
-
-Em linguagem simples: aqui a pergunta já chegou ao sistema e o foco é
-como a resposta é construída, não como o acervo foi carregado.
-
-## Leitura relacionada
-
-- Visão macro da plataforma: [README-ARQUITETURA.md](./README-ARQUITETURA.md)
-- Produção e indexação do acervo: [README-INGESTAO.md](./README-INGESTAO.md)
-- Fluxo completo guiado de ingestão até resposta: [tutorial-101-processo-completo-de-ingestao-e-rag.md](./tutorial-101-processo-completo-de-ingestao-e-rag.md)
-- Pipeline combinado de ingestão e RAG: [PIPELINE-INGESTAO-RAG.md](./PIPELINE-INGESTAO-RAG.md)
-- Cache e comportamento de runtime: [README-CACHING.md](./README-CACHING.md)
-- Versão didática 101 deste assunto: [tutorial-101-rag.md](./tutorial-101-rag.md)
-
-## Componentes centrais
-
-### rag_router
-
-Recebe a requisição, aplica autenticação, permissão, rate limit e
-entrega a operação ao slice compatível do runtime.
-
-### ContentQASystem
-
-É a fachada principal do QA.
-Ele força a visão de pipeline moderno e registra o resumo consolidado
-do runtime antes da consulta.
-
-### QARuntimeAssembly
-
-Monta o pipeline moderno obrigatório.
-Se o runtime moderno não puder ser ativado, ele falha fechado com
-ModernPipelineUnavailableError.
-
-### IntelligentRAGOrchestrator
-
-Coordena a recuperação inteligente e integra sinais adicionais do
-runtime.
+## 3. Conceitos necessários para entender o módulo
 
-### RetrievalEngine
+### Retrieval
 
-Executa a busca de contexto.
-No código atual, ele expõe processadores dedicados para:
-
-- JSON;
-- hybrid;
-- native hybrid;
-- self query;
-- multi query;
-- tradicional;
-- fallback.
+Retrieval é a etapa de recuperar evidência útil antes da geração. O ponto importante é que retrieval não é sinônimo de busca vetorial. Ele pode combinar sinais vetoriais, sinais lexicais e estratégias mais especializadas conforme o caso.
 
-### GenerationEngine
+### Query analysis
 
-Produz a resposta final depois da recuperação de contexto.
+Query analysis é a leitura da pergunta para extrair pistas sobre intenção, domínio, complexidade e tipo de dado esperado. Isso existe para impedir que todas as perguntas sejam tratadas como se fossem iguais.
 
-## Fluxo ponta a ponta
+### Query rewrite
 
-1. O cliente chama POST /rag/execute.
-2. O router resolve autenticação, correlation_id e configuração.
-3. O fluxo de pergunta entra no ContentQASystem.
-4. QARuntimeAssembly garante o runtime moderno.
-5. IntelligentRAGOrchestrator coordena a estratégia.
-6. RetrievalEngine recupera o contexto.
-7. GenerationEngine monta a resposta final.
+Query rewrite é a reescrita controlada da pergunta antes do retrieval. O objetivo não é inventar uma nova intenção, mas limpar ruído e melhorar a chance de encontrar evidência relevante.
 
-```mermaid
-sequenceDiagram
-    participant Cliente
-    participant API as API /rag/execute
-    participant QA as ContentQASystem
-    participant Assembly as QARuntimeAssembly
-    participant Orch as IntelligentRAGOrchestrator
-    participant Retrieval as RetrievalEngine
-    participant Generation as GenerationEngine
-
-    Cliente->>API: POST /rag/execute
-    API->>QA: ask_question
-    QA->>Assembly: prepara runtime moderno
-    Assembly-->>QA: runtime pronto
-    QA->>Orch: coordena retrieval
-    Orch->>Retrieval: busca contexto
-    Retrieval-->>Orch: documentos e sinais
-    Orch->>Generation: gera resposta
-    Generation-->>API: answer e metadata
-    API-->>Cliente: resposta final
-```
+### Roteamento adaptativo
 
-## Mapa rápido das etapas internas do pipeline moderno
+Roteamento adaptativo é a decisão de qual estratégia de retrieval usar. Ele existe porque JSON, texto livre, pergunta comparativa, consulta híbrida e recuperação estruturada não têm o mesmo comportamento ideal.
 
-<!-- markdownlint-disable MD013 -->
-| Etapa | O que ela faz na prática | Arquivos principais |
-| --- | --- | --- |
-| 1. Boundary e contexto | recebe a pergunta, resolve YAML, autenticação e contexto de execução | src/api/routers/rag_operations_router.py, src/api/routers/rag_runtime_operations_compat.py |
-| 2. Runtime assembly | garante que o runtime moderno obrigatório conseguiu subir | src/orchestrators/qa_runtime_assembly.py |
-| 3. Query rewrite | reescreve a pergunta sem trocar a intenção quando a política permite | src/qa_layer/rag_engine/query_rewriter.py, src/qa_layer/rag_engine/intelligent_orchestrator.py |
-| 4. Query analysis | classifica tipo da pergunta, domínio, entidades e complexidade | src/qa_layer/rag_engine/query_analyzer.py |
-| 5. Adaptive routing | escolhe a estratégia base de retrieval | src/qa_layer/rag_engine/adaptive_router.py |
-| 6. Processor selection | converte a estratégia em processador concreto | src/qa_layer/rag_engine/retrieval_engine.py |
-| 7. Domain query expansion | enriquece a pergunta com vocabulário do domínio e BM25 | src/qa_layer/rag_engine/retrieval_engine.py, src/qa_layer/rag_engine/domain_query_expansion_config_service.py |
-| 8. Multi-query | gera variações da mesma pergunta e busca em paralelo | src/qa_layer/rag_engine/multi_query_retriever.py, src/qa_layer/rag_engine/retrieval_engine.py |
-| 9. Hybrid search | combina sinais vetoriais e textuais, incluindo modo nativo quando existir | src/qa_layer/rag_engine/retrieval_engine.py |
-| 10. Fusion | junta rankings de vários retrievers com algoritmo explícito | src/qa_layer/rag_engine/fusion_algorithms.py, src/qa_layer/rag_engine/retrieval_engine.py |
-| 11. Rerank | reordena os melhores documentos antes da resposta | src/qa_layer/rag_engine/reranker.py, src/qa_layer/rag_engine/retrievers.py |
-| 12. Evidence e diagnostics | normaliza evidência e produz sinais de confiabilidade | src/qa_layer/qa_question_processor.py, src/services/question_service.py |
-| 13. Generation | monta contexto, renderiza prompt e chama o LLM com retry | src/qa_layer/rag_engine/generation_engine.py |
-<!-- markdownlint-enable MD013 -->
+### Runtime moderno
 
-## Pipeline avançado em etapas reais
+Runtime moderno é a política arquitetural que exige um pipeline explícito e validado para o QA. O ganho é previsibilidade de execução. O trade-off é que o sistema prefere falhar cedo a voltar silenciosamente para um caminho antigo ou implícito.
 
-O pipeline moderno de RAG não é uma caixa-preta única.
-Ele passa por etapas bem separadas, e cada uma resolve um problema
-diferente.
+### Geração aumentada por evidência
 
-## Etapa 1: boundary, contexto e contrato de execução
-
-O ponto de entrada é o dispatcher de POST /rag/execute.
-Ali o sistema resolve autenticação, permissões, correlation_id,
-configuração YAML e o contexto da pergunta.
-
-Boa prática observada:
-o boundary não tenta responder a pergunta sozinho.
-Ele prepara contrato e contexto, e delega o restante ao runtime de QA.
-
-Em linguagem simples: a API organiza a entrada, mas a inteligência de
-RAG começa de verdade depois disso.
+O LLM entra no final, quando já existe contexto recuperado. Isso muda a natureza da resposta. Em vez de um modelo “falando sozinho”, a plataforma tenta produzir texto apoiado em evidência encontrada no acervo.
 
-## O que o runtime moderno exige
+## 4. Como o módulo funciona por dentro
 
-QARuntimeAssembly valida três pontos importantes.
+O caminho de consulta entra pelo boundary HTTP do RAG. A API resolve autenticação, contexto e configuração. Depois disso, a pergunta entra no `ContentQASystem`, que funciona como fachada principal do domínio de QA.
 
-- user_session obrigatório no YAML;
-- correlation_id obrigatório dentro de user_session;
-- rag_system moderno habilitado.
+Essa fachada não trata o RAG como um conjunto de utilidades soltas. Ela primeiro monta o estado de runtime e exige que o pipeline moderno esteja disponível. Para isso, delega ao `QARuntimeAssembly`, que valida pré-condições e seleciona a estratégia moderna adequada.
 
-Sem isso, o runtime falha cedo.
-
-## Etapa 2: montagem e seleção do runtime moderno
+Com o runtime pronto, o sistema segue para a parte mais importante: entender a pergunta antes de tentar respondê-la. O runtime moderno analisa a consulta, decide se deve reescrevê-la, escolhe a estratégia de retrieval e então recupera evidência. Só depois entra a geração final.
 
-QARuntimeAssembly é a porta que decide qual estratégia moderna será
-ativada.
-Ele valida user_session, correlation_id e o bloco rag_system antes de
-qualquer retrieval.
-
-Hoje, as estratégias modernas observadas no código são:
-
-- modern_basic;
-- modern_streaming;
-- modern_parallel.
+O valor dessa arquitetura está no isolamento das decisões. Quando uma resposta sai ruim, a investigação pode perguntar: a pergunta foi mal interpretada? a evidência foi fraca? a estratégia de retrieval estava errada? a geração exagerou além da evidência?
 
-Boa prática importante:
-quando o pipeline moderno não pode subir, o sistema falha fechado.
-Ele não esconde um retorno para pipeline legado por conveniência.
-
-Em linguagem simples: primeiro o sistema confirma que o motor certo está
-montado; só depois ele deixa a pergunta andar.
+![Fluxo ponta a ponta](assets/diagrams/docs-readme-rag-diagrama-01.svg)
 
-## A seleção de estratégia é explícita
+## 5. Pipeline ou fluxo principal
 
-O runtime moderno não escolhe o modo de execução por opinião difusa em
-vários pontos do código.
-QARuntimeAssembly centraliza essa decisão e só trabalha com estratégias
-modernas.
-
-Hoje, a seleção observada no código é esta:
-
-- modern_basic para o caminho normal;
-- modern_streaming quando o template ativo ou o chain_builder aponta
-    streaming;
-- modern_parallel quando a configuração de processamento paralelo está
-    habilitada.
-
-Se alguém pedir fallback antigo pelo YAML, o assembly não volta para um
-pipeline legado por conveniência.
-Ele registra o sinal e continua exigindo o runtime moderno.
-
-Em linguagem simples: o sistema atual prefere falhar cedo a esconder um
-retrocesso arquitetural atrás de um fallback implícito.
-
-## Etapa 3: query rewrite
-
-Antes de analisar a pergunta, o `IntelligentRAGOrchestrator` passa a
-consulta por `query_rewriter.rewrite()`.
-
-Essa etapa existe para melhorar a pergunta sem trocar a intenção.
-No código atual, o rewriter pode:
-
-- parafrasear a pergunta;
-- corrigir ruído textual;
-- gerar pequenas variações controladas;
-- desistir e preservar a pergunta original quando a política estiver
-    desligada, o LLM falhar ou a similaridade ficar baixa demais.
-
-Boa prática importante:
-query rewrite não é licença para inventar pergunta nova.
-Ele só continua quando a similaridade com a intenção original permanece
-alta o suficiente.
+### Etapa 1: entrada e contextualização
 
-Em linguagem simples: é como reescrever a mesma dúvida com palavras mais
-limpas antes de decidir como procurar.
+A pergunta entra pela API, que resolve identidade, permissão, correlation_id e configuração operacional do request. Essa etapa organiza contexto, não a resposta final.
 
-## Etapa 4: análise semântica da pergunta
+### Etapa 2: montagem obrigatória do runtime moderno
 
-Depois da montagem do runtime, o próximo passo é entender a pergunta.
-QueryAnalyzer extrai features semânticas que orientam o resto da
-pipeline.
+O `ContentQASystem` exige que o runtime moderno seja montado de forma explícita. O `QARuntimeAssembly` valida o mínimo necessário e seleciona a estratégia de execução.
 
-Entre os sinais observados no código estão:
+### Etapa 3: leitura da pergunta
 
-- tipo da pergunta, como factual, procedural, conceptual ou comparative;
-- tipo de dado esperado, como structured_json, unstructured_text,
-    api_data ou mixed_data;
-- domínio técnico, como technical, operational, regulatory ou
-    financial;
-- entidades, palavras-chave, termos técnicos e complexidade;
-- necessidade de filtros, tempo ou dados em tempo real.
+Com o runtime pronto, o sistema tenta entender a pergunta. Essa etapa extrai sinais que influenciam todo o resto: complexidade, domínio, tipo de dado, necessidade de filtros e indícios de qual retrieval faz mais sentido.
 
-Essa etapa existe porque perguntas diferentes precisam de retrieval
-diferente.
-Uma consulta sobre código técnico, uma consulta comparativa e uma
-pergunta operacional sobre status não deveriam cair cegamente na mesma
-estratégia.
+### Etapa 4: reescrita controlada e roteamento
 
-Em linguagem simples: antes de procurar documento, o sistema tenta
-entender que tipo de resposta o usuário provavelmente quer.
+Quando a política do runtime permite, a pergunta pode ser reescrita para reduzir ruído e aumentar a precisão do retrieval. Em seguida, o roteamento adaptativo escolhe a família de estratégia mais adequada.
 
-## Etapa 5: roteamento adaptativo
-
-Com a análise em mãos, AdaptiveQueryRouter decide a estratégia de
-retrieval mais adequada.
-As estratégias-base observadas no runtime são:
+### Etapa 5: recuperação da evidência
 
-- semantic;
-- bm25;
-- hybrid;
-- selfquery;
-- hybrid_with_selfquery.
+O retrieval recupera documentos, trechos ou sinais relevantes. Dependendo do caso, a estratégia pode combinar modos diferentes de busca e fusão.
 
-O roteador usa regras, thresholds e indicadores para estimar confiança,
-complexidade e fallback strategy.
-Ele também mantém estatísticas de uso e pode incluir metadados da
-análise na resposta.
+### Etapa 6: geração final
 
-Boa prática importante:
-o roteamento não é apenas regex de superfície.
-Ele cruza características da query com configuração moderna do YAML.
+Com a evidência em mãos, o pipeline monta o contexto final e chama o LLM para produzir a resposta. A geração é o fechamento do fluxo, não o ponto de partida.
 
-## Etapa 6: seleção do processador
+## 6. Decisões técnicas importantes
 
-RetrievalEngine transforma análise e roteamento em um ProcessorType
-concreto.
-Essa decisão é importante porque processor e strategy não são exatamente
-a mesma coisa.
+### Exigir runtime moderno
 
-O código atual escolhe processadores assim, em alto nível:
+O projeto opta por não esconder um caminho antigo atrás de fallback implícito. O ganho é previsibilidade semântica. O trade-off é que o sistema bloqueia com mais clareza quando o ambiente ou o YAML não entregam o que o runtime moderno exige.
 
-- JSON toolkit quando a pergunta pede dado estruturado em JSON;
-- API retriever quando a necessidade é dado de API;
-- hybrid search quando a estratégia é híbrida ou há códigos exatos e
-    termos técnicos fortes;
-- self query quando a estratégia ou os filtros estruturados pedem isso;
-- multi query para perguntas comparativas ou procedurais;
-- traditional rag como caminho padrão.
+### Separar análise da pergunta de geração
 
-Boa prática importante:
-o runtime permite force_processor no contexto para diagnóstico ou uso
-controlado, sem mudar o contrato global do pipeline.
+Essa separação melhora a capacidade de diagnóstico. O ganho é saber em que parte a resposta se perdeu. O trade-off é um pipeline mais explícito e menos “mágico”.
 
-Em linguagem simples: a análise decide o perfil da pergunta, e a seleção
-do processador decide qual ferramenta concreta o pipeline vai usar.
+### Tratar retrieval como estratégia, não como função única
 
-## Etapa 7: expansão de query por domínio
+O ganho é adaptar a busca ao tipo de pergunta. O trade-off é que o comportamento deixa de ser trivial para quem espera uma única busca sempre igual.
 
-Antes da busca final, o pipeline ainda pode enriquecer a consulta com
-termos de domínio.
-Quando query_expansion_step está disponível, o runtime mede quantos
-termos técnicos existiam antes e depois do enriquecimento e registra isso
-na telemetria.
+### Manter `ContentQASystem` como fachada
 
-Essa tática é útil quando a pergunta do usuário está curta demais ou usa
-vocabulário incompleto em relação ao domínio indexado.
+O ganho é centralizar a entrada do domínio e o resumo do runtime. O trade-off é que outras camadas precisam respeitar essa fachada em vez de acionar pedaços isolados do pipeline de forma dispersa.
 
-Boa prática importante:
-a expansão é observável.
-O sistema registra se a técnica executou, se adicionou termos e qual foi
-a confiança dessa expansão.
+## 7. O que acontece em caso de sucesso
 
-Em linguagem simples: se o usuário falou pouco ou usou um termo mais
-fraco, o pipeline tenta completar o vocabulário de busca com o que ele
-já aprendeu sobre aquele domínio.
+No caminho feliz, a pergunta entra com contexto coerente, o runtime moderno é montado, a análise identifica a natureza da consulta, a estratégia de retrieval encontra evidência adequada e o modelo gera uma resposta compatível com esse contexto.
 
-## Etapa 8: multi-query
+Para o usuário, sucesso é receber uma resposta útil. Para o operador, sucesso também significa conseguir explicar por que aquela estratégia foi escolhida e qual evidência sustentou a resposta.
 
-Quando o processador escolhido é `MULTI_QUERY`, o pipeline usa
-`MultiQueryRetriever` para gerar variações da mesma pergunta via LLM,
-executar essas variações em paralelo e deduplicar os resultados.
+## 8. O que acontece em caso de erro
 
-Essa etapa existe para perguntas que ganham cobertura quando são vistas
-por mais de um ângulo, como comparações, procedimentos ou temas amplos.
+### Erro antes do runtime moderno
 
-O comportamento observado no código inclui:
+Se o runtime moderno não pode ser montado, o problema está na configuração, no contexto mínimo ou na indisponibilidade de componentes exigidos pelo pipeline.
 
-- geração de queries relacionadas com estratégia configurável;
-- execução paralela das variações;
-- deduplicação dos resultados recuperados;
-- fallback seguro para a query original se a expansão falhar.
+### Erro de entendimento da pergunta
 
-Em linguagem simples: em vez de procurar com uma frase só, o sistema faz
-outras perguntas equivalentes para ter mais chance de achar material útil.
+Quando a pergunta é mal classificada, o sistema pode escolher uma estratégia inadequada de retrieval. O sintoma costuma ser resposta com evidência fraca ou deslocada, mesmo com acervo existente.
 
-## Retrieval avançado no runtime atual
+### Erro de retrieval
 
-No código de hoje, RetrievalEngine já faz bem mais do que busca vetorial
-simples.
-Ele mantém um mapa explícito entre o tipo de processador e a estratégia
-de recuperação usada no request.
+Quando a estratégia foi escolhida, mas a recuperação falha ou devolve material ruim, a geração final fica comprometida. Esse é o ponto em que uma resposta ruim não deve ser tratada automaticamente como problema de prompt.
 
-As superfícies avançadas observadas no runtime incluem:
+### Erro de geração
 
-- hybrid search;
-- native hybrid quando o backend suporta isso de forma nativa;
-- self query;
-- multi query;
-- JSON toolkit;
-- API retriever;
-- expansão de consulta por domínio;
-- FTS e sinais de BM25 no pipeline híbrido.
+Mesmo com evidência razoável, a geração ainda pode resumir mal, exagerar ou organizar mal a saída. Por isso a arquitetura mantém clara a separação entre evidência e geração.
 
-Quando um processador avançado não fecha a resposta, o fallback
-controlado volta para o caminho tradicional do RAG.
+## 9. Configurações que mudam o comportamento
 
-Em linguagem simples: o RAG atual tenta escolher o tipo certo de busca
-antes de gerar a resposta, em vez de usar sempre a mesma receita para
-toda pergunta.
+As configurações relevantes do RAG, pelo código lido, pertencem a quatro grupos.
 
-## Etapa 9: tentativa de retrieval com telemetria e cache
+### Habilitação do runtime moderno
 
-Cada tentativa de retrieval é registrada como uma unidade operacional.
-Antes de chamar o retriever, RetrievalEngine abre uma tentativa, mede o
-tempo, registra telemetria e consulta o cache semântico quando ele é
-elegível.
+O runtime moderno depende do bloco de configuração do sistema RAG estar habilitado e coerente com a expectativa da montagem.
 
-O cache semântico não vale para qualquer caso.
-O runtime só tenta esse reaproveitamento quando:
+### Estratégia de execução
 
-- semantic_cache está disponível;
-- o retriever é candidato válido para cache;
-- existem embeddings e backend compatíveis.
+O assembly seleciona estratégias modernas como caminho básico, streaming ou paralelo conforme sinais do YAML e do contexto de execução.
 
-Se houver hit, o pipeline retorna cedo com semantic_cache_hit.
-Se não houver hit, ele executa o retriever e, no fim, tenta armazenar o
-resultado para uso futuro.
+### Política de análise e reescrita
 
-Boa prática importante:
-o cache é tratado como otimização observável, nunca como comportamento
-escondido.
-Há log explícito para disabled, retriever_not_eligible, miss e hit.
+A análise da pergunta e a reescrita controlada mudam como a plataforma decide buscar evidência. Isso altera diretamente a qualidade e o custo do retrieval.
 
-## Etapa 10: retrieval híbrido e enriquecimento textual
+### Estratégias de retrieval e cache
 
-Quando a decisão aponta para hybrid search, `RetrievalEngine` tenta
-combinar sinais vetoriais e textuais.
+O comportamento do retrieval muda conforme políticas de busca, fusão e reaproveitamento de contexto. O importante é entender o efeito operacional dessas escolhas, não decorar uma lista de chaves.
 
-No código atual, isso acontece em dois formatos:
+## 10. Observabilidade e diagnóstico
 
-- hybrid nativo, quando o backend do vector store suporta esse modo;
-- hybrid manual, quando o runtime precisa coordenar os sinais por conta
-    própria.
+A investigação do RAG fica melhor quando segue esta ordem.
 
-Além disso, o runtime ainda pode:
+1. Confirmar se o runtime moderno realmente subiu.
+2. Verificar que estratégia foi selecionada.
+3. Observar se a pergunta foi reescrita ou roteada de forma coerente.
+4. Separar falha de retrieval de falha de geração.
 
-- enriquecer a query com termos de domínio;
-- aproveitar snapshot BM25 integrado no runtime;
-- acionar FTS Postgres como complemento, dependendo da configuração.
+Sinais úteis do código lido:
 
-Boa prática importante:
-o pipeline não trata busca vetorial e textual como alternativas
-inimigas. Ele usa cada uma como um tipo diferente de evidência.
+- `ContentQASystem` registra o resumo consolidado do runtime;
+- `QARuntimeAssembly` registra estratégia ativa e falha cedo quando o pipeline moderno não pode operar;
+- o domínio tenta manter a explicação de seleção de estratégia explícita.
 
-Em linguagem simples: busca vetorial acha significado parecido; busca
-textual acha palavras e códigos mais exatos; o híbrido tenta usar as duas.
+## 11. Exemplo prático guiado
 
-## Etapa 11: fusão de resultados
+Imagine uma pergunta técnica enviada ao endpoint de RAG.
 
-Quando o pipeline precisa combinar múltiplas fontes, entra o motor de
-fusão híbrida.
-HybridFusion existe para unir rankings semânticos e lexicais com regras
-explícitas, em vez de concatenar listas de forma ingênua.
+1. A API recebe a consulta e resolve contexto do usuário.
+2. O `ContentQASystem` assume a execução do domínio.
+3. O `QARuntimeAssembly` confirma que o runtime moderno está apto e escolhe a estratégia adequada.
+4. A pergunta é analisada e, se fizer sentido, reescrita de forma controlada.
+5. O retrieval recupera a evidência mais útil para aquele tipo de pergunta.
+6. O LLM gera a resposta final usando esse contexto.
 
-Os algoritmos observados no código incluem:
+O ganho prático desse fluxo é que a plataforma consegue explicar melhor de onde veio a resposta e por que seguiu aquele caminho.
 
-- linear;
-- rrf;
-- weighted_rrf;
-- interleaved;
-- score_normalized.
+## 12. Explicação 101
 
-Além do algoritmo, o motor também faz:
+Pense no RAG como um atendimento em duas etapas.
 
-- estruturação homogênea dos resultados;
-- detecção e remoção de duplicatas;
-- normalização de score;
-- aplicação de pesos por retriever e por modalidade.
+Primeiro, alguém tenta entender exatamente o que você quer saber e procura os documentos certos. Depois, outra etapa organiza esse material e escreve a resposta final.
 
-Boa prática importante:
-o pipeline híbrido não trata BM25 e vector search como concorrentes.
-Ele trata cada um como um sinal diferente que pode ser combinado quando
-isso aumenta cobertura e precisão.
+Se essas duas coisas forem feitas ao mesmo tempo, fica muito difícil descobrir por que a resposta saiu ruim. Quando o sistema separa busca de geração, ele fica menos misterioso e mais investigável.
 
-Em linguagem simples: a fusão é a etapa que decide como misturar as duas
-listas sem simplesmente colar uma atrás da outra.
+## 13. Limites e pegadinhas
 
-## Etapa 12: rerank
+- Busca vetorial sozinha não explica todo o comportamento do RAG.
+- Resposta ruim nem sempre é problema do modelo; muitas vezes é problema de evidência ou estratégia.
+- Runtime moderno habilitado não garante que toda pergunta terá boa recuperação; ele apenas torna a execução mais explícita.
+- Aceitar uma consulta não significa que a plataforma já montou evidência suficiente para responder bem.
+- Ler o endpoint não basta para entender a semântica do pipeline.
 
-Depois da recuperação principal e, quando necessário, depois da fusão,
-o runtime ainda pode aplicar rerank.
+## 14. Evidências no código
 
-No código atual, essa etapa usa `NeuralReranker` quando
-`rerank_results=true` no YAML. O objetivo é reordenar os documentos que
-já passaram pela busca para colocar na frente os que parecem mais úteis
-para a resposta final.
-
-Comportamentos observados no código:
-
-- modelo principal configurável;
-- fallback para modelo alternativo quando existir;
-- anexação de `rerank_score` nos metadados dos documentos;
-- bypass limpo quando o rerank estiver desligado.
-
-Em linguagem simples: a busca traz candidatos; o rerank tenta colocar os
-melhores candidatos no topo antes da geração.
-
-## Dois níveis de cache diferentes
-
-O runtime atual trabalha com dois reaproveitamentos diferentes, e é
-importante não confundir os dois.
-
-O primeiro é o cache de pipeline.
-PipelineCacheManager guarda instâncias de ContentQASystem por hash do
-YAML, com política LRU, TTL e invalidação global.
-
-O segundo é o cache semântico de retrieval.
-CacheEngine pode montar SemanticQueryCache para perguntas compatíveis,
-reaproveitando documentos já recuperados quando houver embeddings e
-backend disponível.
-
-Hoje, esse cache semântico já suporta backends como Redisearch, Qdrant e
-Azure Search.
-Se não houver vector store ou embeddings válidos, ele simplesmente não é
-montado para aquele runtime.
-
-Em linguagem simples: uma camada evita reconstruir o sistema inteiro a
-cada chamada parecida; a outra evita refazer a mesma busca de contexto
-quando a pergunta é equivalente.
-
-## Etapa 13: validação de evidência e diagnósticos
-
-Depois do retrieval inteligente, QAQuestionProcessor ainda passa o
-resultado por uma etapa de confiabilidade de evidência.
-O runtime normaliza documentos, aplica preferência de fontes,
-complementa access_control quando necessário e chama o analisador de
-evidência para garantir que a resposta não siga apoiada em contexto
-frágil.
-
-Também é nessa fase que entram:
-
-- prompt metadata;
-- pipeline diagnostics;
-- logs de execução do RAG;
-- anexação da telemetria do pipeline ao resultado final.
-
-Em linguagem simples: recuperar chunks não basta.
-O sistema ainda verifica se a base de evidência parece suficientemente
-confiável antes de fechar a resposta.
-
-## Etapa 14: geração da resposta
-
-GenerationEngine é a etapa que transforma contexto recuperado em resposta
-final.
-Ele não só chama o LLM.
-Antes disso, ele:
-
-- detecta presença multimodal nos documentos;
-- monta o bloco de contexto com documentos e memória relevante;
-- renderiza o system prompt efetivo;
-- registra a origem do prompt;
-- chama o LLM com retry externo;
-- mede tempo de geração;
-- contabiliza uso de tokens para billing.
-
-Boa prática importante:
-a geração usa retry explícito para o recurso externo de LLM.
-Isso é coerente com a regra geral do repositório de não confiar em rede
-ou provider externo sem política de resiliência.
-
-Em linguagem simples: a etapa de geração pega o que o retrieval trouxe,
-organiza isso num contexto útil e só então pede ao modelo para redigir a
-resposta.
-
-## Busca e geração não são a mesma etapa
-
-Quando a resposta vem ruim, o erro pode estar em lugares diferentes.
-
-- Retrieval ruim: contexto insuficiente ou irrelevante.
-- Geração ruim: resposta ruim mesmo com contexto correto.
-
-Na prática, a investigação começa em retrieval antes de culpar o
-prompt final.
-
-## Boas práticas reais do pipeline RAG
-
-O desenho atual do runtime já comunica algumas boas práticas que valem
-como guia de leitura.
-
-- falhar cedo quando o runtime moderno não está disponível;
-- separar análise da pergunta, roteamento, retrieval e geração;
-- tratar processador e estratégia como decisões relacionadas, mas não
-    idênticas;
-- só aplicar cache semântico quando o retriever for elegível;
-- usar fusão explícita quando múltiplos sinais precisam ser combinados;
-- validar evidência e diagnóstico antes de declarar a resposta pronta;
-- tratar LLM como recurso externo com retry e observabilidade.
-
-## Caminho especializado de Excel
-
-O runtime ainda tem um slice especializado para planilhas.
-Esse caminho vive fora do fluxo genérico e tenta responder perguntas
-tabulares com lógica própria antes de cair em um caminho mais amplo.
-
-## Como depurar “não trouxe contexto”
-
-1. Confirme se a base certa foi ingerida.
-2. Confirme vectorstore_id e backend ativos.
-3. Confirme se o runtime moderno subiu sem erro.
-4. Confirme qual QueryType, DataType e Domain foram inferidos.
-5. Confirme qual processador de retrieval foi usado.
-6. Confirme se houve expansão de query.
-7. Confirme se o caso caiu em multi-query ou não.
-8. Confirme se houve reuse do pipeline ou semantic_cache_hit.
-9. Se a pergunta for híbrida, confirme hybrid search, fusão e rerank.
-10. Só depois investigue a etapa de geração.
-
-## Fluxograma funcional cruzado
-
-```mermaid
-flowchart LR
-    subgraph Cliente
-        C1[Cliente ou UI]
-    end
-
-    subgraph API
-        A1[/rag/execute]
-    end
-
-    subgraph Runtime
-        R1[ContentQASystem]
-        R2[QARuntimeAssembly]
-        R3[IntelligentRAGOrchestrator]
-        R4[RetrievalEngine]
-        R5[GenerationEngine]
-    end
-
-    subgraph Infra
-        I1[Qdrant ou Azure Search]
-        I2[BM25 e sinais de domínio]
-    end
-
-    C1 --> A1 --> R1 --> R2 --> R3 --> R4
-    R4 --> I1
-    R4 --> I2
-    R4 --> R5 --> A1
-```
-
-## Fluxo avançado do RAG moderno
-
-```mermaid
-flowchart LR
-    subgraph Entrada
-        E1[POST /rag/execute]
-        E2[Contexto e YAML]
-    end
-
-    subgraph Runtime
-        R1[QARuntimeAssembly]
-        R2[QueryRewriter]
-        R3[QueryAnalyzer]
-        R4[AdaptiveQueryRouter]
-        R5[RetrievalEngine]
-        R6[Evidence e Diagnostics]
-        R7[GenerationEngine]
-    end
-
-    subgraph Tecnicas
-        T1[Domain Query Expansion]
-        T2[Multi Query]
-        T3[Hybrid Search]
-        T4[Hybrid Fusion]
-        T5[Rerank]
-        T6[Retry do LLM]
-    end
-
-    subgraph Saida
-        S1[Answer]
-        S2[Sources]
-        S3[Metadata e Telemetria]
-    end
-
-    E1 --> E2 --> R1 --> R2 --> R3 --> R4 --> R5 --> R6 --> R7
-    R5 --> T1
-    R5 --> T2
-    R5 --> T3
-    R5 --> T4
-    R5 --> T5
-    R7 --> T6
-    R7 --> S1
-    R6 --> S2
-    R6 --> S3
-```
-
-## Como rodar e validar
-
-1. Suba a API com YAML válido.
-2. Confirme que a base já foi indexada.
-3. Execute POST /rag/execute com operation igual a ask.
-4. Verifique answer, sources e metadata.
-5. Se a resposta vier ruim, valide retrieval antes de mexer em prompt.
-
-## Evidência no código
-
-- src/api/routers/rag_router.py
-- src/api/routers/rag_operations_router.py
-- src/qa_layer/content_qa_system.py
-- src/qa_layer/qa_question_processor.py
-- src/qa_layer/pipeline_cache_manager.py
-- src/orchestrators/qa_runtime_assembly.py
-- src/qa_layer/rag_engine/intelligent_orchestrator.py
-- src/qa_layer/rag_engine/query_analyzer.py
-- src/qa_layer/rag_engine/adaptive_router.py
-- src/qa_layer/rag_engine/retrieval_engine.py
-- src/qa_layer/rag_engine/fusion_algorithms.py
-- src/qa_layer/rag_engine/cache_engine.py
-- src/qa_layer/rag_engine/semantic_cache.py
-- src/qa_layer/rag_engine/generation_engine.py
-- src/qa_layer/json_rag/specialized_rag_excel.py
-
-## Lacunas no código
-
-Não encontrado no código.
-
-Onde deveria estar:
-
-- um endpoint de diagnóstico que devolva, no mesmo payload, estratégia,
-  processador de retrieval, sinais usados e resposta final;
-- uma UI de troubleshooting do RAG que consolide retrieval e geração
-  sem exigir leitura dispersa de logs.
+- [src/qa_layer/content_qa_system.py](../src/qa_layer/content_qa_system.py): fachada principal do domínio de QA e resumo consolidado do runtime.
+- [src/orchestrators/qa_runtime_assembly.py](../src/orchestrators/qa_runtime_assembly.py): montagem e seleção do runtime moderno.
+- [src/api/routers/config_resolution.py](../src/api/routers/config_resolution.py): resolução compartilhada de configuração consumida pelos boundaries.

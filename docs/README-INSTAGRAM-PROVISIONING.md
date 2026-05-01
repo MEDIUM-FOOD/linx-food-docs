@@ -1,312 +1,210 @@
-**Produto:** Plataforma de Agentes de IA
-
 # Manual de Provisionamento e Operação Instagram Direct
 
-## Visão geral
+## 1. O que esta feature faz
 
-Este manual descreve como provisionar contas Instagram Business, configurar
-webhooks e operar o canal Instagram Direct na Plataforma de Agentes de IA. O processo é análogo
-ao fluxo do WhatsApp: provisionamento via Meta Graph API, registro no
-ClientDirectory, seleção automática do YAML do cliente e ingestão de eventos
-via router multicanal.
+Este manual explica como a plataforma provisiona contas Instagram Business, configura o webhook do aplicativo e registra o canal no diretório central do tenant.
 
-## Objetivo
+O fluxo real confirmado no código é objetivo: o backend valida o payload, chama a Instagram Graph API para ler o perfil, assinar a página para mensagens e configurar o webhook, e por fim grava a conta no `ClientDirectory` com os metadados necessários para operação posterior.
 
-Disponibilizar atendimento e automações em Instagram Direct com onboarding
-self-service, garantindo segurança (assinatura de webhook), rastreabilidade
-(correlation_id) e isolamento multi-tenant.
+## 2. Que problema ela resolve
 
-## Como o usuário recebe essa feature
+Sem esse módulo, o onboarding de Instagram Direct dependeria de configuração manual espalhada entre Meta, portal interno e diretório multi-tenant. Isso gera risco operacional em três pontos:
 
-1. O time de operações habilita a permissão `provision.instagram` na
-  `X-API-Key` do tenant.
-2. O portal de provisionamento envia os dados para
-  `POST /api/instagram/provision/start`.
-3. O canal é registrado no `ClientDirectory` com `channel_id` e
-  `secret_token`.
-4. O cliente valida o webhook e testa uma mensagem de prova.
+1. Credencial correta, mas webhook apontando para o ambiente errado.
+2. Conta ativa na Meta, mas não registrada no diretório da plataforma.
+3. Segredo e token usados em produção sem rastreabilidade local.
 
-### Para quem esta comecando (for dummies)
-Pense no Instagram como um novo canal de atendimento. O provisionamento
-liga a conta da sua empresa � Plataforma de Agentes de IA, registra o webhook e garante que
-as mensagens cheguem com seguranca e rastreio.
+O fluxo existe para transformar esse onboarding em um processo repetível, auditável e isolado por tenant.
 
-### Impacto para o usuario
-- Atendimento e automacoes no Instagram com rastreabilidade.
-- Menos trabalho manual para operar o canal.
-- Seguranca e isolamento entre clientes.
+## 3. Componentes principais
 
-### Limites e pegadinhas
-- Webhook sem assinatura valida e rejeitado.
-- Tokens curtos ou invalidos nao passam no provisionamento.
-- `channel_id` errado impede resolver o YAML automaticamente.
+### 3.1 Serviço de onboarding Instagram
 
----
+`InstagramProvisionerAsync` encapsula as chamadas externas para a Graph API.
 
-## Arquitetura
+Os comportamentos confirmados no serviço são:
 
-- `InstagramProvisionerAsync`
-  (src/channel_layer/services/instagram_onboarding.py)
-  - Serviço assíncrono que valida credenciais, assina webhook e habilita
-    mensagens via Graph API.
-  - Usa `create_logger_with_correlation` e trata falhas de rede/HTTP.
-- Router de provisionamento
-  - Endpoint `/api/instagram/provision/start` (FastAPI) em
-    src/api/routers/instagram_provision_router.py.
-  - Protegido por `PermissionKeys.PROVISION_INSTAGRAM`.
-- Router multicanal
-  - Endpoints em `/channels/instagram/{channel_id}/messages` (webhook) e
-    `/channels/instagram/{channel_id}/send` (envio manual).
-  - Seleção automática do YAML via ClientDirectory quando o webhook não envia
-    caminho explícito.
-  - Validação de assinatura `X-Hub-Signature-256` com `secret_token` do canal.
-- Parser de webhooks
-  - `InstagramMessageProcessor` converte eventos Meta em
-    `IncomingMessagePayload`.
-  - Extração de identificador do remetente para enriquecer o correlation_id.
-- Envio de mensagens
-  - `InstagramMessageClient` (Graph API /messages) busca credenciais no YAML/
-    tenant_security_keys com aliases (instagram_access_token etc.).
-  - `InstagramResponder` monta payloads com texto, quick replies e mídias.
-- Persistência de canais
-  - `ChannelRegistry` carrega definições do YAML do tenant.
-  - ClientDirectory registra `channel_id`, `client_code`, secret_token e
-    caminhos YAML para resolução automática.
+1. Validar presença de `access_token`, `app_id` e `app_secret` já na inicialização.
+2. Abrir um cliente HTTP com base URL na versão configurada da Graph API.
+3. Ler o perfil principal da conta com `fetch_business_profile`.
+4. Assinar a página em mensagens com `subscribe_page_to_messages`.
+5. Configurar o webhook do aplicativo com `configure_webhook`.
+6. Tratar falhas HTTP e de rede com logging correlacionado.
 
----
+O papel desse serviço é exclusivamente integrar com a Meta. Ele não decide autenticação do usuário, persistência local ou regra de tenant.
 
-## 🧭 Jornada de uso (passo a passo)
+### 3.2 Router público de provisionamento
 
-1. **Preparar credenciais**
-  - Token de página, `app_id` e `app_secret` válidos.
-2. **Provisionar**
-  - Chamar `POST /api/instagram/provision/start` com payload mínimo.
-3. **Registrar canal**
-  - Persistir `channel_id`, `secret_token` e caminho do YAML no
-    `ClientDirectory`.
-4. **Validar webhook**
-  - Confirmar desafio de assinatura (GET) e envio de evento real.
-5. **Testar fluxo**
-  - Enviar comentário/DM e conferir resposta automatizada.
-6. **Operar em produção**
-  - Monitorar logs por `correlation_id` e métricas de resposta.
+O boundary HTTP fica em `instagram_provision_router`.
 
----
+Ele concentra:
 
-## 🧩 Quando usar
+1. Permissão `PROVISION_INSTAGRAM`.
+2. Validação do payload com `InstagramProvisionStartRequest`.
+3. Chamada ao `InstagramProvisionerAsync`.
+4. Registro da conta no `ClientDirectory`.
+5. Tradução de erros externos em respostas HTTP operacionais.
 
-- **SAC via DM**: atendimento individual com histórico e rastreio.
-- **Follow-up de comentários**: resposta pública + DM com contexto.
-- **Campanhas segmentadas**: envio manual via `/channels/instagram/{id}/send`.
-- **Canal unificado**: quando o fluxo usa workflows de comentários + DM.
+## 4. Conceitos que importam para entender
 
----
+### 4.1 `instagram_business_account_id`
 
-##  Exemplos de uso
+É o identificador técnico da conta Instagram Business que será associada ao canal da plataforma.
 
-### Exemplo feliz (provisionamento + teste)
+### 4.2 `page_id`
 
-1. `POST /api/instagram/provision/start` com token válido.
-2. Registrar `channel_id` no `ClientDirectory`.
-3. Enviar comentário de teste e validar reply + DM.
+É a página Facebook associada à conta Instagram. O código confirma que a assinatura de mensagens é feita no escopo da página, não diretamente no identificador da conta Instagram.
 
-### Exemplo de erro (token inválido)
+### 4.3 `callback_url` e `verify_token`
 
-- Retorna `400` ou `502` no provisionamento.
-- Corrigir `access_token` e repetir o `start`.
+Esses dois valores governam o webhook.
 
-## Configuração e credenciais
+1. `callback_url` precisa ser URL HTTP ou HTTPS válida.
+2. `verify_token` precisa cumprir comprimento mínimo e é usado no handshake de verificação.
 
-1. Tenant security keys (diretório multi-tenant)
-   - Armazene `access_token` de página com `instagram_manage_messages` e
-     `pages_messaging`.
-   - Opcionalmente configure aliases: `instagram_access_token`,
-     `page_access_token`, `page_token`.
-2. Channel definition (YAML do cliente)
-   - `channels.<channel_id>.security.secret_token`: segredo usado para validar
-     `X-Hub-Signature-256`.
-   - `channels.<channel_id>.security_keys`: credenciais específicas do canal
-     (opcional se já estiverem em `security_keys` global + active_channel).
-3. Callback e verify token
-   - `callback_url`: endpoint público apontando para
-     `/channels/instagram/{channel_id}/messages`.
-   - `verify_token`: mesmo valor deve estar acessível ao serviço para responder
-     ao desafio de assinatura (via perfil do cliente em ClientDirectory).
-4. Versão da API
-   - Padrão `v20.0`, configurável via payload de provisionamento e aliases.
+### 4.4 `channel_id`
 
----
+É o identificador lógico do canal dentro da plataforma. Ele permite associar a conta provisionada a um canal de operação e ao YAML correto do tenant.
 
-## Fluxo de provisionamento (backend)
+## 5. Fluxo real de provisionamento
 
-Endpoint: `POST /api/instagram/provision/start`
+O endpoint público confirmado é `POST /api/instagram/provision/start`.
 
-Payload mínimo:
-```json
-{
-  "instagram_business_account_id": "17841400000000000",
-  "page_id": "112233445566778",
-  "display_name": "Loja Plataforma de Agentes de IA",
-  "email": "contato@prometeu.com.br",
-  "access_token": "EAAB...",
-  "app_id": "123456789012345",
-  "app_secret": "APP_SECRET",
-  "callback_url": "https://sua.api/channels/instagram/ig_sac/messages",
-  "verify_token": "TOKEN_WEBHOOK",
-  "channel_id": "ig_sac",
-  "graph_api_version": "v20.0"
-}
-```
+O fluxo executável segue esta ordem:
 
-O router:
-1) Valida campos (IDs, email, URL, tokens) e permissão do usuário.
-2) Usa `InstagramProvisionerAsync` para:
-   - `fetch_business_profile(ig_business_account_id)`
-   - `subscribe_page_to_messages(page_id)`
-   - `configure_webhook(callback_url, verify_token)`
-3) Retorna dados do perfil (username) e status.
-4) A aplicação deve registrar o canal no ClientDirectory, associando
-   `channel_id`, `client_code`, `secret_token` e caminho YAML do tenant.
+1. O router valida campos como IDs, email, token, URL de callback, segredo e versão da API.
+2. O `client_code` é resolvido a partir do contexto autenticado em `user_data`.
+3. O serviço de onboarding lê o perfil da conta Instagram Business.
+4. O serviço assina a página para mensagens.
+5. O serviço configura o webhook do aplicativo.
+6. O router registra a conta no `ClientDirectory`.
+7. A resposta HTTP devolve sucesso, identificadores principais e status ativo.
 
-Resposta típica:
-```json
-{
-  "success": true,
-  "instagram_business_account_id": "17841400000000000",
-  "ig_username": "lojaprometeu",
-  "page_id": "112233445566778",
-  "status": "active",
-  "message": "Webhook configurado e conta registrada."
-}
-```
+## 6. O que o payload precisa trazer
 
-Erros mapeados:
-- 400: validação de payload ou token curto.
-- 502: erro HTTP da Graph API.
-- 503: falha de rede ao acessar a Graph API.
+Os campos obrigatórios confirmados no schema do router são:
 
-### Validação pós-provisionamento
+1. `instagram_business_account_id`.
+2. `page_id`.
+3. `display_name`.
+4. `email`.
+5. `access_token`.
+6. `app_id`.
+7. `app_secret`.
+8. `callback_url`.
+9. `verify_token`.
 
-1) Chame `/api/instagram/provision/start` com token de página válido.
-2) Verifique no ClientDirectory se o registro foi criado para o
-   `instagram_business_account_id` informado.
-3) Confirme no Meta Dashboard que o webhook está ativo para a página.
-4) Envie um comentário de teste em um post e valide reply público + DM
-   (o log do router multicanal deve conter correlation_id e `ig_sender`).
-5) Se usar versão customizada da Graph API, confirme que
-   `graph_api_version` apareceu no metadata.
+Os campos opcionais confirmados são:
 
-### Campos enviados pelo onboarding HTML
+1. `page_name`.
+2. `channel_id`.
+3. `graph_api_version`, com default operacional `v20.0`.
 
-O formulário `ui-admin-gov-provisionamento-instagram.html` publica em
-`/api/instagram/provision/start` e grava no metadata do ClientDirectory:
+## 7. Persistência local e segurança
 
-- `instagram_business_account_id`, `page_id`, `page_name`, `display_name` e
-  `email`.
-- `access_token` (somente hash SHA-256 é persistido), `app_id`, `app_secret`
-  (hash combinado) e `verify_token` (hash SHA-256 é persistido).
-- `callback_url`, `channel_id`, `graph_api_version` e `registered_by`
-  (user_email da chave).
-- Nenhum token fica armazenado em claro no metadata; apenas hashes e dados
-  públicos (URL, nomes, IDs).
+Depois do provisionamento externo, o router grava a conta no `ClientDirectory`.
 
-### Ajustes necessários no canal (amanhã)
+O ponto de segurança mais importante é este: o metadata persistido não guarda os segredos em claro. O código calcula hash do `access_token`, do token de aplicação e do `verify_token` antes de registrar o canal.
 
-- Coluna `execution_mode` na tabela `tenant_channels` deve ficar como
-  `workflow` para o channel_id do Instagram.
-- `yaml_path` do mesmo registro deve apontar para
-  `app/yaml/rag-config-instagram-comment.yaml`.
-- O YAML agora possui dois workflows:
-  - `workflow_instagram_comment_followup`: focado em comentário → reply
-    público + DM.
-  - `workflow_instagram_unificado_comment_dm`: trata tanto comentário
-    quanto DM com o mesmo fluxo; inclui reply público apenas se houver
-    `comment_id` e sempre monta a sequência de DM.
-- Escolha qual workflow ativar para o canal (mantenha apenas um como
-  enabled=true se quiser um comportamento único). Atualmente os dois
-  estão enabled; para uma rota única use o unificado.
+Na prática, isso reduz exposição operacional sem perder rastreabilidade de qual material credencial foi usado no onboarding.
 
----
+## 8. O que sai na resposta de sucesso
 
-## Recebimento de mensagens (webhook)
+O contrato de resposta confirmado no router devolve:
 
-Endpoint: `POST /channels/instagram/{channel_id}/messages`
+1. `success`.
+2. `instagram_business_account_id`.
+3. `ig_username`.
+4. `page_id`.
+5. `status`.
+6. `message`.
 
-- Aceita corpo bruto Meta (object `instagram` ou `page`).
-- O parser gera `batched_payloads` e extrai `sender_id` para compor
-  correlation_id.
-- Se o webhook não enviar `yaml_config_path`, o sistema resolve o YAML via
-  ClientDirectory usando o `channel_id` e `client_code` do diretório.
-- Validação de assinatura: header `X-Hub-Signature-256` comparado ao
-  `secret_token` do canal (HMAC SHA-256 do corpo).
-- Logs incluem `channel_id`, `client_code`, `ig_sender` e correlation_id.
+Essa resposta é suficiente para a camada de portal saber que a conta foi provisionada e qual identificador ficou ativo na plataforma.
 
-Desafio de assinatura (GET): `GET /channels/{channel_id}/messages` com
-`hub.mode=subscribe`, `hub.challenge`, `hub.verify_token`.
-- O verify_token esperado é lido do perfil do cliente no ClientDirectory
-  (`meta_webhook_verify_token`).
+## 9. O que acontece em caso de erro
 
----
+Os erros confirmados no código se dividem assim:
 
-## Envio de mensagens
+### 9.1 Erro de validação do payload
 
-### Via webhook (automático)
-- `ChannelMessageProcessor` seleciona `InstagramResponder` e
-  `InstagramMessageClient` conforme `channel_type=instagram`.
-- Credenciais resolvidas do YAML e `tenant_security_keys` (aliases suportados).
-- Payload final inclui texto, quick replies e mídias (`media_id` ou URL
-  reutilizável com `is_reusable=true`).
+Se identificador, URL, token ou email forem inválidos, o router responde com erro de validação antes de chamar a Meta.
 
-### Envio manual (útil para suporte)
-Endpoint: `POST /channels/instagram/{channel_id}/send`
+### 9.2 Erro HTTP da Instagram Graph API
 
-Exemplo:
-```json
-{
-  "yaml_config_path": "app/yaml/seu-cliente.yaml",
-  "recipient_id": "USER_123",
-  "text": "Olá!"
-}
-```
+Se a Meta responder com falha HTTP, o router devolve `502`. O objetivo é deixar claro que a borda da plataforma está saudável, mas a integração externa falhou.
 
-- O router monta mensagens se `messages` não for fornecido.
-- Verifica se o `channel_id` é Instagram e se o `client_code` está presente no
-  ChannelDefinition.
+### 9.3 Erro de rede
 
----
+Se houver problema de conectividade com a Graph API, o router responde `503`.
 
-## Boas práticas
+### 9.4 Erro de contexto autenticado
 
-- Registre o `secret_token` no YAML do canal e mantenha-o sincronizado com o
-  `verify_token` armazenado no ClientDirectory.
-- Garanta que o `callback_url` público aponte para o caminho correto do canal
-  na API.
-- Use cabeçalhos de correlação (`X-Correlation-Id`) na borda; o router preserva
-  e compõe novos IDs com o `sender_id` do Instagram.
-- Mantenha os aliases de credenciais para evitar quebras quando tokens forem
-  rotacionados.
-- Monitore logs de `webhook.signature_*` para detectar falhas de assinatura.
+Se a permissão usada não trouxer `client_code`, o router bloqueia o fluxo com erro operacional, porque sem isso não existe como decidir em qual tenant a conta deve ser registrada.
 
----
+## 10. Operação do canal depois do provisionamento
 
-## Troubleshooting rápido
+Este manual é de onboarding, mas o código e a documentação existente deixam claro o acoplamento com a operação posterior.
 
-- 401/403 no webhook: verifique `X-Hub-Signature-256` e `secret_token` do canal.
-- 400 no provisionamento: IDs ou URLs inválidos; tokens curtos são rejeitados.
-- 502/503 no provisionamento: instabilidade da Graph API; tente novamente.
-- Mensagens não saem: confira se `instagram_access_token` está presente em
-  `security_keys` ou em `channels.<channel_id>.security_keys`.
-- Correlation ausente: certifique-se de enviar `X-Correlation-Id` ou usar
-  `channel_id` correto para o router compor o ID com o remetente.
+Depois que a conta é provisionada:
 
----
+1. O canal fica registrado no diretório.
+2. O webhook do aplicativo pode entregar eventos para o boundary multicanal.
+3. O `channel_id` passa a ser usado para resolver o canal e o YAML do tenant.
+4. O restante da operação de mensagens segue o stack específico de Instagram do projeto.
 
-## Referências cruzadas
+## 11. Observabilidade e diagnóstico
 
-- Router de provisionamento: src/api/routers/instagram_provision_router.py
-- Router multicanal: src/api/routers/channel_router.py
-- Envio de mensagens: src/channel_layer/clients/instagram_message_client.py
-- Parser de webhooks: src/channel_layer/instagram_processor.py
-- Responder Instagram: src/channel_layer/responders/instagram_responder.py
-- Serviço de onboarding: src/channel_layer/services/instagram_onboarding.py
-- Registro multi-tenant: src/security/client_directory.py
+O principal ponto de diagnóstico no código é o logger correlacionado criado dentro do `InstagramProvisionerAsync`.
+
+Para investigar problema real, separe a análise em três perguntas:
+
+1. O payload passou pela validação local?
+2. A Graph API respondeu com sucesso nas três etapas externas?
+3. O registro local no `ClientDirectory` foi concluído?
+
+Se a resposta falhar antes da persistência, o problema está no boundary HTTP ou na Graph API. Se a Meta aceitar o fluxo mas a conta não aparecer no diretório, o problema passa para a gravação local.
+
+## 12. Limites e pegadinhas
+
+Os limites confirmados no código são:
+
+1. O fluxo atual cobre provisionamento inicial; ele não descreve, por si só, toda a operação de envio e recebimento posterior.
+2. O router depende de `client_code` vindo da autenticação; ele não tenta adivinhar tenant.
+3. O webhook só é configurado se `callback_url` e `verify_token` passarem na validação local.
+4. A versão da Graph API é configurável, mas precisa seguir o formato esperado pelo router.
+
+## 13. Troubleshooting rápido
+
+### 13.1 O provisionamento falhou com erro de validação
+
+Causa provável: `callback_url`, email, token ou algum identificador veio fora do contrato aceito pelo schema.
+
+### 13.2 O provisionamento falhou com `502`
+
+Causa provável: a Graph API respondeu com falha HTTP em leitura do perfil, assinatura da página ou configuração do webhook.
+
+### 13.3 O provisionamento falhou com `503`
+
+Causa provável: erro de rede entre a plataforma e a Graph API.
+
+### 13.4 A conta foi aceita, mas o canal não aparece no tenant
+
+Causa provável: problema na gravação via `ClientDirectory` ou na associação com o `client_code` autenticado.
+
+## 14. Explicação 101
+
+Provisionar Instagram Direct aqui significa ligar a conta comercial do cliente ao aplicativo da plataforma e registrar isso no diretório interno.
+
+Pense no fluxo como três travas sucessivas:
+
+1. Validar se os dados que chegaram fazem sentido.
+2. Pedir para a Meta aceitar essa conta e esse webhook.
+3. Registrar localmente que esse tenant agora tem um canal Instagram ativo.
+
+Sem a primeira trava, o sistema aceita payload ruim. Sem a segunda, o canal não funciona de verdade. Sem a terceira, a operação futura não sabe que a conta existe.
+
+## 15. Evidências no código
+
+1. `src/channel_layer/services/instagram_onboarding.py`: integração assíncrona com a Instagram Graph API.
+2. `src/api/routers/instagram_provision_router.py`: endpoint público, validações de payload, registro no diretório e mapeamento de erros.
+3. `src/security/client_directory.py`: persistência da conta provisionada no diretório multi-tenant.

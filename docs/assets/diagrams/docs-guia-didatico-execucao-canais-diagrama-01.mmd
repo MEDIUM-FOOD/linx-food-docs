@@ -1,0 +1,9 @@
+flowchart LR
+    U["Operador ou cliente"] --> API["API"]
+    API --> HTTP["Endpoints HTTP"]
+    API --> STATUS["Consulta de status e historico"]
+    SCHED["Scheduler dedicado"] --> JOBS["Jobs por tempo"]
+    WORKER["Worker oficial"] --> CHANNELS["Plano de controle multicanal"]
+    WORKER --> ASYNC["Runtime assincrono RabbitMQ + Dramatiq"]
+    ASYNC --> ING["Ingestao assincrona"]
+    ASYNC --> ETL["ETL assincrono"]

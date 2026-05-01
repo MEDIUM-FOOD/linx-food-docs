@@ -37,98 +37,20 @@ Leitura prática:
 
 ## Diagrama de Sequencia: Agente Supervisor (execution.type=agent)
 
-```mermaid
-sequenceDiagram
-  participant U as Cliente
-  participant API as agent_router (/agent/execute)
-  participant CFG as config_resolution
-  participant AUTH as authenticate_with_yaml_config
-  participant ORCH as AgentOrchestrator
-  participant SUP as AgentSupervisor
-  participant TF as ToolsFactory
-  participant LLM as Modelo/Tools
-
-  U->>API: POST /agent/execute
-  API->>CFG: resolve_yaml_configuration(encrypted_data)
-  CFG-->>API: yaml_config
-  API->>AUTH: validar X-API-Key + permissao
-  AUTH-->>API: user_code
-  API->>ORCH: execute(task, max_iterations)
-  ORCH->>SUP: initialize()
-  SUP->>TF: resolve_agent_tools(agente ativo)
-  TF-->>SUP: tools resolvidas
-  SUP->>LLM: run(message/thread)
-  LLM-->>SUP: output + uso de tools
-  SUP-->>ORCH: payload final_response/metrics
-  ORCH-->>API: AgentResponse
-  API-->>U: 200 (sync) ou 202 (async)
-```
+![Diagrama de Sequencia: Agente Supervisor (execution.type=agent)](assets/diagrams/docs-readme-agente-supervisor-diagrama-01.svg)
 
 ## Diagrama de Sequencia: Processo Macro Agente Supervisor
 
-```mermaid
-sequenceDiagram
-  participant U as Cliente
-  participant API as agent_router
-  participant ORCH as AgentOrchestrator
-  participant SUP as AgentSupervisor
-  participant RT as LangGraph Runtime
-
-  U->>API: /agent/execute
-  API->>ORCH: execute(...)
-  ORCH->>SUP: initialize + run(message, thread_id)
-  SUP->>RT: invoke agente
-
-  alt exige intervencao humana
-    RT-->>SUP: __interrupt__
-    SUP-->>ORCH: pausado + thread_id
-    ORCH-->>API: resposta de pausa
-    U->>API: /agent/continue (mesmo thread_id)
-    API->>SUP: run(Command(resume=...), thread_id)
-    SUP->>RT: resume checkpoint
-  end
-
-  RT-->>SUP: resultado final
-  SUP-->>ORCH: final_response + metrics
-  ORCH-->>API: AgentResponse
-  API-->>U: resposta final
-```
+![Diagrama de Sequencia: Processo Macro Agente Supervisor](assets/diagrams/docs-readme-agente-supervisor-diagrama-02.svg)
 
 ## 2. Sintaxe Canônica de Supervisor
 
-```yaml
-memory:
-  checkpointer:
-    enabled: true
-    backend: "sqlite"
-    sqlite:
-      path: "./data/checkpointer.db"
-  agent_conversation_history:
-    enabled: true
-    backend: "redis"
-    redis:
-      url: "${REDIS_URL}"
-      key_prefix: "conversation_history:"
-      ttl: 604800
+Leitura prática da sintaxe canônica:
 
-global_tools_configuration: {}
-tools_library: []
-selected_supervisor: "supervisor_operacional"
-
-multi_agents:
-  - id: "supervisor_operacional"
-    enabled: true
-    execution:
-      type: "agent"
-    prompt: "Você é um supervisor operacional"
-    directives:
-      - "Priorize respostas objetivas"
-    local_tools_configuration: {}
-    local_mcp_configuration: {}
-    tools_library: []
-    agents: []
-    tenants: []
-```
+1. O bloco `memory` pode ativar `checkpointer` em SQLite e `agent_conversation_history` em Redis.
+2. `global_tools_configuration` e `tools_library` ficam na raiz como baseline de ferramentas.
+3. `selected_supervisor` aponta para o supervisor ativo, por exemplo `supervisor_operacional`.
+4. O item correspondente em `multi_agents` precisa estar habilitado, declarar `execution.type=agent` e carregar prompt, directives, configurações locais, catálogo local, agentes e tenants.
 
 ## 3. Seleção do Supervisor Ativo
 
@@ -287,68 +209,28 @@ Observações:
 
 ### 9.2 Saída de sucesso
 
-```yaml
-thread_id: "thread::..."
-status: "success"
-correlation_id: "..."
-result: {}
-timing:
-  total_ms: 0.0
-  invoke_ms: 0.0
-  overhead_ms: 0.0
-  thread_generation_ms: 0.0
-  config_prep_ms: 0.0
-  command_detect_ms: 0.0
-execution_timeline: []
-final_response: "..."
-tools_usage:
-  total_calls: 0
-  tools: {}
-```
+Leitura prática da saída de sucesso:
+
+1. O payload retorna `thread_id`, `status=success` e `correlation_id`.
+2. `result` carrega a saída principal do fluxo.
+3. `timing` expõe métricas como `total_ms`, `invoke_ms`, `overhead_ms`, `thread_generation_ms`, `config_prep_ms` e `command_detect_ms`.
+4. `execution_timeline` traz a linha do tempo da execução.
+5. `final_response` resume a resposta final gerada pelo supervisor.
+6. `tools_usage` informa `total_calls` e o detalhamento agregado por ferramenta.
 
 ### 9.3 Saída de erro
 
-```yaml
-thread_id: "thread::..."
-status: "error"
-correlation_id: "..."
-error: "mensagem de erro"
-```
+Leitura prática da saída de erro:
+
+1. O payload mantém `thread_id` e `correlation_id` para rastreabilidade.
+2. `status=error` marca a falha terminal.
+3. `error` carrega a mensagem operacional do problema.
 
 ### 9.4 Human-in-the-loop oficial (interrupt-only)
 
 #### Diagrama de Sequencia: HIL no AgentSupervisor
 
-```mermaid
-sequenceDiagram
-  participant U as Cliente
-  participant API as agent_router (/agent/execute)
-  participant SUP as AgentSupervisor
-  participant G as LangGraph Runtime
-  participant H as Humano Aprovador
-
-  U->>API: Executa agente com thread_id=T1
-  API->>SUP: run(message, thread_id=T1)
-  SUP->>G: invoke fluxo
-  G-->>SUP: __interrupt__ (pedido de decisão)
-  SUP-->>API: resposta pausada + thread_id=T1
-  API-->>H: exibe contexto para decisão
-
-  H->>API: /agent/continue (thread_id=T1, resume=decisão)
-  API->>SUP: run(Command(resume=...), thread_id=T1)
-  SUP->>G: retoma checkpoint da thread T1
-
-  alt decisão aprovada
-    G-->>SUP: execução concluída
-    SUP-->>API: success + metadata.human_approvals
-  else decisão rejeitada
-    G-->>SUP: ação bloqueada
-    SUP-->>API: falha controlada + auditoria
-  else decisão editada
-    G-->>SUP: execução com payload editado
-    SUP-->>API: success + decision_type=edited
-  end
-```
+![Diagrama de Sequencia: HIL no AgentSupervisor](assets/diagrams/docs-readme-agente-supervisor-diagrama-03.svg)
 
 Visão geral:
 
@@ -414,106 +296,24 @@ Troubleshooting:
 
 ### 10.1 Exemplo mínimo válido
 
-```yaml
-tools_library:
-  - id: "uuid_generate"
-    description: "Gera UUID"
-    strategy: "direct"
-    category: "custom_tools"
-    status: "active"
-    tags: []
-    aliases: []
-    metadata: {}
-    impl: "src.agentic_layer.tools.custom_tools.uuid_generator_tool.UUIDGeneratorTool"
+Leitura prática do exemplo mínimo válido:
 
-multi_agents:
-  - id: "sup_minimo"
-    enabled: true
-    execution:
-      type: "agent"
-    agents:
-      - id: "agente_uuid"
-        description: "Gera ids únicos"
-        system_prompt: "Use a ferramenta para gerar UUID"
-        tools: ["uuid_generate"]
-```
+1. A raiz expõe uma tool direta chamada `uuid_generate`, publicada como ativa e ligada ao callable de geração de UUID.
+2. Em `multi_agents`, o supervisor `sup_minimo` fica habilitado com `execution.type=agent`.
+3. Esse supervisor declara um único especialista, `agente_uuid`.
+4. O agente traz descrição, prompt de sistema e a tool `uuid_generate` no conjunto autorizado.
 
 ### 10.2 Exemplo completo
 
-```yaml
-memory:
-  checkpointer:
-    enabled: true
-    backend: "sqlite"
-    sqlite:
-      path: "./data/checkpointer_supervisor.db"
-  agent_conversation_history:
-    enabled: true
-    backend: "redis"
-    redis:
-      url: "${REDIS_URL}"
-      key_prefix: "conversation_history:"
-      ttl: 604800
+Leitura prática do exemplo completo:
 
-global_tools_configuration:
-  dyn_sql:
-    timeout_seconds: 20
-
-tools_library:
-  - id: "dyn_sql<buscar_pedido>"
-    description: "Consulta pedido por ID"
-    strategy: "factory"
-    category: "domain_tools"
-    status: "active"
-    tags: ["sql"]
-    aliases: []
-    metadata: {}
-    factory_impl: "src.agentic_layer.tools.domain_tools.dynamic_sql_tools.dynamic_sql_factory.DynamicSQLFactory.create_tool"
-    tool_name: "buscar_pedido"
-    factory_function: "create_tool"
-    factory_returns: "tool"
-    config:
-      read_only: true
-
-multi_agents:
-  - id: "sup_operacoes"
-    enabled: true
-    execution:
-      type: "agent"
-    prompt: "Você coordena atendimento e financeiro"
-    directives:
-      - "Responda em português"
-      - "Sempre informe próximo passo"
-    local_tools_configuration:
-      dyn_sql:
-        timeout_seconds: 12
-    agents:
-      - id: "agente_atendimento"
-        description: "Atendimento ao cliente"
-        prompt:
-          system: "Resolva dúvidas do cliente"
-        tools:
-          - "dyn_sql<buscar_pedido>"
-        local_tools_configuration:
-          dyn_sql:
-            timeout_seconds: 8
-        limits:
-          timeout_s: 45
-          max_tool_calls: 6
-          token_budget: 9000
-        execution:
-          default_mode: "auto"
-
-      - id: "agente_financeiro"
-        description: "Valida pagamentos e estornos"
-        system_prompt: "Atue em pagamentos"
-        tools:
-          - "dyn_sql<buscar_pedido>"
-        limits:
-          timeout_s: 30
-          max_tool_calls: 4
-          token_budget: 7000
-```
+1. `memory.checkpointer` usa SQLite com arquivo próprio do supervisor, enquanto `memory.agent_conversation_history` usa Redis com prefixo e TTL definidos.
+2. `global_tools_configuration` publica `dyn_sql.timeout_seconds=20` como baseline.
+3. `tools_library` registra a tool de fábrica `dyn_sql<buscar_pedido>` com leitura somente e metadados de criação da tool.
+4. O supervisor `sup_operacoes` fica habilitado no modo clássico, com prompt principal e directives operacionais em português.
+5. O próprio supervisor reduz `dyn_sql.timeout_seconds` para `12` no escopo local.
+6. O agente `agente_atendimento` usa a mesma tool, baixa o timeout para `8` e define guardrails mais altos de tempo, chamadas de tool e orçamento de tokens.
+7. O agente `agente_financeiro` reutiliza a tool `dyn_sql<buscar_pedido>`, mas com limites mais restritivos, adequados ao papel financeiro.
 
 ## 11. Matriz de Compatibilidade
 
@@ -545,24 +345,12 @@ Mapeamentos:
 
 Exemplo AST:
 
-```yaml
-selected_supervisor: sup_ast
-multi_agents:
-  - id: sup_ast
-    enabled: true
-    execution:
-      type: agent
-    directives:
-      - "Coordene especialistas com objetividade"
-    prompt:
-      system: "Coordene especialistas"
-    agents:
-      - id: especialista
-        description: "Especialista de operações"
-        prompt:
-          system: "Atenda solicitações operacionais"
-        tools: ["json_parse"]
-```
+Leitura prática do exemplo AST:
+
+1. `selected_supervisor=sup_ast` marca o alvo ativo no fragmento compilado.
+2. Em `multi_agents`, o supervisor `sup_ast` fica habilitado com `execution.type=agent`.
+3. `directives` e `prompt.system` materializam a instrução principal do coordenador.
+4. O agente filho `especialista` recebe descrição, prompt operacional e a tool `json_parse`.
 
 Fluxo recomendado:
 
@@ -581,10 +369,8 @@ Arquivos e classes que validam de verdade:
 
 O que rodar ao mexer nisso:
 
-```bash
-source .venv/bin/activate && python scripts/docs/verify_agentic_ast_docs_sync.py
-source .venv/bin/activate && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/docs/test_agentic_ast_docs_sync.py tests/unit/test_agentic_assembly_service.py tests/unit/test_agentic_assembly_draft_llm_e2e.py tests/unit/test_agentic_assembly_quality_gate.py tests/unit/test_agentic_assembly_runtime_guardrails.py -q
-```
+1. Ative a `.venv` e execute `python scripts/docs/verify_agentic_ast_docs_sync.py` para validar sincronização entre documentação e AST.
+2. Ainda na `.venv`, execute a bateria focal `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/docs/test_agentic_ast_docs_sync.py tests/unit/test_agentic_assembly_service.py tests/unit/test_agentic_assembly_draft_llm_e2e.py tests/unit/test_agentic_assembly_quality_gate.py tests/unit/test_agentic_assembly_runtime_guardrails.py -q`.
 
 ## Evidência no código
 

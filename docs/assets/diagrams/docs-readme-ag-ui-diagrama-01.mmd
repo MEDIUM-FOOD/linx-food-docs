@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    participant Operador
+    participant Tela as Tela AG-UI
+    participant Sidecar as Sidecar
+    participant API as POST /ag-ui/runs
+    participant Orq as AgUiRunOrchestrator
+    participant Adapter as RetailDemoAgUiAdapter
+    participant Deep as YAML DeepAgent
+    participant Mat as DashboardMaterializationService
+
+    Operador->>Tela: Abre a tela e informa contexto
+    Tela->>Sidecar: Anexa contexto da página
+    Operador->>Sidecar: Envia pedido
+    Sidecar->>API: POST com payload AG-UI
+    API->>Orq: Cria contexto e inicia run
+    Orq-->>Sidecar: RUN_STARTED
+    Orq->>Adapter: Resolve executionKind=retail_demo
+    alt Tela fixa
+        Adapter->>Deep: Usa capability governada
+        Deep-->>Adapter: Resultado autorizado
+        Adapter-->>Sidecar: TOOL_CALL_* + STATE_SNAPSHOT + TEXT_MESSAGE_*
+    else Dashboard dinâmico
+        Adapter->>Mat: Valida e materializa DashboardSpec
+        Mat-->>Sidecar: STATE_SNAPSHOT + CUSTOM + STATE_DELTA
+    end
+    Orq-->>Sidecar: RUN_FINISHED ou RUN_ERROR
+    Sidecar->>Tela: Atualiza store, timeline, mensagens e canvas

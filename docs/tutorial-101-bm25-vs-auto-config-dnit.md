@@ -57,143 +57,19 @@ Resumo de bolso:
 
 Observacao: a validacao automatica de Mermaid nao estava disponivel no ambiente durante esta geracao.
 
-```mermaid
-flowchart TD
-    A[Ingestao de documentos] --> B[Manifestos com auto_config_signals]
-    B --> C[DomainAutoConfigAggregator em domain_signal_processor.py]
-    C --> D[DomainConfigRepository.update_auto_config]
-    D --> E[(ingestion_domain_processors.auto_config)]
-
-    F[Pergunta do usuario] --> G[rag_router -> ContentQASystem]
-    G --> H[DomainConfigurationService._build_runtime_domain_config]
-    H --> I[auto_config no runtime]
-    I --> J[QueryAnalyzer]
-
-    G --> K[RetrievalEngine.merge_bm25_vocabulary_config]
-    K --> L[(bm25_indexes)]
-    L --> M[BM25VocabularySnapshot]
-    M --> N[BM25Retriever.retrieve]
-
-    J --> O[IntelligentOrchestrator]
-    N --> O
-    O --> P[Resposta final]
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-bm25-vs-auto-config-dnit-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant API as rag_router
-    participant DCS as DomainConfigurationService
-    participant ACFG as ingestion_domain_processors
-    participant QA as QueryAnalyzer
-    participant RET as RetrievalEngine
-    participant BDB as bm25_indexes
-    participant BMR as BM25Retriever
-
-    U->>API: Envia pergunta
-    API->>DCS: Monta configuracao de runtime do dominio
-    DCS->>ACFG: Le snapshot auto_config persistido
-    ACFG-->>DCS: termos, codigos e hints
-    DCS-->>API: runtime com auto_detection_keywords e query_expansion
-    API->>QA: Analisa query com runtime de dominio
-    QA-->>API: sinais de dominio e hints
-    API->>RET: Prepara retrieval hibrido
-    RET->>BDB: Carrega BM25VocabularySnapshot
-    BDB-->>RET: detection_keywords e query_expansion_vocabulary
-    RET->>BMR: retrieve(query)
-    BMR-->>RET: scores lexicais
-    RET-->>API: contexto recuperado
-    API-->>U: resposta baseada no contexto
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-bm25-vs-auto-config-dnit-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart LR
-    subgraph Entry[Entry points]
-        A1[app/main.py]
-        A2[src/api/service_api.py]
-        A3[src/api/routers/rag_router.py]
-    end
-
-    subgraph Orchestration[Orquestracao]
-        B1[ContentQASystem]
-        B2[IntelligentOrchestrator]
-        B3[DomainConfigurationService]
-    end
-
-    subgraph Runtime[Runtime de dominio]
-        C1[auto_config runtime hints]
-        C2[QueryAnalyzer]
-        C3[DnitQueryExpansionStep]
-    end
-
-    subgraph Retrieval[Retrieval]
-        D1[RetrievalEngine]
-        D2[BM25Retriever]
-        D3[vector search]
-    end
-
-    subgraph Data[Camada de dados]
-        E1[bm25_indexes]
-        E2[ingestion_domain_processors.auto_config]
-        E3[ingestion manifests]
-    end
-
-    subgraph Contracts[Contratos]
-        F1[YAML domain_specific_processing]
-        F2[YAML domain_specific_rag]
-    end
-
-    subgraph Graphs[LangGraph neste tema]
-        G1[Nao encontrado no codigo como ator principal deste fluxo]
-    end
-
-    A1 --> A2 --> A3 --> B1 --> B2
-    A3 --> B3
-    B3 --> C1 --> C2 --> C3 --> D1
-    D1 --> D2
-    D1 --> D3
-    D1 --> E1
-    B3 --> E2
-    E3 --> E2
-    F1 --> B3
-    F2 --> B3
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-bm25-vs-auto-config-dnit-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart TB
-    C1[bm25_retriever.py\nBM25Retriever]
-    C2[bm25_index_manager.py\nBM25VocabularySnapshot]
-    C3[retrieval_engine.py\nmerge_bm25_vocabulary_config]
-    C4[service.py\n_apply_auto_config_runtime_hints]
-    C5[query_analyzer.py\n_load_auto_detection_keywords]
-    C6[intelligent_orchestrator.py\n_apply_vocabulary_to_yaml]
-    C7[domain_config_repository.py\nupdate_auto_config]
-    C8[domain_signal_processor.py\naggregate and persist]
-    D1[(bm25_indexes)]
-    D2[(ingestion_domain_processors.auto_config)]
-    D3[(ingestion manifests)]
-    T1[test_dnit_query_expansion.py]
-
-    C8 --> D3
-    C8 --> C7
-    C7 --> D2
-    C4 --> D2
-    C4 --> C5
-    C3 --> D1
-    D1 --> C2
-    C2 --> C3
-    C3 --> C1
-    C6 --> C3
-    T1 --> C4
-    T1 --> C5
-    T1 --> C6
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-bm25-vs-auto-config-dnit-diagrama-04.svg)
 
 ## 10) Onde isso aparece neste projeto
 

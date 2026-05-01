@@ -1,243 +1,111 @@
-# Configuração YAML da Plataforma
+# YAML como Contrato Operacional
 
-Este documento cobre o caminho real do YAML até o runtime.
-Ele não substitui os documentos de domínio, tools ou AST.
-O objetivo aqui é explicar como o YAML entra, é enriquecido e quais
-regras do código fazem a configuração ser aceita ou rejeitada.
+Este manual explica o YAML como contrato vivo da plataforma. O foco não é listar chaves em ordem alfabética. O foco é mostrar como a configuração entra no sistema, quais transformações ela sofre, onde a plataforma falha fechado e por que isso é essencial para operação confiável.
 
-## Papel do YAML no produto
+## 1. Visão geral
 
-O YAML continua sendo o contrato operacional principal.
-Mas ele não vai direto para execução.
+A plataforma é YAML-first, mas isso não significa que o YAML cru vai direto para execução. O documento passa por carga, resolução de origem, injeção de contexto, expansão de placeholders, normalização estrutural e, no escopo agentic, validação governada e possível compilação AST.
 
-Antes de chegar ao runtime, ele passa por carregamento, injeção de
-contexto, resolução de segredos, expansão de placeholders, normalização
-e, no escopo agentic, validação governada.
+Em termos práticos, o YAML é a intenção operacional do produto. O runtime existe para provar se essa intenção é executável com segurança.
 
-## De onde o YAML pode vir
+## 2. O problema que este módulo resolve
 
-No boundary HTTP atual, a resolução aceita três entradas:
+Sem uma resolução central, cada endpoint teria sua própria leitura de YAML, seus próprios defaults e suas próprias exceções. Isso criaria divergência entre o que o documento parece dizer e o que o sistema realmente executa.
 
-- encrypted_data;
-- yaml_inline_content;
-- yaml_config_path.
+O resolvedor central existe para evitar exatamente isso. Ele garante que as mesmas regras valham para YAML vindo por encrypted_data, yaml_inline_content ou yaml_config_path. Também garante que contexto do cliente, security_keys, tools_library e user_session entrem sempre pelo fluxo canônico.
 
-Fora do boundary HTTP, também existe carregamento a partir de arquivo.
+## 3. Conceitos necessários para entender o módulo
 
-## Fluxo real de resolução
+Resolução significa transformar uma entrada bruta em configuração executável.
 
-```mermaid
-sequenceDiagram
-        participant C as Cliente
-        participant R as resolve_yaml_configuration
-        participant F as ConfigurationFactory
-        participant D as ClientDirectory
-        participant P as Placeholders
-        participant N as Normalizador
+Normalização significa ajustar a estrutura para o contrato canônico, rejeitando layouts antigos em vez de mascará-los.
 
-        C->>R: encrypted_data, inline ou path
-        R->>F: cria configuração base
-        F-->>R: dicionário inicial
-        R->>D: injeta client_context e security_keys
-        D-->>R: tenant e segredos
-        R->>P: expande placeholders
-        R->>N: normaliza contrato
-        N-->>R: ResolvedConfig
-```
+Placeholder é um valor simbólico que será substituído por segredo ou configuração concreta depois do enriquecimento do contexto.
 
-## O que a fábrica faz no caminho principal
+No escopo agentic, a AST é a representação tipada do YAML governado. Ela existe para que edição, validação e compilação falem a mesma língua. Quando a feature flag FEATURE_AGENTIC_AST_ENABLED está ativa, esse fluxo também fica exposto por endpoints como /config/assembly/validate.
 
-Pelo código atual, ConfigurationFactory:
+## 4. Como o YAML funciona por dentro
 
-1. carrega YAML de arquivo ou payload;
-2. injeta user_session com correlation_id;
-3. valida security_keys;
-4. injeta tools_library quando a chave existe e chega vazia;
-5. garante o security keys store;
-6. expande placeholders, quando a expansão está habilitada;
-7. normaliza a estrutura YAML;
-8. anexa metadados de carregamento.
+O fluxo começa na borda HTTP. O sistema escolhe a origem do documento, carrega o conteúdo e injeta user_session com correlation_id. Depois disso, enriquece client_context, resolve security_keys, garante store para chaves, tenta expandir placeholders e só então normaliza a estrutura.
 
-Em linguagem simples: o YAML final de runtime já não é o mesmo objeto
-cru que entrou pela API.
+Nesse processo, tools_library ocupa um papel crítico. O cliente não envia o catálogo pronto. O contrato observado no código é fechado: tools_library precisa existir na raiz e chegar vazia para receber a injeção do catálogo builtin persistido. tools_library ausente ou preenchida vira erro explícito.
 
-## tools_library não é preenchida pelo cliente
+No escopo agentic, o YAML pode seguir ainda para draft, validate e confirm. Quando isso acontece, o sistema registra metadata.agentic_assembly.governed_hashes para detectar drift entre o que foi validado e o que ficou persistido depois.
 
-O contrato atual é fechado.
+## 5. Pipeline principal de resolução
 
-- a chave tools_library precisa existir na raiz;
-- ela deve chegar vazia;
-- a injeção usa o catálogo builtin persistido carregado pelo cache de
-    tools;
-- tools_library ausente ou preenchida gera erro.
+1. Escolher a origem do YAML.
+2. Carregar o documento em memória.
+3. Injetar user_session e correlation_id.
+4. Enriquecer client_context e security_keys.
+5. Expandir placeholders com base no contexto real.
+6. Garantir o contrato de tools_library.
+7. Normalizar a estrutura canônica.
+8. Se houver escopo agentic, validar pelo fluxo governado, inclusive /config/assembly/validate quando apropriado.
 
-Na prática, o cliente não publica catálogo manual dentro do YAML.
+Esse pipeline existe para impedir que uma configuração aparentemente aceitável só quebre muito depois, dentro de um domínio já difícil de investigar.
 
-## client_context e security_keys
+## 6. Decisões técnicas importantes
 
-O resolver HTTP enriquece o YAML com dados vindos do diretório de
-clientes e do repositório de segredos.
+A primeira decisão importante é falhar fechado quando o contrato crítico está errado. user_session fora do lugar, placeholder essencial não resolvido, tools_library preenchida manualmente ou chaves legadas incompatíveis devem interromper o fluxo.
 
-Isso é importante porque tenant, identidade do cliente e chaves não são
-tratados como detalhe cosmético.
-Eles influenciam autorização, rastreabilidade e resolução de recursos.
+A segunda decisão é separar resolução geral de governança agentic. Nem todo YAML precisa da mesma profundidade de validação, mas quando o documento entra em workflows, multi_agents ou tools_library governado, a AST deixa de ser opcional.
 
-## Placeholders
+A terceira decisão é tratar vector_store.if_exists como política do dataset vivo, não como detalhe local do provider vetorial. Isso evita desalinhamento entre BM25, banco relacional e store vetorial.
 
-O runtime expande placeholders depois do enriquecimento multi-tenant.
+## 7. O que acontece em caso de sucesso
 
-Esse detalhe importa porque o sistema precisa conhecer o cliente antes
-de tentar resolver parte dos segredos.
+No caminho feliz, o YAML entra por uma das origens aceitas, recebe user_session, contextos do cliente, chaves de segurança, catálogo de tools e normalização estrutural. Se houver parte agentic governada, ela ainda recebe validação ou compilação consistente. O resultado é um documento pronto para o runtime, não apenas um texto bem formatado.
 
-Se placeholder crítico sobra no final, isso é sinal de lacuna de
-configuração e não de sucesso parcial.
+## 8. O que acontece em caso de erro
 
-## user_session é obrigatório para o runtime
+Os erros mais importantes aparecem em quatro famílias.
 
-O caminho principal injeta correlation_id em user_session.
-Além disso, vários componentes do runtime falham quando esse bloco ou o
-correlation_id não existem.
+1. Erro de origem: payload ausente, inválido ou fonte não suportada.
+2. Erro de contrato: user_session mal posicionado, tools_library inválida ou estrutura legada.
+3. Erro de segredo: placeholder sem resolução ou security_keys insuficientes.
+4. Erro de governança: documento agentic que não passa pelo modelo AST quando deveria.
 
-Em linguagem simples: user_session não é um adorno do YAML.
-Ele participa do isolamento operacional e do rastreamento.
+O comportamento desejado não é sucesso parcial. É erro claro, com contexto suficiente para o operador saber se o problema está no YAML, no ambiente ou no fluxo governado.
 
-## vector_store.if_exists no runtime atual
+## 9. Configurações que realmente mudam comportamento
 
-O código atual lê vector_store.if_exists como política obrigatória de
-lifecycle do acervo em fluxos de ingestão.
+FEATURE_AGENTIC_AST_ENABLED decide se o slice governado do assembly AST fica exposto e utilizável.
 
-Em linguagem simples: essa chave diz o que o sistema deve fazer quando o
-acervo já existe. Como ela decide se o acervo será atualizado, preservado
-ou reconstruído, o sistema não aplica mais default silencioso para update.
-Se a chave estiver ausente, vazia, com tipo errado ou com valor inválido,
-a configuração deve falhar de forma clara antes da ingestão continuar.
+tools_library decide se o catálogo builtin poderá ser injetado corretamente.
 
-Pontos observados no runtime:
+vector_store.if_exists decide a política do dataset vivo em ingestão.
 
-- o valor é normalizado para overwrite, skip ou update;
-- valores ausentes ou inválidos falham fechado;
-- a camada de vector store bloqueia flags legadas de purge;
-- no caminho de overwrite, a persistência pode preparar nova geração de
-    dataset antes da troca do alvo físico;
-- o lifecycle de dataset usa repositório canônico com geração ativa e
-    physical_bm25_target.
+user_session.correlation_id decide a identidade lógica da execução.
 
-Na prática, não trate if_exists como um detalhe só do provider vetorial.
-Ele rege o conjunto inteiro do dataset vivo: PostgreSQL, vector store,
-BM25 e versões de documento.
+Essas chaves são mais do que dados. Elas mudam o comportamento estrutural do sistema.
 
-O alias vector_store.incremental_indexing.respect_last_modified não faz
-parte do contrato atual. Use vector_store.incremental_indexing.enabled
-para ativar ou desativar a indexação incremental.
+## 10. Observabilidade e diagnóstico
 
-## Rejeição de estruturas legadas
+A sequência mais eficiente de diagnóstico é esta.
 
-O normalizador e o runtime rejeitam caminhos antigos em vez de mascarar
-erro.
+1. Descobrir de onde o YAML veio.
+2. Verificar se user_session e correlation_id foram injetados.
+3. Verificar se client_context e security_keys foram resolvidos.
+4. Verificar se placeholders críticos sobraram.
+5. Verificar se tools_library chegou vazia e foi enriquecida.
+6. Se houver escopo agentic, verificar a trilha de validação e metadata.agentic_assembly.governed_hashes.
 
-Exemplos já documentados pelo código e pelas mensagens atuais:
+Em termos simples: primeiro confirme se o documento foi realmente preparado. Só depois discuta o que o domínio fez com ele.
 
-- user_session fora do lugar certo;
-- chaves legadas de purge ligadas ao overwrite;
-- estruturas antigas rejeitadas pelo normalizador.
+## 11. Exemplo prático guiado
 
-O efeito prático desejado é falhar cedo.
+Imagine um operador enviando um YAML agentic por linguagem natural. A API resolve a origem do pedido, prepara o YAML base e, com FEATURE_AGENTIC_AST_ENABLED ativa, o fluxo governado pode usar endpoints como /config/assembly/objective-to-yaml e /config/assembly/validate. O documento resultante recebe hash governado em metadata.agentic_assembly.governed_hashes. A partir daí, o sistema consegue dizer se o YAML usado em runtime ainda corresponde ao que foi validado.
 
-## Escopo agentic governado
+## 12. Explicação 101
 
-Nem todo o YAML passa pelo mesmo nível de governança.
-O trecho agentic inclui blocos como:
+Pense no YAML como a ordem de produção de uma fábrica. Se a ordem vem incompleta, com campo errado ou segredo faltando, a fábrica não deveria começar a montar metade do produto e torcer pelo melhor. O resolvedor existe para impedir esse tipo de improviso.
 
-- workflows;
-- multi_agents;
-- selected_workflow;
-- selected_supervisor;
-- workflows_defaults;
-- tools_library.
+## 13. Evidências no código
 
-Nesse escopo, o fluxo oficial é draft, validate e confirm.
-
-## AST não é detalhe opcional da UI
-
-Quando FEATURE_AGENTIC_AST_ENABLED está ativa, o fluxo governado de AST
-também vira superfície HTTP pública.
-
-Isso inclui endpoints como:
-
-- /config/assembly/draft;
-- /config/assembly/objective-to-yaml;
-- /config/assembly/validate;
-- /config/assembly/confirm;
-- /config/assembly/schema;
-- /config/assembly/catalog.
-
-Se a feature estiver desligada, esse slice responde como ausente.
-
-Quando o fluxo AST confirma um documento governado, o runtime registra o
-selo de hash em `metadata.agentic_assembly.governed_hashes`. Esse selo
-serve para detectar drift, ou seja, diferença entre o contrato validado e
-o conteúdo persistido depois. Em linguagem simples: é uma assinatura de
-controle para saber se o YAML compilado continua igual ao que foi
-validado.
-
-## Validação de contrato YAML geral
-
-O código atual registra que a validação geral em /config/contract está
-desativada.
-
-Isso não quer dizer ausência de validação.
-Quer dizer que a proteção principal hoje vem da resolução, da
-normalização e dos validadores do escopo agentic.
-
-## Como validar um YAML sem adivinhar
-
-1. Confirme a origem do YAML: encrypted_data, inline ou path.
-2. Confirme se user_session.correlation_id ficou presente.
-3. Confirme se client_context e security_keys foram enriquecidos.
-4. Confirme se placeholders críticos foram resolvidos.
-5. Confirme se tools_library existe e chegou vazia para receber injeção.
-6. Se houver ingestão, confirme que vector_store.if_exists existe, usa
-    overwrite, skip ou update, e combina com a intenção do acervo.
-7. Se houver escopo agentic, passe por /config/assembly/validate.
-
-## Leitura complementar sem fragmentar assunto
-
-- Use GUIA-USUARIO-TOOLS.md para catálogo e famílias de tools.
-- Use README-AST-AGENTIC-DESIGNER.md para fluxo AST.
-- Use README-DEEPAGENTS-SUPERVISOR.md para o contrato do DeepAgent.
-- Use README-INGESTAO.md quando a dúvida for pipeline documental.
-
-## Como rodar e validar
-
-1. Use um endpoint que passe por resolve_yaml_configuration.
-2. Envie encrypted_data, YAML inline ou yaml_config_path.
-3. Confira correlation_id na request e nos logs.
-4. Verifique se o YAML resolvido não deixou placeholder crítico para
-     trás.
-5. Se o fluxo for agentic, valide também no slice /config/assembly.
-
-## Evidência no código
-
-- src/api/routers/config_resolution.py
-- src/config/config_cli/configuration_factory.py
-- src/security/client_directory.py
-- src/security/security_keys_resolver.py
-- src/utils/yaml_schema_normalizer.py
-- src/api/routers/config_assembly_router.py
-- src/config/agentic_assembly/assembly_service.py
-- src/config/agentic_assembly/drift_detector.py
-- src/ingestion_layer/document_persistence_manager.py
-- src/ingestion_layer/vector_stores/base.py
-- src/telemetry/ingestion/dataset_lifecycle_repository.py
-- src/api/routers/config_contract_router.py
-
-## Lacunas no código
-
-Não encontrado no código.
-
-Onde deveria estar:
-
-- um endpoint administrativo único para exportar o YAML final resolvido
-    de forma segura para auditoria humana;
-- uma visão consolidada dos erros de resolução, normalização e validação
-    do YAML no mesmo relatório operacional.
+- [src/api/routers/config_resolution.py](../src/api/routers/config_resolution.py): resolução central das origens de YAML.
+- [src/config/config_cli/configuration_factory.py](../src/config/config_cli/configuration_factory.py): carga, enriquecimento, injeção de tools_library e normalização final.
+- [src/utils/yaml_schema_normalizer.py](../src/utils/yaml_schema_normalizer.py): guarda estrutural do contrato canônico.
+- [src/config/agentic_assembly/assembly_service.py](../src/config/agentic_assembly/assembly_service.py): parse, validação e compilação do escopo agentic.
+- [src/config/agentic_assembly/drift_detector.py](../src/config/agentic_assembly/drift_detector.py): lógica de detecção de deriva governada.
+- [src/ingestion_layer/vector_stores/base.py](../src/ingestion_layer/vector_stores/base.py): política de vector_store.if_exists no runtime de ingestão.

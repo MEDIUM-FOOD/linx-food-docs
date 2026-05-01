@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Cliente
+        C1["Cliente ou UI"]
+    end
+
+    subgraph API
+        A1["/rag/execute"]
+    end
+
+    subgraph Runtime
+        R1["ContentQASystem"]
+        R2["QARuntimeAssembly"]
+        R3["IntelligentRAGOrchestrator"]
+        R4["RetrievalEngine"]
+        R5["GenerationEngine"]
+    end
+
+    subgraph Infra
+        I1["Qdrant ou Azure Search"]
+        I2["BM25 e sinais de domínio"]
+    end
+
+    C1 --> A1 --> R1 --> R2 --> R3 --> R4
+    R4 --> I1
+    R4 --> I2
+    R4 --> R5 --> A1

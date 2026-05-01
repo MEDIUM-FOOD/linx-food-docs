@@ -1,0 +1,16 @@
+sequenceDiagram
+        participant Usuario as Usuário
+        participant UI as Interface HIL
+        participant API as /agent/execute
+        participant Runtime as DeepAgent
+        participant Continue as /agent/continue
+
+        Usuario->>UI: Solicita uma tarefa agentic
+        UI->>API: Envia a execução
+        API->>Runtime: Executa com HIL configurado
+        Runtime-->>API: Pausa antes da tool sensível
+        API-->>UI: Publica thread_id e envelope hil
+        UI->>Usuario: Renderiza revisão a partir do contrato
+        Usuario->>UI: Aprova, edita ou rejeita
+        UI->>Continue: Envia resume.decisions com a mesma thread
+        Continue->>Runtime: Valida a pausa e retoma o fluxo

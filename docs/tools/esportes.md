@@ -118,7 +118,6 @@ times, atletas e odds. Todas seguem o padrão `@tool_factory`, exigem
 - Rotas obrigatórias em `enetpulse.routes`: `events`, `fixtures`,
   `odds`, `standings`, `teams`.
 
-
 ## ⚙️ Formatos de resposta e erros
 
 - Resposta sempre em **lista de dicionários** para padronizar o fluxo.

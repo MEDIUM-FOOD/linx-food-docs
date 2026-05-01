@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant O as Operador
+    participant API as Endpoint NL2SQL
+    participant TOOL as schema_rag_sql
+    participant VS as Vector Store de Schema
+    participant LLM as Modelo
+    participant G as Guardrail
+
+    O->>API: Pergunta em linguagem natural
+    API->>API: Resolve YAML e correlation_id
+    API->>TOOL: Aciona geração dedicada
+    TOOL->>VS: Busca schema relevante
+    VS-->>TOOL: Documentos de schema
+    TOOL->>TOOL: Limita e formata contexto
+    TOOL->>LLM: Prompt com schema e dialeto
+    LLM-->>TOOL: SQL proposta
+    TOOL-->>API: Resposta bruta
+    API->>G: Valida somente leitura
+    G-->>API: Aprovada ou bloqueada
+    API-->>O: SQL, warnings, diagnostics e review_required

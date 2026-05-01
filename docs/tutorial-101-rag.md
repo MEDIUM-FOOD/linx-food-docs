@@ -59,165 +59,23 @@ Em termos 101, a resposta final nao nasce no endpoint. O endpoint so organiza en
 
 ## 6) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart LR
-    A[Cliente] --> B[POST /rag/execute operation=ask]
-    B --> C[resolve_yaml_configuration]
-    C --> D[authenticate_with_yaml_config]
-    D --> E[ask_question compat]
-    E --> F[QuestionService.execute]
-    F --> G[ContentQASystem]
-    G --> H[QARuntimeAssembly]
-    G --> I[QAQuestionProcessor]
-    I --> J[IntelligentRAGOrchestrator]
-    J --> K[Retrieval]
-    J --> L[Generation]
-    L --> M[Resposta com answer, sources, analysis e metrics]
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-rag-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant API as /rag/execute
-    participant Compat as rag_runtime_operations_compat
-    participant QS as QuestionService
-    participant Cache as PipelineCacheManager
-    participant QA as ContentQASystem
-    participant Assembly as QARuntimeAssembly
-    participant Processor as QAQuestionProcessor
-    participant Orch as IntelligentRAGOrchestrator
-
-    U->>API: POST /rag/execute com operation=ask
-    API->>Compat: execute_rag_operation
-    Compat->>Compat: resolve YAML + auth + execution mode
-    Compat->>QS: ask_question()
-    QS->>Cache: get_cached_system()
-    Cache-->>QS: pipeline existente ou vazio
-    QS->>QA: inicializa ContentQASystem se necessario
-    QA->>Assembly: valida runtime moderno
-    QS->>QA: ask_question(...)
-    QA->>Processor: ask_question(...)
-    Processor->>Orch: intelligent_retrieve(...)
-    Orch-->>Processor: answer + documents + diagnostics
-    Processor-->>QS: payload normalizado
-    QS-->>Compat: RagQuestionResponse
-    Compat-->>U: 200 sync ou 202 async
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-rag-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-    subgraph EntryPoints
-        E1[/rag/execute]
-        E2[/health]
-    end
-
-    subgraph Contracts
-        C1[ExecuteEnvelope]
-        C2[RagQuestionRequest]
-        C3[user_session, vector_store, rag_system, qa_system]
-    end
-
-    subgraph Orchestration
-        O1[rag_runtime_operations_compat]
-        O2[QuestionService]
-        O3[PipelineCacheManager]
-    end
-
-    subgraph QA_Runtime
-        Q1[ContentQASystem]
-        Q2[QARuntimeAssembly]
-        Q3[QAQuestionProcessor]
-        Q4[IntelligentRAGOrchestrator]
-    end
-
-    subgraph Retrieval_And_Generation
-        R1[rag_engine.config_utils]
-        R2[retrieval]
-        R3[generation]
-    end
-
-    subgraph Telemetry
-        T1[analysis]
-        T2[pipeline_diagnostics]
-        T3[logs e token_usage]
-    end
-
-    E1 --> C1 --> O1 --> O2 --> O3 --> Q1 --> Q2 --> Q3 --> Q4 --> R1 --> R2 --> R3 --> T1
-    Q3 --> T2
-    O2 --> T3
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-rag-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart TD
-    A[src/api/routers/rag_operations_router.py]
-    B[src/api/routers/rag_runtime_operations_compat.py]
-    C[src/services/question_service.py]
-    D[src/qa_layer/content_qa_system.py]
-    E[src/orchestrators/qa_runtime_assembly.py]
-    F[src/qa_layer/qa_question_processor.py]
-    G[src/qa_layer/rag_engine]
-    H[src/qa_layer/pipeline_cache_manager.py]
-    I[src/utils/yaml_schema_normalizer.py]
-    J[app/yaml/rag-config-linx-food.yaml]
-    K[tests/unit + tests/smoke]
-
-    A --> B
-    B --> C
-    C --> H
-    C --> D
-    D --> E
-    D --> F
-    F --> G
-    B --> I
-    I --> J
-    C --> K
-    D --> K
-    G --> K
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-rag-diagrama-04.svg)
 
 ### 9.1) Mapa visual 5: swimlane funcional
 
-```mermaid
-flowchart LR
-    subgraph Cliente
-        C1[Prepara payload com question e encrypted_data]
-        C2[Chama /rag/execute]
-    end
-
-    subgraph API
-        A1[Valida envelope]
-        A2[Resolve YAML]
-        A3[Autentica e escolhe modo]
-    end
-
-    subgraph Service
-        S1[QuestionService]
-        S2[Pipeline cache]
-    end
-
-    subgraph RuntimeQA
-        R1[ContentQASystem]
-        R2[QARuntimeAssembly]
-        R3[QAQuestionProcessor]
-        R4[IntelligentRAGOrchestrator]
-    end
-
-    subgraph Saida
-        O1[Resposta sync]
-        O2[Task async com polling e stream]
-        O3[Metrics, sources e diagnostics]
-    end
-
-    C1 --> C2 --> A1 --> A2 --> A3 --> S1 --> S2 --> R1 --> R2 --> R3 --> R4 --> O1
-    A3 --> O2
-    R4 --> O3
-```
+![9.1) Mapa visual 5: swimlane funcional](assets/diagrams/docs-tutorial-101-rag-diagrama-05.svg)
 
 ## 10) Onde isso aparece neste projeto
 

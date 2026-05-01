@@ -1,0 +1,16 @@
+sequenceDiagram
+        participant C as Cliente
+        participant R as resolve_yaml_configuration
+        participant F as ConfigurationFactory
+        participant D as ClientDirectory
+        participant P as Placeholders
+        participant N as Normalizador
+
+        C->>R: encrypted_data, inline ou path
+        R->>F: cria configuração base
+        F-->>R: dicionário inicial
+        R->>D: injeta client_context e security_keys
+        D-->>R: tenant e segredos
+        R->>P: expande placeholders
+        R->>N: normaliza contrato
+        N-->>R: ResolvedConfig

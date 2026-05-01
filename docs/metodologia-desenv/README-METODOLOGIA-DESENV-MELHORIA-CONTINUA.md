@@ -23,20 +23,7 @@ Esses arquivos funcionam como memória operacional:
 
 ## O ciclo de melhoria
 
-```mermaid
-flowchart TB
-  A[Erro, regressao ou correcao do usuario] --> B{Tipo de aprendizado}
-  B -- erro real --> C[error-backlog]
-  B -- erro recorrente --> D[regression-logs]
-  B -- licao preventiva --> E[lessons]
-  B -- instrucao ruim --> F[bad-instructions]
-  C --> G[Planejamento futuro]
-  D --> G
-  E --> G
-  F --> G
-  G --> H[Execucao melhor]
-  H --> A
-```
+![O ciclo de melhoria](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-melhoria-continua-diagrama-01.svg)
 
 ## `lessons-instructions.md`
 
@@ -140,31 +127,7 @@ representado pelo backlog de erros e pelos logs de regressão.
 
 ## Como os arquivos interagem
 
-```mermaid
-sequenceDiagram
-  participant H as Humano
-  participant C as Copilot
-  participant L as Logs
-  participant E as Error backlog
-  participant R as Regression logs
-  participant N as Lessons
-  participant B as Bad instructions
-
-  H->>C: relata erro ou pede mudanca
-  C->>L: le evidencias
-  C->>E: consulta erro parecido
-  alt erro recorrente
-    C->>R: registra regressao
-  else erro novo
-    C->>E: registra erro novo
-  end
-  alt houve aprendizado preventivo
-    C->>N: registra licao
-  end
-  alt regra de governanca falhou
-    C->>B: registra instrucao problematica
-  end
-```
+![Como os arquivos interagem](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-melhoria-continua-diagrama-02.svg)
 
 ## Quando registrar uma lição
 

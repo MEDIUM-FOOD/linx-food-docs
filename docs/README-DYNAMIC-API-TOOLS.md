@@ -55,25 +55,7 @@ headers, timeout e autenticação.
 
 ## Como a execução é montada
 
-```mermaid
-sequenceDiagram
-        participant Y as YAML
-        participant G as Registro governado
-        participant L as ToolLoader
-        participant F as DynamicApiToolFactory
-        participant A as AuthenticationManager
-        participant H as HttpClient
-
-        Y->>L: dyn_api<endpoint_id>
-        L->>F: tool_config resolvido
-        F->>F: tenta tools_config.api_dynamic
-        alt não encontrou no YAML
-                F->>G: resolve operação por tenant
-        end
-        F->>A: resolve autenticação quando existir
-        F->>H: executa request HTTP
-        H-->>F: resposta normalizada
-```
+![Como a execução é montada](assets/diagrams/docs-readme-dynamic-api-tools-diagrama-01.svg)
 
 ## Guardrails importantes
 

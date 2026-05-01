@@ -1,0 +1,31 @@
+flowchart LR
+    subgraph Orquestracao
+        O1["ContentIngestionOrchestrator"]
+        O2["IngestionFactoryBundle"]
+        O3["ProcessorFactory"]
+    end
+
+    subgraph Processor
+        P1["PdfProcessor"]
+        P2["Pipeline de Extracao"]
+    end
+
+    subgraph FilaDeterministica
+        F1["OrderedEngineSelector"]
+        F2["DeterministicLegoPdfParsingEngine"]
+        F3["PdfParsingEngineResolver"]
+    end
+
+    subgraph Engines
+        E1["Parsing Textual"]
+        E2["OCR de Pagina"]
+        E3["Tabelas"]
+        E4["Imagem e Visao"]
+    end
+
+    O1 --> O2 --> O3 --> P1 --> P2
+    P2 --> F1 --> F2 --> F3
+    F3 --> E1
+    P1 --> E2
+    P1 --> E3
+    P1 --> E4

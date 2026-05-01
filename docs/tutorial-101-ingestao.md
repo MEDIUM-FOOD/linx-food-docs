@@ -63,118 +63,19 @@ A analogia do mundo real é esta: ingestão não é um funcionário só fazendo 
 
 ## 5) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart LR
-  U[Cliente] --> API[/POST /rag/ingest/]
-  API --> SVC[IngestionService.execute]
-  SVC --> ORCH[ContentIngestionOrchestrator.ingest_content]
-  ORCH --> DISP[ContentTypeDispatcherMixin]
-  DISP --> LOC[LocalContentFamilyService]
-  DISP --> CONF[ConfluenceContentFamilyService]
-  DISP --> REM[RemoteContentFamilyService]
-  DISP --> DYN[DynamicDataContentFamilyService]
-  LOC --> L1[Markdown TXT DOCX PDF JSON PPT Imagem]
-  CONF --> C1[Paginas e anexos Confluence]
-  REM --> R1[Web YouTube GDrive Blob S3 MinIO]
-  DYN --> D1[Scripts e arquivos dinamicos]
-  DISP --> VS[Vector store]
-```
+![5) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-ingestao-diagrama-01.svg)
 
 ## 6) Mapa visual 2: sequência
 
-```mermaid
-sequenceDiagram
-  participant U as Usuario
-  participant API as rag_router
-  participant SVC as IngestionService
-  participant ORCH as ContentIngestionOrchestrator
-  participant DISP as ContentTypeDispatcher
-  participant LOC as LocalContentFamilyService
-  participant CONF as ConfluenceContentFamilyService
-  participant REM as RemoteContentFamilyService
-  participant DYN as DynamicDataContentFamilyService
-
-  U->>API: POST /rag/ingest
-  API->>SVC: execute(...)
-  SVC->>ORCH: ingest_content(request)
-  ORCH->>DISP: _execute_content_processing_pipeline
-  alt markdown, texto, docx, pdf, json, ppt, imagem
-    DISP->>LOC: processar familia local
-  end
-  alt confluence_page_ids
-    DISP->>CONF: processar paginas e anexos
-  end
-  alt web, youtube, google drive, azure blob, s3, minio
-    DISP->>REM: processar familia remota
-  end
-  alt dynamic_data_sources
-    DISP->>DYN: executar fonte dinamica
-  end
-  DISP-->>ORCH: resultado consolidado
-  ORCH-->>SVC: métricas e status
-  SVC-->>API: resposta
-  API-->>U: 200 ou 202
-```
+![6) Mapa visual 2: sequência](assets/diagrams/docs-tutorial-101-ingestao-diagrama-02.svg)
 
 ## 7) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-  subgraph Entry
-    E[rag_router]
-  end
-  subgraph Service
-    S[IngestionService]
-  end
-  subgraph Orchestration
-    O[ContentIngestionOrchestrator]
-    D[ContentTypeDispatcherMixin]
-  end
-  subgraph Families
-    F1[LocalContentFamilyService]
-    F2[ConfluenceContentFamilyService]
-    F3[RemoteContentFamilyService]
-    F4[DynamicDataContentFamilyService]
-  end
-  subgraph ProcessorsAndSources
-    P1[Processors PDF JSON DOCX PPT Imagem Markdown TXT]
-    P2[ConfluenceDataSource e processor canonico]
-    P3[WebDataSource YouTubeDataSource FileSystemDataSource]
-    P4[DynamicDataLoader]
-  end
-  subgraph Data
-    V[Vector Store]
-    T[Telemetry DB e persistencia]
-  end
-
-  E --> S --> O --> D
-  D --> F1 --> P1 --> V
-  D --> F2 --> P2 --> V
-  D --> F3 --> P3 --> V
-  D --> F4 --> P4 --> V
-  O --> T
-```
+![7) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-ingestao-diagrama-03.svg)
 
 ## 8) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-  A[rag_router.py] --> B[IngestionService]
-  B --> C[ContentIngestionOrchestrator]
-  C --> D[ContentTypeDispatcherMixin]
-  D --> E[local_content_family.py]
-  D --> F[confluence_content_family.py]
-  D --> G[remote_content_family.py]
-  D --> H[dynamic_data_content_family.py]
-  E --> I[processors/]
-  F --> J[confluence_data_source.py]
-  G --> K[datasources e clients remotos]
-  H --> L[dynamic_data/loader.py]
-  I --> M[Vector Store]
-  J --> M
-  K --> M
-  L --> M
-```
+![8) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-ingestao-diagrama-04.svg)
 
 ## 9) Onde isso aparece no projeto
 

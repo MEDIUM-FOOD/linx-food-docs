@@ -67,28 +67,7 @@ Leia nesta ordem:
 
 ## Mapa visual da metodologia
 
-```mermaid
-flowchart LR
-  H[Desenvolvedor humano] --> P[Pedido claro]
-  P --> I[Investigar]
-  I --> PL[Planejar]
-  PL --> EX[Implementar]
-  EX --> T[Testar]
-  T --> D[Documentar]
-  D --> R[Registrar aprendizado]
-  R --> H
-
-  G[.github instructions] --> I
-  G --> PL
-  G --> EX
-  G --> T
-  G --> D
-  S[Suite oficial] --> T
-  L[Logs e correlation_id] --> I
-  L --> EX
-  B[Backlog e regressões] --> PL
-  B --> EX
-```
+![Mapa visual da metodologia](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-indice-diagrama-01.svg)
 
 ## A promessa operacional da metodologia
 

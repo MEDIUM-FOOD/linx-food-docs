@@ -44,17 +44,7 @@ critério, pode derrubar desempenho de mais de um fluxo ao mesmo tempo.
 
 ## Fluxo resumido
 
-```mermaid
-flowchart LR
-   A[Request ou job] --> B[Resolver de recurso]
-   B --> C{Cache hit?}
-   C -- Não --> D[Criar recurso]
-   D --> E[Salvar em memória ou Redis]
-   C -- Sim --> F[Reutilizar recurso]
-   E --> G[Resposta]
-   F --> G
-   G --> H[TTL ou invalidação admin]
-```
+![Fluxo resumido](assets/diagrams/docs-readme-caching-diagrama-01.svg)
 
 ## Famílias principais encontradas no runtime
 

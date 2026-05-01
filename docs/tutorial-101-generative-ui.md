@@ -61,197 +61,23 @@ O detalhe mais importante para nao se confundir: isso nao e o WebChat. O WebChat
 
 ## 6) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart LR
-    A[Operador abre tela AG-UI] --> B[Pagina monta contexto visual e operacional]
-    B --> C[Sidecar ou botao rapido monta payload]
-    C --> D[POST /ag-ui/runs]
-    D --> E[Router valida permissao e fonte de configuracao]
-    E --> F[AgUiRunOrchestrator emite RUN_STARTED]
-    F --> G[RetailDemoAgUiAdapter decide o caminho]
-    G --> H1[Capability fixa com dyn_sql aprovado]
-    G --> H2[dashboard_dynamic com DashboardSpec]
-    H1 --> I1[Eventos de tool, snapshot e mensagem]
-    H2 --> I2[Eventos de materializacao, deltas e render ready]
-    I1 --> J[Cliente SSE aplica eventos no store]
-    I2 --> J
-    J --> K[Sidecar atualiza timeline e correlacao]
-    J --> L[Pagina atualiza resultado ou canvas]
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-generative-ui-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Operador
-    participant Pagina as Tela AG-UI
-    participant Sidecar
-    participant Cliente as ag-ui-client.js
-    participant API as POST /ag-ui/runs
-    participant Router as ag_ui_router.run_ag_ui
-    participant Orq as AgUiRunOrchestrator
-    participant Adapter as RetailDemoAgUiAdapter
-    participant Mat as DashboardMaterializationService
-
-    Operador->>Pagina: Ajusta prompt, periodo e contexto
-    Pagina->>Sidecar: attachContext()
-    Operador->>Sidecar: submitMessage()
-    Sidecar->>Cliente: start(payload)
-    Cliente->>API: POST SSE com X-API-Key
-    API->>Router: request validado
-    Router->>Orq: run(context)
-    Orq-->>Cliente: RUN_STARTED
-    Orq->>Adapter: execute(context)
-    alt capability fixa
-        Adapter-->>Cliente: STEP_STARTED
-        Adapter-->>Cliente: TOOL_CALL_START
-        Adapter-->>Cliente: TOOL_CALL_ARGS
-        Adapter-->>Cliente: TOOL_CALL_RESULT
-        Adapter-->>Cliente: STATE_SNAPSHOT
-        Adapter-->>Cliente: TEXT_MESSAGE_*
-        Adapter-->>Cliente: STEP_FINISHED
-    else dashboard_dynamic
-        Adapter->>Mat: build_events(context, dashboardSpec)
-        Mat-->>Cliente: CUSTOM spec.started
-        Mat-->>Cliente: STATE_SNAPSHOT
-        Mat-->>Cliente: CUSTOM spec.validated
-        Mat-->>Cliente: STATE_DELTA
-        Mat-->>Cliente: CUSTOM widget.added
-        Mat-->>Cliente: CUSTOM render.ready
-    end
-    Orq-->>Cliente: RUN_FINISHED ou RUN_ERROR
-    Cliente->>Sidecar: onEvent(event)
-    Sidecar->>Pagina: atualiza DOM e estado
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-generative-ui-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-    subgraph EntryPoints
-        A1[src/api/service_api.py]
-        A2[src/api/routers/ag_ui_router.py]
-        A3[app/ui/static/ui-admin-plataforma-ag-ui-*.html]
-    end
-
-    subgraph Orchestration
-        B1[src/api/services/ag_ui_run_orchestrator.py]
-        B2[src/api/services/ag_ui_event_encoder.py]
-    end
-
-    subgraph AgentsAndGraphs
-        C1[app/yaml/ag-ui-pdv-vendas-demo.yaml]
-        C2[executionKind retail_demo]
-    end
-
-    subgraph ToolsAndIntegrations
-        D1[src/api/services/ag_ui_retail_demo_adapter.py]
-        D2[src/agentic_layer/tools/.../dynamic_sql_factory.py]
-        D3[src/api/services/ag_ui_dashboard_materialization.py]
-    end
-
-    subgraph Contracts
-        E1[src/api/schemas/ag_ui_models.py]
-        E2[src/api/schemas/ag_ui_dashboard_models.py]
-    end
-
-    subgraph DataAndUi
-        F1[DATABASE_VAREJO_DSN e DATABASE_VAREJO_SCHEMA]
-        F2[app/ui/static/js/shared/ag-ui-client.js]
-        F3[app/ui/static/js/shared/ag-ui-sidecar-chat.js]
-        F4[app/ui/static/js/ag-ui-dashboard-dinamico.js]
-    end
-
-    A1 --> A2 --> B1 --> D1
-    B1 --> B2
-    D1 --> C1
-    D1 --> D2
-    D1 --> D3
-    D1 --> E1
-    D3 --> E2
-    A3 --> F2 --> A2
-    F2 --> F3
-    F3 --> F4
-    D2 --> F1
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-generative-ui-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-    UIHub[ui-admin-plataforma-ag-ui-varejo-demo.html]
-    Vendas[ui-admin-plataforma-ag-ui-vendas-cockpit.html]
-    Checkout[ui-admin-plataforma-ag-ui-checkout-radar.html]
-    Catalogo[ui-admin-plataforma-ag-ui-catalogo-central.html]
-    Dashboard[ui-admin-plataforma-ag-ui-dashboard-dinamico.html]
-    Client[ag-ui-client.js]
-    Sidecar[ag-ui-sidecar-chat.js]
-    Store[ag-ui-state-store.js]
-    Router[ag_ui_router.py]
-    Orchestrator[ag_ui_run_orchestrator.py]
-    Adapter[ag_ui_retail_demo_adapter.py]
-    Materializer[ag_ui_dashboard_materialization.py]
-    Schemas[ag_ui_models.py + ag_ui_dashboard_models.py]
-    Yaml[ag-ui-pdv-vendas-demo.yaml]
-
-    UIHub --> Vendas
-    UIHub --> Checkout
-    UIHub --> Catalogo
-    UIHub --> Dashboard
-    Vendas --> Client
-    Checkout --> Client
-    Catalogo --> Client
-    Dashboard --> Client
-    Client --> Sidecar
-    Sidecar --> Store
-    Client --> Router
-    Router --> Orchestrator
-    Orchestrator --> Adapter
-    Adapter --> Materializer
-    Adapter --> Schemas
-    Materializer --> Schemas
-    Adapter --> Yaml
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-generative-ui-diagrama-04.svg)
 
 ### Mapa visual 5: fluxo funcional cruzado por responsabilidade
 
-```mermaid
-flowchart LR
-    subgraph Operador
-        O1[Abre a tela]
-        O2[Preenche periodo, prompt e contexto]
-        O3[Clica em executar]
-    end
-    subgraph Frontend
-        F1[Controller monta capability e parametros]
-        F2[Sidecar anexa contexto]
-        F3[Cliente abre POST SSE]
-        F4[Store aplica eventos]
-        F5[Pagina renderiza resultado ou canvas]
-    end
-    subgraph API
-        A1[Router valida permissao]
-        A2[Router exige yaml_inline_content ou equivalente]
-        A3[Router cria correlation id]
-        A4[Orquestrador emite lifecycle]
-    end
-    subgraph Runtime
-        R1[Adapter resolve capability]
-        R2[Dyn SQL aprovado ou DashboardSpec]
-        R3[Materializacao ou tool result]
-    end
-    subgraph Governanca
-        G1[YAML define supervisor e tools]
-        G2[Validador bloqueia HTML, JS e SQL livre]
-        G3[Browser nao cria correlation id]
-    end
-
-    O1 --> O2 --> O3 --> F1 --> F2 --> F3 --> A1 --> A2 --> A3 --> A4 --> R1 --> R2 --> R3 --> F4 --> F5
-    G1 --> R1
-    G2 --> R2
-    G3 --> F3
-```
+![Mapa visual 5: fluxo funcional cruzado por responsabilidade](assets/diagrams/docs-tutorial-101-generative-ui-diagrama-05.svg)
 
 ## 10) Onde isso aparece neste projeto
 

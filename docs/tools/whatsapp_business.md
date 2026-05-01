@@ -147,8 +147,6 @@ tools_library:
       max_messages_per_second: 80  # Limite Meta Cloud API
       max_messages_per_day: 100000
 
-
-
 tools_library:
     type: "whatsapp_business"
     config:

@@ -71,23 +71,7 @@ connection_id válidos.
 
 ## Como a execução é montada
 
-```mermaid
-sequenceDiagram
-        participant Y as YAML
-        participant G as Registro governado
-        participant L as ToolLoader
-        participant F as DynamicSqlToolFactory
-        participant D as Banco SQL
-
-        Y->>L: dyn_sql<query_id>
-        L->>F: tool_config resolvido
-        F->>F: tenta tools_config.sql_dynamic
-        alt não encontrou no YAML
-                F->>G: resolve query por tenant
-        end
-        F->>D: executa SQL parametrizada
-        D-->>F: resultado ou erro
-```
+![Como a execução é montada](assets/diagrams/docs-readme-dynamic-sql-tools-diagrama-01.svg)
 
 ## Guardrails importantes
 
@@ -298,27 +282,7 @@ operacional.
 
 ## Fluxo dedicado de NL2SQL
 
-```mermaid
-sequenceDiagram
-        participant Cliente
-        participant Router as /config/nl2sql/generate
-        participant Service as Nl2SqlService
-        participant Factory as SqlSchemaRagToolFactory
-        participant VS as Vector Store de Schema
-        participant LLM as LLM
-        participant Guard as SqlReadOnlyGuardrail
-
-        Cliente->>Router: prompt + YAML + dialect
-        Router->>Service: contexto resolvido
-        Service->>Factory: yaml_config preparado
-        Factory->>VS: busca metadados de schema
-        VS-->>Factory: contexto relevante
-        Factory->>LLM: prompt de geração SQL
-        LLM-->>Service: SQL proposta
-        Service->>Guard: valida somente leitura
-        Guard-->>Service: allowed ou blocked
-        Service-->>Cliente: SQL proposta + diagnostics
-```
+![Fluxo dedicado de NL2SQL](assets/diagrams/docs-readme-dynamic-sql-tools-diagrama-02.svg)
 
 ## Quando usar dyn_sql e quando não usar
 

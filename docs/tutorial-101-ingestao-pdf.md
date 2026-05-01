@@ -55,206 +55,23 @@ O ponto 101 mais importante e este: a palavra OCR aparece tres vezes porque o pr
 
 ## 6) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart TD
-    A[Cliente HTTP ou console admin PDF] --> B[/rag/ingest]
-    B --> C[Preparacao async e resolucao do YAML]
-    C --> D[IngestionRequestBuilder]
-    D --> E[ContentIngestionOrchestrator]
-    E --> F[PDFContentProcessor]
-    F --> G[Pipeline de extracao]
-    G --> G1[ValidatePdfBytesStage]
-    G1 --> G2[ApplyDocumentOcrStage]
-    G2 --> G3[ParseViaEngineStage]
-    G3 --> G4[ApplyEngineResultStage]
-    G4 --> H[Pipeline textual]
-    H --> H1[PreserveStructureStage]
-    H1 --> H2[RemoveBasicArtifactsStage]
-    H2 --> H3[FixSimpleOcrArtifactsStage]
-    H3 --> I{Documento pede multimodal?}
-    I -- nao --> J[Chunking textual final]
-    I -- sim --> K[Extracao de imagens e etapas multimodais]
-    K --> L[Chunks enriquecidos e manifest]
-    J --> M[Indexacao e telemetria]
-    L --> M[Indexacao e telemetria]
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant UI as UI admin ou cliente
-    participant Crypto as /crypto/session-key
-    participant API as /rag/ingest
-    participant Prep as IngestionJobExecutor
-    participant Builder as IngestionRequestBuilder
-    participant Orch as ContentIngestionOrchestrator
-    participant PDF as PDFContentProcessor
-    participant Extract as PdfRuntimeCoordinator
-    participant Rich as PdfRichProcessingApplicationService
-    participant Multi as PdfMultimodalApplicationService
-
-    UI->>Crypto: solicita sessao de criptografia
-    Crypto-->>UI: session_id + public_key_pem
-    UI->>API: POST /rag/ingest com encrypted_data
-    API->>Prep: prepara execucao assincrona
-    Prep->>Builder: resolve YAML e fontes
-    Builder-->>Prep: IngestionRequest com pdf_file_paths
-    Prep->>Orch: inicia ingestao
-    Orch->>PDF: processa documento PDF
-    PDF->>Extract: build_extraction_pipeline()
-    Extract-->>PDF: bytes validados + OCR documental opcional + resultado da engine
-    PDF->>Rich: run(document, entrypoint)
-    Rich->>Rich: process_content e OCR basico opcional
-    Rich->>Multi: process_multimodal_document() quando habilitado
-    Multi-->>Rich: chunks multimodais ou fallback textual
-    Rich-->>PDF: chunks finais
-    PDF-->>Orch: documento pronto para indexacao
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart LR
-    subgraph EntryPoints
-        EP1[/rag/ingest]
-        EP2[/crypto/session-key]
-        EP3[Console admin PDF]
-    end
-
-    subgraph Contracts
-        C1[RagIngestionRequest]
-        C2[encrypted_data]
-        C3[ingestion.content_profiles.type_specific.pdf]
-    end
-
-    subgraph Orchestration
-        O1[IngestionJobExecutor]
-        O2[IngestionRequestBuilder]
-        O3[ContentIngestionOrchestrator]
-    end
-
-    subgraph GraphsAndProcessors
-        G1[PDFContentProcessor]
-        G2[PdfRuntimeCoordinator]
-        G3[PdfRichProcessingApplicationService]
-        G4[PdfMultimodalApplicationService]
-    end
-
-    subgraph ToolsAndEngines
-        T1[PdfDocumentOcrService]
-        T2[DeterministicLegoPdfParsingEngine]
-        T3[PymupdfPdfParsingEngine]
-        T4[PdfChunkingService]
-    end
-
-    subgraph DataAndTelemetry
-        D1[PDF local]
-        D2[Execution manifest]
-        D3[Logs por correlation_id]
-    end
-
-    EP1 --> C1
-    EP2 --> C2
-    EP3 --> C2
-    C1 --> O1
-    C2 --> O1
-    C3 --> O2
-    O1 --> O2
-    O2 --> O3
-    O3 --> G1
-    G1 --> G2
-    G1 --> G3
-    G3 --> G4
-    G2 --> T1
-    G2 --> T2
-    T2 --> T3
-    G3 --> T4
-    D1 --> G1
-    G4 --> D2
-    O1 --> D3
-    G1 --> D3
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart TD
-    A[src/api/routers/rag_ingestion_router.py]
-    B[src/api/routers/rag_router.py]
-    C[src/api/services/ingestion_job_executor.py]
-    D[src/services/ingestion_request_builder.py]
-    E[src/ingestion_layer/main_orchestrator.py]
-    F[src/ingestion_layer/processors/pdf_processor.py]
-    G[src/ingestion_layer/processors/pdf_runtime_coordinator.py]
-    H[src/ingestion_layer/processors/pdf_document_ocr_service.py]
-    I[src/ingestion_layer/pdf_tools]
-    J[src/ingestion_layer/processors/pdf_rich_processing_application_service.py]
-    K[src/ingestion_layer/processors/pdf_multimodal_application_service.py]
-    L[src/utils/pdf_config_resolver.py]
-    M[app/yaml/rag-config-mrctito-dnit-ingest.yaml]
-    N[tests/unit + tests/validation]
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    G --> I
-    F --> J
-    J --> K
-    D --> L
-    L --> M
-    F --> N
-    G --> N
-    K --> N
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-04.svg)
 
 ### 9.1) Mapa visual 5: swimlane funcional
 
-```mermaid
-flowchart LR
-    subgraph Cliente
-        C1[Carrega YAML ou payload]
-        C2[Solicita criptografia]
-        C3[Dispara /rag/ingest]
-    end
-
-    subgraph BordaHTTP
-        H1[Valida request RagIngestionRequest]
-        H2[Prepara execucao assincrona]
-    end
-
-    subgraph Preparacao
-        P1[Resolve YAML e chaves]
-        P2[Monta IngestionRequest]
-        P3[Descobre pdf_file_paths]
-    end
-
-    subgraph PipelinePDF
-        PDF1[Valida bytes]
-        PDF2[OCR documental opcional]
-        PDF3[Parsing por engine]
-        PDF4[Limpeza textual]
-        PDF5[OCR basico opcional]
-        PDF6[Multimodal opcional]
-        PDF7[Chunking final]
-    end
-
-    subgraph Saidas
-        S1[Chunks]
-        S2[Execution manifest]
-        S3[Logs e telemetria]
-    end
-
-    C1 --> C2 --> C3 --> H1 --> H2 --> P1 --> P2 --> P3 --> PDF1 --> PDF2 --> PDF3 --> PDF4 --> PDF5 --> PDF6 --> PDF7 --> S1
-    PDF6 --> S2
-    H2 --> S3
-    PDF3 --> S3
-    PDF6 --> S3
-```
+![9.1) Mapa visual 5: swimlane funcional](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-05.svg)
 
 ## 10) Onde isso aparece neste projeto
 

@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant U as Cliente
+  participant API as workflow_router (/workflow/execute)
+  participant CFG as config_resolution
+  participant AUTH as authenticate_with_yaml_config
+  participant SVC as WorkflowExecutionService
+  participant ORCH as WorkflowOrchestrator
+  participant AW as AgentWorkflow
+  participant G as StateGraph Nodes
+
+  U->>API: POST /workflow/execute
+  API->>CFG: resolve_yaml_configuration(encrypted_data)
+  CFG-->>API: yaml_config
+  API->>AUTH: validar permissao WORKFLOW_EXECUTE
+  AUTH-->>API: user_code
+  API->>SVC: execute_sync/execute_async
+  SVC->>ORCH: executar workflow
+  ORCH->>AW: initialize + run(message, thread)
+  AW->>G: compilar grafo (nodes/edges)
+  G-->>AW: estado final (messages/variables/metadata)
+  AW-->>ORCH: resultado do runtime
+  ORCH-->>SVC: OrchestratorResult
+  SVC-->>API: WorkflowResponse
+  API-->>U: 200 (sync) ou 202 (async)

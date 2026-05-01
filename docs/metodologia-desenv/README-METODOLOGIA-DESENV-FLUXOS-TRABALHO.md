@@ -35,25 +35,7 @@ Use quando existe uma feature nova ou uma evolução clara.
 
 ### Diagrama
 
-```mermaid
-sequenceDiagram
-  participant H as Humano
-  participant I as Investigar
-  participant P as Planejar
-  participant E as Implementar
-  participant T as Suite
-  participant D as Documentar
-
-  H->>I: descreve objetivo e escopo
-  I-->>H: evidencias, lacunas e riscos
-  H->>P: pede plano executavel
-  P-->>H: tarefas pequenas e verificaveis
-  H->>E: executa tarefa por tarefa
-  E->>T: valida impacto e regressao
-  T-->>E: logs, checkpoints e telemetria
-  E->>D: atualiza docs quando necessario
-  D-->>H: entrega documentada e provada
-```
+![Diagrama](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-fluxos-trabalho-diagrama-01.svg)
 
 ## Fluxo 2: correção de erro com log
 
@@ -93,20 +75,7 @@ default suspeito ou comportamento anômalo.
 
 ### Diagrama da correção
 
-```mermaid
-flowchart TB
-  S[Sintoma observado] --> C[Capturar correlation_id ou log]
-  C --> L[Ler log completo]
-  L --> K[Ler codigo executado]
-  K --> Q{Historia fecha?}
-  Q -- nao --> O[Instrumentar observabilidade]
-  O --> N[Nova execucao]
-  N --> L
-  Q -- sim --> R[Corrigir causa raiz]
-  R --> T[Rodar suite compativel]
-  T --> B[Registrar backlog ou regressao]
-  B --> F[Fechar tarefa]
-```
+![Diagrama da correção](../assets/diagrams/docs-metodologia-desenv-readme-metodologia-desenv-fluxos-trabalho-diagrama-02.svg)
 
 ## Fluxo 3: refatoração segura
 

@@ -1,6 +1,6 @@
-**Produto:** Plataforma de Agentes de IA
+# Exemplos de Integração com API RAG
 
-# 🌍 Exemplos de Integração com API RAG
+Produto: Plataforma de Agentes de IA
 
 Esta pasta contém exemplos práticos de como integrar sua aplicação com a API RAG em diferentes linguagens de programação.
 
@@ -8,11 +8,11 @@ Explicando de forma simples: o cliente manda uma pergunta e um YAML de configura
 
 ## 📚 Arquivos Disponíveis
 
-| Arquivo | Linguagem | Descrição |
-|---------|-----------|-----------|
-| `rag_api_client.py` | Python | Cliente completo com criptografia FERNET+RSA-OAEP |
-| `rag_api_client.rb` | Ruby | Cliente completo com bibliotecas padrão (`net/http` + `OpenSSL`) |
-| `rag_api_client.js` | JavaScript/Node.js | Cliente completo com `axios` e `crypto` nativo do Node.js |
+| Arquivo             | Linguagem          | Descrição                                                           |
+| ------------------- | ------------------ | ------------------------------------------------------------------- |
+| `rag_api_client.py` | Python             | Cliente completo com criptografia FERNET+RSA-OAEP                   |
+| `rag_api_client.rb` | Ruby               | Cliente completo com bibliotecas padrão (`net/http` + `OpenSSL`)    |
+| `rag_api_client.js` | JavaScript/Node.js | Cliente completo com `axios` e `crypto` nativo do Node.js           |
 
 ## 🚀 Pré-requisitos
 
@@ -46,19 +46,19 @@ Exemplo: `app/yaml/rag-config-auto.yaml`
 
 ## 🐍 Python
 
-### Instalação de Dependências
+### Instalação de Dependências em Python
 
 ```bash
 pip install httpx cryptography pyyaml
 ```
 
-### Execução
+### Execução em Python
 
 ```bash
 python examples/rag_api_client.py
 ```
 
-### Uso Programático
+### Uso Programático em Python
 
 ```python
 from rag_api_client import RAGAPIClient
@@ -82,20 +82,20 @@ for source in result["sources"]:
 
 ## 💎 Ruby
 
-### Instalação de Dependências
+### Instalação de Dependências em Ruby
 
 ```bash
 # O exemplo Ruby usa apenas bibliotecas padrão do Ruby
 # (net/http, openssl, json, yaml, etc.)
 ```
 
-### Execução
+### Execução em Ruby
 
 ```bash
 ruby examples/rag_api_client.rb
 ```
 
-### Uso Programático
+### Uso Programático em Ruby
 
 ```ruby
 require_relative 'rag_api_client'
@@ -126,19 +126,19 @@ result['sources']&.each { |source| puts "  - #{source}" }
 
 ## 🟨 JavaScript/Node.js
 
-### Instalação de Dependências
+### Instalação de Dependências em JavaScript
 
 ```bash
 npm install axios
 ```
 
-### Execução
+### Execução em JavaScript
 
 ```bash
 node examples/rag_api_client.js
 ```
 
-### Uso Programático
+### Uso Programático em JavaScript
 
 ```javascript
 const { RAGAPIClient } = require('./rag_api_client');
@@ -170,7 +170,7 @@ Use esse formato como referência oficial para qualquer cliente novo:
 
 ### Fluxo Completo
 
-```
+```text
 1. Cliente solicita sessão criptográfica
    POST /crypto/session-key
    → Retorna: session_id, public_key_pem, ttl_seconds
@@ -266,14 +266,14 @@ Todos os clientes retornam o mesmo formato:
 
 Todos os exemplos tratam estes cenários:
 
-| HTTP Status | Situação | Ação |
-|-------------|----------|------|
-| **400** | Parâmetros inválidos | Verificar payload e YAML |
-| **401** | Autenticação falhou | Verificar access_key no YAML |
-| **404** | Endpoint não encontrado | Verificar URL da API |
-| **500** | Erro interno | Verificar logs do servidor |
-| **503** | Serviço indisponível | Retry com backoff |
-| **Timeout** | Request demorou | Aumentar timeout |
+| HTTP Status | Situação               | Ação                           |
+| ----------- | ---------------------- | ------------------------------ |
+| **400**     | Parâmetros inválidos   | Verificar payload e YAML       |
+| **401**     | Autenticação falhou    | Verificar access_key no YAML   |
+| **404**     | Endpoint não encontrado| Verificar URL da API           |
+| **500**     | Erro interno           | Verificar logs do servidor     |
+| **503**     | Serviço indisponível   | Retry com backoff              |
+| **Timeout** | Request demorou        | Aumentar timeout               |
 
 ### Exemplo de Tratamento (Python)
 
@@ -719,6 +719,6 @@ Para adicionar exemplos em outras linguagens:
 4. Adicione documentação clara e exemplos de uso
 5. Teste com a API em execução
 
----
+## Encerramento
 
-**Desenvolvido com ❤️ pela equipe Plataforma de Agentes de IA**
+Documento mantido pela equipe Plataforma de Agentes de IA.

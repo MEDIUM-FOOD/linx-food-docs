@@ -57,149 +57,19 @@ A analogia do mundo real é esta: a ingestão é o trabalho de catalogar uma bib
 
 ## 6) Mapa visual 1: fluxo macro
 
-```mermaid
-flowchart TD
-    A[Request de ingestao ou consulta] --> B[src/api/routers/rag_router.py]
-    B --> C[src/services/ingestion_service.py]
-    C --> D[src/ingestion_layer/main_orchestrator.py]
-    D --> E[src/ingestion_layer/datasources/filesystem_data_source.py]
-    E --> F[src/ingestion_layer/processors/excel_processor.py]
-    F --> G[ContentChunk com row_data e column_names]
-    G --> H[Vector Store Qdrant ou Azure Search]
-    I[Pergunta sobre planilha] --> J[src/qa_layer/rag_engine/intelligent_orchestrator.py]
-    J --> K[src/qa_layer/json_rag/specialized_rag_excel.py]
-    K --> H
-    K --> L[DeterministicTabularEngine]
-    K --> M[JsonToolkit e create_json_agent]
-    L --> N[Resposta deterministica]
-    M --> O[Resposta generativa]
-    N --> P[Resposta final]
-    O --> P
-```
+![6) Mapa visual 1: fluxo macro](assets/diagrams/docs-tutorial-101-ingestao-excel-e-rag-de-excel-diagrama-01.svg)
 
 ## 7) Mapa visual 2: quem chama quem
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant API as rag_router
-    participant SVC as IngestionService
-    participant ORCH as ContentIngestionOrchestrator
-    participant FS as FileSystemDataSource
-    participant XP as ExcelContentProcessor
-    participant VS as Vector Store
-    participant IQA as IntelligentOrchestrator
-    participant XRAG as JSONSpecializedRAGExcel
-
-    U->>API: POST ingestao ou pergunta
-    API->>SVC: execute()
-    SVC->>ORCH: ingest_content(request)
-    ORCH->>FS: fetch_document(path)
-    FS-->>ORCH: StorageDocument(.xlsx/.xls)
-    ORCH->>XP: build_from_storage() e process_document()
-    XP-->>ORCH: ExcelDocument + ContentChunk por linha
-    ORCH->>VS: index_chunks(chunks)
-    VS-->>ORCH: chunks indexados
-    U->>IQA: pergunta sobre planilha
-    IQA->>XRAG: ask_question(question)
-    XRAG->>VS: coleta direta ou similarity_search
-    VS-->>XRAG: documentos com metadata row_data
-    XRAG->>XRAG: tenta caminho deterministico
-    alt resposta analitica
-        XRAG-->>IQA: resposta tabular_deterministic_excel
-    else exige LLM
-        XRAG->>XRAG: create_json_agent(JsonToolkit)
-        XRAG-->>IQA: resposta json_specialized_excel
-    end
-    IQA-->>U: resposta final
-```
+![7) Mapa visual 2: quem chama quem](assets/diagrams/docs-tutorial-101-ingestao-excel-e-rag-de-excel-diagrama-02.svg)
 
 ## 8) Mapa visual 3: camadas
 
-```mermaid
-flowchart TB
-    subgraph EntryPoints
-        A1[app/main.py]
-        A2[src/api/service_api.py]
-        A3[src/api/routers/rag_router.py]
-    end
-    subgraph Orchestration
-        B1[src/services/ingestion_service.py]
-        B2[src/ingestion_layer/main_orchestrator.py]
-        B3[src/qa_layer/rag_engine/intelligent_orchestrator.py]
-    end
-    subgraph AgentsGraphs
-        C1[JSONSpecializedRAGExcel]
-        C2[DeterministicTabularEngine]
-        C3[JsonToolkit create_json_agent]
-    end
-    subgraph ToolsIntegrations
-        D1[FileSystemDataSource]
-        D2[ExcelContentProcessor]
-        D3[ExcelSheetAnalyzer]
-    end
-    subgraph DataLayer
-        E1[Qdrant]
-        E2[Azure Search]
-        E3[Persistencia SQL de manifesto e chunks]
-    end
-    subgraph ContractsConfigs
-        F1[app/yaml/system/rag-config-modelo.yaml]
-        F2[IngestionRequest]
-        F3[ContentChunk metadata]
-    end
-
-    A1 --> A2 --> A3
-    A3 --> B1 --> B2
-    A3 --> B3
-    B2 --> D1 --> D2 --> D3
-    D2 --> F3
-    B2 --> E1
-    B2 --> E2
-    B2 --> E3
-    B3 --> C1 --> C2
-    C1 --> C3
-    C1 --> E1
-    C1 --> E2
-    F1 --> B1
-    F1 --> B3
-    F2 --> B2
-```
+![8) Mapa visual 3: camadas](assets/diagrams/docs-tutorial-101-ingestao-excel-e-rag-de-excel-diagrama-03.svg)
 
 ## 9) Mapa visual 4: componentes
 
-```mermaid
-flowchart LR
-    API[routes rag_router e service_api]
-    ING[IngestionService]
-    ORCH[ContentIngestionOrchestrator]
-    DS[FileSystemDataSource]
-    PROC[ExcelContentProcessor]
-    ANA[ExcelSheetAnalyzer]
-    DISP[content_type_dispatcher]
-    DB[DocumentPersistenceManagerMixin]
-    VQ[Qdrant client]
-    VA[Azure Search client]
-    QA[IntelligentOrchestrator]
-    XR[JSONSpecializedRAGExcel]
-    DET[DeterministicTabularEngine]
-    JTK[JsonToolkit e JsonSpec]
-
-    API --> ING --> ORCH
-    ORCH --> DS
-    ORCH --> DISP
-    DS --> PROC
-    PROC --> ANA
-    PROC --> DISP
-    DISP --> VQ
-    DISP --> VA
-    DISP --> DB
-    QA --> XR
-    XR --> VQ
-    XR --> VA
-    XR --> DET
-    XR --> JTK
-```
+![9) Mapa visual 4: componentes](assets/diagrams/docs-tutorial-101-ingestao-excel-e-rag-de-excel-diagrama-04.svg)
 
 ## 10) Onde isso aparece neste projeto
 

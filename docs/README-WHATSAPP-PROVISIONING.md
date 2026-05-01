@@ -1,666 +1,302 @@
-**Produto:** Plataforma de Agentes de IA
-
 # Manual de Provisionamento WhatsApp Cloud API
 
-## 📋 Visão Geral
-
-Este manual descreve o sistema de provisionamento automático de números WhatsApp Business através da Meta Graph API, projetado para portais SaaS multi-tenant.
+## 1. O que esta feature faz
 
-## 🎯 Objetivo
-
-Automatizar 100% do onboarding de números WhatsApp sem interação manual com o portal da Meta, permitindo que clientes ativem números diretamente através da interface web do seu sistema.
-
----
-
-## 🏗️ Arquitetura
-
-### Componentes Principais
-
-#### 1. `WhatsAppProvisionerAsync`
-**Classe de serviço pura** que executa operações na Meta Graph API.
-
-**Características:**
--  Autossuficiente (sem herança ou injeções complexas)
--  Assíncrona (`async/await`)
--  Gerencia conexões HTTP internamente
--  Logging com correlação usando `create_logger_with_correlation`
--  Tratamento robusto de erros HTTP e rede
-
-**Métodos:**
-- `register_phone()` - Registra número no WABA
-- `request_verification()` - Solicita código SMS/VOICE
-- `verify_code()` - Valida código recebido
-- `activate_number()` - Ativa para envio de mensagens
-- `configure_webhook()` - Configura webhook da aplicação
-- `create_default_template()` - Cria template transacional
+Este manual explica o provisionamento de números WhatsApp Business na plataforma. Na prática, esse fluxo permite registrar um número novo na Meta, solicitar o código de verificação, ativar o número, assumir o webhook do tenant e deixar o canal pronto para operação sem depender de passos manuais espalhados no portal da Meta.
 
-#### 2. `MultiTenantWhatsAppManager`
-**Gerenciador multi-tenant** que carrega configurações do `customers.config`.
+O fluxo real do produto não é uma automação genérica. Ele está dividido entre um serviço assíncrono que fala com a Meta Graph API e um router HTTP que protege, valida, registra estado local e aplica regras de tenant.
 
-**Características:**
--  Lê credenciais do diretório multi-tenant (`ClientDirectory`)
--  Suporta múltiplos clientes SaaS com cache em memória
--  Registra `profile_cache_initialized_at` em UTC para integração com o
-    sistema de invalidação global
--  Expõe `start_provision()` e `finalize_provision()` para orquestrar o fluxo
--  `provision_full_flow()` continua disponível como atalho
--  Métodos auxiliares garantem webhook e template em cenários idempotentes
-
-#### 3. `MetaGraphCredentials`
-**Dataclass** que armazena credenciais da Meta.
-
-**Campos:**
-- `access_token` - Token de longa duração
-- `app_id` - ID da aplicação Meta
-- `whatsapp_business_account_id` - ID do WABA
-- `graph_api_version` - Versão da API (default: v20.0)
-
-#### 4. `ClientPhoneProfile`
-**Dataclass** com dados fornecidos pelo cliente.
+## 2. Que problema ele resolve
 
-**Campos:**
-- `country_code` - Código do país (ex: "55")
-- `phone_number` - Número sem formatação
-- `display_name` - Nome exibido no perfil
-- `legal_name` - Razão social
-- `email` - Email comercial
-- `verification_channel` - "SMS" ou "VOICE"
-- `timezone` - Fuso horário (default: America/Sao_Paulo)
-- `website` - URL do site (opcional)
+Sem esse fluxo, o onboarding de WhatsApp vira um processo frágil: a Meta devolve um identificador técnico do número, o cliente recebe um código por SMS ou voz, o webhook precisa ser assumido no ambiente certo e o estado local do tenant precisa acompanhar cada etapa.
 
----
+O módulo resolve isso separando o problema em duas partes:
 
-## 📁 Arquivos de Configuração
+1. Falar com a Meta do jeito correto.
+2. Manter o diretório local e a operação do tenant coerentes com o que aconteceu na Meta.
 
-### `security/customers.config`
+O ganho prático é previsibilidade operacional. O time sabe quando um número ainda está pendente de verificação, quando já virou ativo e quando o webhook foi realmente assumido pelo ambiente atual.
 
-Localizado na mesma pasta que `users.config`.
+## 3. Componentes principais
 
-```json
-### Uso Básico (Recomendado)
+### 3.1 Credenciais e perfil do número
 
-```python
-import asyncio
-from src.channel_layer.services.whatsapp_meta_onboarding import (
-    ClientPhoneProfile,
-    MultiTenantWhatsAppManager,
-)
-from src.security.client_directory import ClientDirectory
+O contrato de credenciais fica em `MetaGraphCredentials`. Ele carrega `access_token`, `app_id`, `whatsapp_business_account_id`, `graph_api_version` e `base_url`.
 
+O perfil do número fica em `ClientPhoneProfile`. Esse objeto concentra `country_code`, `phone_number`, `display_name`, `legal_name`, `email`, `verification_channel`, `timezone` e `website`. O método `phone_e164()` transforma país e telefone na forma internacional usada ao longo do fluxo.
 
-async def provisionar_numero() -> None:
-    directory = ClientDirectory.instance()
-    manager = MultiTenantWhatsAppManager(directory)
+### 3.2 Serviço assíncrono de integração com a Meta
 
-    profile = ClientPhoneProfile(
-        country_code="55",
-        phone_number="11987654321",
-        display_name="Meu Negócio",
-        legal_name="Meu Negócio LTDA",
-        email="contato@meunegocio.com",
-    )
-
-    inicio = await manager.start_provision(
-        client_code="cliente_demo",
-        profile=profile,
-    )
-
-    directory.register_whatsapp_phone(
-        phone_number_id=inicio["phone_number_id"],
-        client_code="cliente_demo",
-        phone_e164=inicio["phone_e164"],
-        status="pending_verification",
-        metadata={"provision_pending": True},
-    )
-
-    codigo_sms = input("Informe o código SMS recebido: ")
-
-    resultado = await manager.finalize_provision(
-        client_code="cliente_demo",
-        phone_number_id=inicio["phone_number_id"],
-        phone_e164=inicio["phone_e164"],
-        verification_code=codigo_sms,
-        idempotency_key="demo-uuid-123",
-    )
-
-    print(f" Número ativado: {resultado['phone_e164']}")
-
-
-asyncio.run(provisionar_numero())
-```
-
----
-
-## 🧭 Jornada de uso (passo a passo)
-
-1. **Pré-requisitos prontos**
-   - WABA, token e permissões definidos no `customers.config`.
-2. **Início do onboarding (start)**
-   - UI chama `/api/whatsapp/provision/start`.
-   - Backend registra o número e solicita o código SMS/VOICE.
-3. **Cliente recebe o código**
-   - Usuário final digita o código no portal.
-4. **Conclusão do onboarding (verify)**
-   - Backend valida o código, ativa o número e configura webhook.
-5. **Validação funcional**
-   - Teste de webhook e envio de mensagem de prova.
-6. **Operação contínua**
-   - Canal entra em produção com rastreio por `correlation_id`.
-
----
-
-## 🧩 Quando usar
-
-- **Novo número**: quando o cliente ainda não possui número ativo.
-- **Migração**: quando o número já existe na Meta e precisa ser vinculado.
-- **Takeover**: quando o webhook precisa ser assumido pelo ambiente atual.
-
----
-
-##  Exemplos de uso
-
-### Exemplo feliz (start + verify)
-
-1. `POST /api/whatsapp/provision/start`
-2. Usuário recebe código SMS.
-3. `POST /api/whatsapp/provision/verify` com `phone_number_id` válido.
-4. Número ativo com webhook configurado.
-
-### Exemplo de erro (código inválido)
-
-- Se o código não confere, o `verify` retorna erro e o número segue como
-  `pending_verification`. A orientação é reiniciar a etapa `verify` usando
-  o mesmo `phone_number_id` até o SMS correto.
-
----
-
-## 📌 Sobre o onboarding do Instagram
-
-O fluxo completo de Instagram Direct está documentado em
-`docs/README-INSTAGRAM-PROVISIONING.md`.
-```
-
-**Backend executa automaticamente:**
-```python
-resultado = await manager.finalize_provision(
-        client_code="cliente_demo",
-        phone_number_id="109876543210",
-        phone_e164="+5511988888777",
-        verification_code="123456",
-        idempotency_key=idempotency_key,
-)
-
-# resultado = {
-#   "phone_number_id": "109876543210",
-#   "phone_e164": "+5511988888777",
-#   "status": "active",
-#   "webhook_configured": True,
-#   "template_created": True
-# }
-
-directory.register_whatsapp_phone(
-        phone_number_id=resultado["phone_number_id"],
-        client_code="cliente_demo",
-        phone_e164=resultado["phone_e164"],
-        status=resultado["status"],
-        metadata={
-                "webhook_configured": resultado["webhook_configured"],
-                "template_created": resultado["template_created"],
-                "provision_pending": False,
-        "profile_cache_initialized_at": (
-            manager.profile_cache_initialized_at.isoformat()
-        ),
-        }
-)
-```
-
-### Fluxo B: Trazer Número Já Existente na Meta
-
-1. **Importação (`/import-existing`)** — registra localmente um número já
-     ativo, associando `phone_number_id` e metadados ao tenant.
-2. **Takeover (`/takeover`)** — assume o webhook para o ambiente atual e
-     garante o template padrão (opcional). Também suporta `X-Idempotency-Key`.
-
-**Exemplo de importação:**
-```json
-POST /api/whatsapp/provision/import-existing
-{
-    "phone_e164": "+5511988888777",
-    "phone_number_id": "109876543210",
-    "client_code": "cliente_demo",
-    "assume_active": true
-}
-```
-
-**Exemplo de takeover:**
-```json
-POST /api/whatsapp/provision/takeover
-{
-    "phone_e164": "+5511988888777",
-    "client_code": "cliente_demo",
-    "ensure_template": true
-}
-```
-
-Em ambos os passos, a UI envia o cabeçalho `X-API-Key` e pode transmitir uma
-`X-Idempotency-Key` fixa por operação para evitar efeitos duplicados quando há
-replays ou timeouts no navegador.
-
-### 🔄 Reciclando o Cache de Perfis
-- Sempre que credenciais ou metadados do cliente forem ajustados no diretório,
-    utilize o botão **"🧠 Limpar caches em memória"** no painel administrativo
-    para forçar o descarte do cache `profile_cache_initialized_at`.
-- O timestamp é comparado com o sinal global publicado pelo endpoint
-    `/admin/cache/clear-all`; ao detectar mudança, o manager carrega as
-    credenciais novamente antes de prosseguir com o onboarding.
-
----
-
-## 💻 Exemplos de Código
-
-### Uso Básico (Recomendado)
-
-```python
-import asyncio
-from src.channel_layer.services.whatsapp_meta_onboarding import (
-    ClientPhoneProfile,
-    MultiTenantWhatsAppManager,
-)
-from src.security.client_directory import ClientDirectory
-
-async def provisionar_numero():
-    directory = ClientDirectory.instance()
-
-## 📣 Onboarding Instagram Direct (Graph API)
-
-### 🎯 Objetivo
-Provisionar contas Instagram Business para receber e enviar mensagens via
-Graph API, configurando webhook e registrando a conta no diretório multi-
-tenant sem passos manuais na Meta.
-
-###  Pré-requisitos
-- Permissão `provision.instagram` na `X-API-Key` usada na chamada.
-- IDs Meta: `instagram_business_account_id`, `page_id`, `app_id` e
-    `app_secret` válidos com `instagram_manage_messages`.
-- `access_token` da página (long-lived recomendado).
-- `callback_url` público HTTPS para receber webhooks e `verify_token`
-    compartilhado.
-- Opcional: `channel_id` para vincular ao `tenant_channels`/YAML.
-
-### 🔄 Fluxo resumido
-1. **Chamada `POST /api/instagram/provision/start`** (router
-     `instagram_provision_router`): envia payload com IDs, token e webhook.
-2. **Validações**: campos saneados (`_sanitize_identifier`, `_validate_url`,
-     `_validate_token`) e permissão verificada via `require_permission`.
-3. **Configuração Meta** (`InstagramProvisionerAsync`):
-     - `fetch_business_profile` lê username/display name.
-     - `subscribe_page_to_messages` habilita recebimento de mensagens.
-     - `configure_webhook` registra `callback_url` + `verify_token`.
-4. **Registro local** (`ClientDirectory.register_instagram_account`): salva
-     `instagram_business_account_id`, `page_id`, `ig_username` e status
-     `active`, guardando apenas hashes de `access_token`, `app_secret` e
-     `verify_token` em `metadata` (segurança).
-5. **Resposta**: retorna `success`, `ig_username`, `page_id`, status e
-     mensagem de sucesso.
-
-### 📨 Exemplo de requisição
-```json
-POST /api/instagram/provision/start
-Headers:
-    X-API-Key: <chave do tenant com provision.instagram>
-Body:
-{
-    "instagram_business_account_id": "17841400000000000",
-    "page_id": "112233445566778",
-    "page_name": "Plataforma de Agentes de IA Corp",
-    "display_name": "Loja Plataforma de Agentes de IA",
-    "email": "contato@prometeu.com.br",
-    "access_token": "EAAJ...",
-    "app_id": "123456789012345",
-    "app_secret": "app-secret-met",
-    "callback_url": "https://prometeu.com/webhook/instagram",
-    "verify_token": "seu-token-secreto",
-    "channel_id": "instagram_prometeu_sac",
-    "graph_api_version": "v20.0"
-}
-```
-
-### 🔍 O que é persistido
-- Diretório armazena hashes de `access_token`, `app_id|app_secret` e
-    `verify_token` para evitar vazamento.
-- `metadata` mantém `callback_url`, `graph_api_version`, `page_name` e
-    `registered_by` (email do usuário que chamou).
-- `channel_id` (quando enviado) facilita casamento com `tenant_channels` e
-    escolha do `yaml_path` para webhooks.
-
-### 🧪 Boas práticas
-- Reutilize a mesma `X-Idempotency-Key` ao reemitir a requisição em caso de
-    timeout para não duplicar registros.
-- Após provisionar, teste webhook via rota de teste `/channels/instagram/
-    webhook/test` para validar assinatura e entrega.
-- Se trocar token/segredo, reenvie o fluxo `start` para atualizar hashes e
-    reconfigurar o webhook na Meta.
-    manager = MultiTenantWhatsAppManager(directory)
-
-    profile = ClientPhoneProfile(
-        country_code="55",
-        phone_number="11987654321",
-        display_name="Meu Negócio",
-        legal_name="Meu Negócio LTDA",
-        email="contato@meunegocio.com"
-    )
-
-    inicio = await manager.start_provision(
-        client_code="cliente_demo",
-        profile=profile,
-    )
-
-    # Persistir estágio pendente no diretório da sua aplicação
-    directory.register_whatsapp_phone(
-        phone_number_id=inicio["phone_number_id"],
-        client_code="cliente_demo",
-        phone_e164=inicio["phone_e164"],
-        status="pending_verification",
-        metadata={"provision_pending": True}
-    )
-
-    codigo_sms = input("Informe o código SMS recebido: ")
-
-    resultado = await manager.finalize_provision(
-        client_code="cliente_demo",
-        phone_number_id=inicio["phone_number_id"],
-        phone_e164=inicio["phone_e164"],
-        verification_code=codigo_sms,
-        idempotency_key="demo-uuid-123"
-    )
-
-    print(f" Número ativado: {resultado['phone_e164']}")
-
-asyncio.run(provisionar_numero())
-```
-
-### Uso Avançado (Passo a Passo)
-
-```python
-async def onboarding_manual():
-    creds = MetaGraphCredentials(
-        access_token="EAA...",
-        app_id="123456",
-        whatsapp_business_account_id="789012"
-    )
-
-    async with WhatsAppProvisionerAsync(creds) as svc:
-        # Etapa 1: Registrar
-        reg = await svc.register_phone(profile)
-        phone_id = reg["id"]
-
-        # Etapa 2: Solicitar código
-        await svc.request_verification(phone_id)
-
-        # Aguardar input do usuário
-        codigo = input("Digite o código SMS: ")
-
-        # Etapa 3: Verificar
-        await svc.verify_code(phone_id, codigo)
-
-        # Etapa 4: Ativar
-        await svc.activate_number(phone_id)
-
-        # Etapa 5: Webhook
-        await svc.configure_webhook(
-            "https://meuapp.com/webhook",
-            "token123"
-        )
-
-        # Etapa 6: Template
-        await svc.create_default_template("boas_vindas")
-```
-
----
-
-## 🌐 Integração com Interface Web
-
-### Endpoint FastAPI (Exemplo)
-
-```python
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
-
-from src.channel_layer.services.whatsapp_meta_onboarding import (
-    ClientPhoneProfile,
-    MultiTenantWhatsAppManager,
-)
-from src.security.client_directory import ClientDirectory
-
-router = APIRouter(prefix="/api/whatsapp/provision")
-
-
-class StartRequest(BaseModel):
-    telefone: str
-    client_code: str
-    channel_id: str | None = None
-
-
-class VerifyRequest(BaseModel):
-    telefone: str
-    client_code: str
-    phone_number_id: str
-    codigo_sms: str
-    channel_id: str | None = None
-
-
-@router.post("/start")
-async def iniciar_provisionamento(req: StartRequest):
-    directory = ClientDirectory.instance()
-    manager = MultiTenantWhatsAppManager(directory)
-
-    profile = ClientPhoneProfile(
-        country_code="55",
-        phone_number=req.telefone,
-        display_name="Nome exibido",
-        legal_name="Nome exibido",
-        email="contato@cliente.com",
-    )
-
-    inicio = await manager.start_provision(
-        client_code=req.client_code,
-        profile=profile,
-    )
-
-    directory.register_whatsapp_phone(
-        phone_number_id=inicio["phone_number_id"],
-        client_code=req.client_code,
-        phone_e164=inicio["phone_e164"],
-        status="pending_verification",
-        metadata={"provision_pending": True},
-    )
-
-    return {
-        "success": True,
-        "phone_number_id": inicio["phone_number_id"],
-        "message": "SMS enviado para o número informado.",
-    }
-
-
-@router.post("/verify")
-async def verificar_codigo(
-    req: VerifyRequest,
-    x_idempotency_key: str | None = Header(default=None),
-):
-    directory = ClientDirectory.instance()
-    manager = MultiTenantWhatsAppManager(directory)
-
-    registro = directory.get_whatsapp_phone_by_e164(
-        req.client_code,
-        req.telefone,
-    )
-    if not registro or registro.get("phone_number_id") != req.phone_number_id:
-        raise HTTPException(409, "Fluxo inválido. Reinicie a etapa /start.")
-
-    resultado = await manager.finalize_provision(
-        client_code=req.client_code,
-        phone_number_id=req.phone_number_id,
-        phone_e164=registro.get("phone_e164", req.telefone),
-        verification_code=req.codigo_sms,
-        idempotency_key=x_idempotency_key,
-    )
-
-    directory.register_whatsapp_phone(
-        phone_number_id=resultado["phone_number_id"],
-        client_code=req.client_code,
-        phone_e164=resultado["phone_e164"],
-        status=resultado.get("status", "active"),
-        metadata={
-            "webhook_configured": resultado.get("webhook_configured", False),
-            "template_created": resultado.get("template_created", False),
-            "provision_pending": False,
-        },
-    )
-
-    return resultado
-```
-
----
-
-## 🔐 Segurança
-
-### Credenciais
-
--  Armazenadas em `security/customers.config` (fora do git)
--  Nunca expor `access_token` no frontend
--  Usar HTTPS para todas as chamadas
-
-### Webhook
-
--  Validar `verify_token` em produção
--  Verificar assinatura Meta (`X-Hub-Signature-256`)
--  Usar URL pública com certificado SSL válido
-
----
-
-## 🧪 Testes
-
-### Teste de Importação
-
-```bash
-python -c "from src.channel_layer.services.whatsapp_meta_onboarding import WhatsAppProvisionerAsync; print(' OK')"
-```
-
-### Teste com Credenciais de Teste
-
-```python
-# Usar número de teste da Meta (não cobra)
-# Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
-```
-
----
-
-## 📊 Diagrama de Fluxo
-
-```
-┌─────────────┐
-│   Cliente   │
-│  (Browser)  │
-└──────┬──────┘
-       │
-       │ 1. Preenche formulário
-       │    (telefone, nome, email)
-       ▼
-┌─────────────────────────────┐
-│  Backend FastAPI            │
-│  POST /provision/start      │
-└──────┬──────────────────────┘
-       │
-       │ 2. Chama Meta API
-       ▼
-┌─────────────────────────────┐
-│  WhatsAppProvisionerAsync   │
-│  - register_phone()         │
-│  - request_verification()   │
-└──────┬──────────────────────┘
-       │
-       │ 3. Meta envia SMS
-       ▼
-┌─────────────┐
-│   Cliente   │
-│  Recebe:    │
-│  "123456"   │
-└──────┬──────┘
-       │
-       │ 4. Digita código
-       ▼
-┌─────────────────────────────┐
-│  Backend FastAPI            │
-│  POST /provision/verify     │
-└──────┬──────────────────────┘
-       │
-       │ 5. Executa fluxo completo
-       ▼
-┌─────────────────────────────┐
-│  MultiTenantWhatsAppManager │
-│  - verify_code()            │
-│  - activate_number()        │
-│  - configure_webhook()      │
-│  - create_default_template()│
-└──────┬──────────────────────┘
-       │
-       │ 6. Retorna sucesso
-       ▼
-┌─────────────┐
-│   Cliente   │
-│    Ativo  │
-└─────────────┘
-```
-
----
-
-## 🚨 Tratamento de Erros
-
-### Erros Comuns
-
-| Erro | Causa | Solução |
-|------|-------|---------|
-| `httpx.RequestError` | Problema de rede | Retry com backoff exponencial |
-| `httpx.HTTPStatusError 400` | Dados inválidos | Validar entrada do usuário |
-| `httpx.HTTPStatusError 401` | Token inválido | Renovar `access_token` |
-| `httpx.HTTPStatusError 429` | Rate limit | Aguardar e tentar novamente |
-| `ValueError` | JSON corrompido | Verificar resposta da API |
-
-### Exemplo de Tratamento
-
-```python
-try:
-    resultado = await manager.provision_full_flow(...)
-except httpx.HTTPStatusError as e:
-    if e.response.status_code == 400:
-        raise HTTPException(400, "Dados inválidos")
-    elif e.response.status_code == 429:
-        raise HTTPException(429, "Muitas requisições. Aguarde.")
-    else:
-        raise HTTPException(500, "Erro na Meta API")
-except httpx.RequestError:
-    raise HTTPException(503, "Serviço indisponível")
-```
-
----
-
-## 📚 Referências
-
-- [Meta Graph API Docs](https://developers.facebook.com/docs/graph-api/)
-- [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api)
-- [httpx Documentation](https://www.python-httpx.org/)
-
----
-
-##  Checklist de Implementação
-
-- [ ] Configurar `security/customers.config`
-- [ ] Obter `access_token` de longa duração
-- [ ] Criar endpoints FastAPI
-- [ ] Implementar página HTML de provisionamento
-- [ ] Configurar webhook público com HTTPS
-- [ ] Testar com número de teste da Meta
-- [ ] Validar fluxo completo em produção
-- [ ] Monitorar logs de erro
-- [ ] Implementar retry logic
-- [ ] Documentar para equipe de suporte
+`WhatsAppProvisionerAsync` é a camada que executa as chamadas externas.
+
+Ele concentra as etapas externas do onboarding:
+
+1. Registrar o número na Meta.
+2. Pedir o código de verificação.
+3. Validar o código recebido.
+4. Ativar o número.
+5. Configurar o webhook.
+6. Garantir o template padrão.
+
+O papel desse serviço é técnico. Ele não decide regra de tenant nem persistência local. Ele executa a conversa com a Meta e devolve os fatos necessários para a camada acima.
+
+### 3.3 Gerenciador multi-tenant
+
+`MultiTenantWhatsAppManager` é a camada que liga a operação Meta ao diretório do produto.
+
+Ele resolve:
+
+1. Credenciais do tenant com `get_credentials`.
+2. Configuração de webhook do tenant com `get_webhook_config`.
+3. Início do onboarding com `start_provision`.
+4. Conclusão do onboarding com `finalize_provision`.
+5. Atalhos operacionais como `provision_full_flow`.
+6. Operações auxiliares de webhook e template usadas pelo router de takeover.
+
+O ponto importante é este: o manager já sabe buscar configuração do tenant, aplicar fallback de webhook quando necessário e devolver um resumo operacional simples para o restante do sistema.
+
+### 3.4 Router HTTP
+
+O boundary público está em `whatsapp_provision_router`.
+
+Esse router faz o trabalho de borda:
+
+1. Exigir permissão `PROVISION_WHATSAPP`.
+2. Extrair `correlation_id` para logging.
+3. Resolver o contexto do tenant e do `client_code`.
+4. Validar telefone, `phone_number_id`, SMS e regras de reentrada.
+5. Persistir o estado do número no `ClientDirectory`.
+6. Traduzir falhas internas em respostas HTTP operacionais.
+
+## 4. Conceitos que importam para entender o fluxo
+
+### 4.1 `client_code`
+
+É o identificador do cliente dentro do diretório multi-tenant. Ele define de quais credenciais Meta, webhook e metadados de canal o fluxo vai depender.
+
+### 4.2 `phone_number_id`
+
+É o identificador técnico que a Meta devolve quando aceita o registro do número. O produto usa esse valor como elo entre a etapa de início e a etapa de verificação final.
+
+### 4.3 Estado local do número
+
+O diretório local não serve só como cadastro. Ele é a memória operacional do onboarding.
+
+Os estados confirmados no código são:
+
+1. `pending_verification` quando o `/start` já registrou o número e disparou o código.
+2. `active` quando o `/verify` ou o `/import-existing` concluem o processo.
+
+### 4.4 Idempotência
+
+Os endpoints de verificação e takeover aceitam `X-Idempotency-Key`. Isso existe para proteger a operação contra replay de navegador, timeout e reenvio da mesma ação.
+
+### 4.5 Correlação
+
+Cada endpoint extrai `correlation_id` de `user_data` e cria logger correlacionado. Isso permite seguir a mesma execução do início ao fim sem adivinhar qual tentativa gerou determinado efeito.
+
+## 5. Fluxo principal de onboarding de número novo
+
+### 5.1 Descoberta do `client_code`
+
+O fluxo começa com a listagem de `client_codes` autorizados para o tenant. Essa etapa existe para impedir que um operador tente provisionar número em um cliente que não pertence ao contexto autenticado.
+
+### 5.2 Início do onboarding com `/start`
+
+Quando a API recebe `POST /start`, ela faz cinco coisas importantes:
+
+1. Resolve o contexto do tenant e do canal.
+2. Confere se o número já existe localmente com `phone_number_id`; se existir, devolve conflito e bloqueia re-onboarding.
+3. Monta `ClientPhoneProfile` a partir do perfil do tenant e do telefone informado.
+4. Chama `MultiTenantWhatsAppManager.start_provision`.
+5. Persiste o telefone como `pending_verification` no diretório local.
+
+No manager, `start_provision` registra o número na Meta, exige que a Meta devolva `phone_number_id` e solicita o código de verificação no canal definido pelo perfil. Se a Meta não devolver o identificador, o fluxo falha fechado.
+
+### 5.3 Verificação e ativação com `/verify`
+
+Quando a API recebe `POST /verify`, o comportamento é mais rigoroso:
+
+1. O número precisa existir localmente, senão o usuário é orientado a reiniciar pelo `/start`.
+2. O `phone_number_id` enviado na requisição precisa bater com o valor já salvo localmente.
+3. Se houver `X-Idempotency-Key`, a API tenta reaproveitar a resposta anterior antes de refazer a etapa externa.
+4. O manager finaliza o fluxo validando código, ativando número, configurando webhook e criando template padrão.
+5. O diretório é atualizado com `status=active`, indicadores de webhook e template e metadados de idempotência, quando aplicável.
+
+O comportamento real de `finalize_provision` também confirma uma regra importante: `callback_url` e `verify_token` podem vir da chamada, mas se estiverem ausentes o manager cai para a configuração já registrada do tenant. Se esses valores estiverem vazios, a finalização falha com erro explícito de webhook inválido.
+
+## 6. Fluxos operacionais auxiliares
+
+### 6.1 Importar número já existente com `/import-existing`
+
+Esse endpoint existe para o cenário em que o número já está ativo na Meta, mas ainda não foi registrado no diretório da plataforma.
+
+Ele não refaz onboarding. Ele apenas:
+
+1. Resolve o tenant e o canal.
+2. Normaliza o telefone.
+3. Registra `phone_number_id`, telefone, dados do tenant e status local.
+4. Devolve confirmação de que o número foi importado sem re-onboarding.
+
+Se `assume_active=true`, o status local vira `active`. Caso contrário, o fluxo preserva um estado mais cauteloso.
+
+### 6.2 Remover webhook antigo com `/remove-webhook`
+
+Essa etapa existe para cenários de migração. O objetivo é desinscrever uma configuração anterior antes de assumir o tráfego no ambiente atual.
+
+O router resolve o callback do request ou do diretório do tenant e delega ao manager a remoção da assinatura. O retorno é operacional: ele informa se o webhook foi removido com sucesso ou se a solicitação foi enviada e ainda precisa de validação manual.
+
+### 6.3 Assumir webhook com `/takeover`
+
+O takeover só funciona quando o número já existe localmente no `ClientDirectory`. Essa exigência reduz risco de corte errado em número desconhecido.
+
+O fluxo faz o seguinte:
+
+1. Busca local do número por `phone_e164`.
+2. Se o número não existir, responde `404`.
+3. Resolve a configuração de webhook do tenant.
+4. Chama `ensure_webhook_subscription` para assumir o webhook do ambiente atual.
+5. Opcionalmente chama `ensure_template_exists` para garantir o template padrão.
+6. Se houver `X-Idempotency-Key`, salva a resposta de takeover no metadata do número.
+
+O uso prático é migração com corte controlado. Primeiro você registra o número localmente, depois assume o webhook quando o ambiente estiver pronto.
+
+## 7. Endpoints públicos e papel de cada um
+
+Os endpoints confirmados no router são:
+
+1. `GET /client-codes` para listar `client_codes` autorizados.
+2. `POST /start` para registrar o número e solicitar o código de verificação.
+3. `POST /verify` para validar o SMS e ativar o número.
+4. `POST /import-existing` para registrar localmente número já ativo na Meta.
+5. `POST /remove-webhook` para remover subscrição antiga.
+6. `POST /takeover` para assumir o webhook e, se solicitado, garantir template.
+
+## 8. O que entra e o que sai em cada etapa
+
+### 8.1 Entradas críticas
+
+Os dados críticos confirmados no código são:
+
+1. `phone_e164` no formato internacional.
+2. `client_code` coerente com o tenant autenticado.
+3. `phone_number_id` nas etapas que não podem se apoiar só no telefone.
+4. `codigo_sms` no `/verify`.
+5. `channel_id` quando a operação precisa se vincular a um canal específico.
+6. `X-Idempotency-Key` nas operações em que replay é risco real.
+
+### 8.2 Saídas importantes
+
+As respostas confirmadas no código carregam, conforme a etapa:
+
+1. `phone_number_id`.
+2. `phone_e164`.
+3. `status` operacional.
+4. mensagem humana de progresso ou sucesso.
+5. `webhook_configured` e `template_created` quando a etapa mexe nisso.
+
+## 9. O que acontece em caso de sucesso
+
+No caminho feliz, o produto conta uma história operacional coerente:
+
+1. `/start` cria o vínculo com a Meta e grava o número como pendente.
+2. O cliente recebe o código por SMS ou voz.
+3. `/verify` conclui ativação, webhook e template.
+4. O diretório local sai do estado pendente e entra em `active`.
+5. Os logs registram início, sucesso e identificadores relevantes com o mesmo `correlation_id`.
+
+Em cenários de migração:
+
+1. `/import-existing` registra localmente sem refazer onboarding.
+2. `/remove-webhook` limpa o vínculo antigo, quando necessário.
+3. `/takeover` passa o webhook para o ambiente atual.
+
+## 10. O que acontece em caso de erro
+
+Os erros confirmados no código se distribuem assim:
+
+### 10.1 Conflito por re-onboarding
+
+Se `/start` encontrar número já registrado com `phone_number_id`, o router devolve conflito. Isso evita duplicar onboarding do mesmo telefone.
+
+### 10.2 Fluxo de verificação sem início válido
+
+Se `/verify` não encontrar registro local, a API responde que o fluxo precisa ser reiniciado pelo `/start`. Se o `phone_number_id` armazenado não bater com o da requisição, a API também bloqueia a continuação.
+
+### 10.3 Erro de Meta ou contrato externo
+
+Se a Meta não devolver `phone_number_id` no registro, a API falha fechado. Se a finalização receber código inválido, o router traduz o problema para erro operacional de código SMS incorreto. Outras falhas externas sobem como erro de integração com a Meta.
+
+### 10.4 Problema de webhook do tenant
+
+Se o manager não conseguir resolver `callback_url` e `verify_token`, a finalização falha com erro explícito de webhook mal configurado. Isso evita ativar número sem conseguir receber eventos no ambiente certo.
+
+### 10.5 Persistência local
+
+Se o `ClientDirectory` falhar ao registrar o telefone pendente ou ativo, o router devolve erro HTTP e registra a exceção com correlação. O objetivo é impedir que o sistema aparente sucesso externo enquanto perde o estado local.
+
+## 11. Observabilidade e diagnóstico
+
+O ponto de partida da investigação é o `correlation_id` do request.
+
+Cada endpoint registra eventos de início, sucesso e exceção. Os nomes dos eventos confirmados no código incluem:
+
+1. `start_provisioning.begin` e `start_provisioning.success`.
+2. `verify_and_activate.begin` e `verify_and_activate.success`.
+3. `import_existing.begin` e `import_existing.success`.
+4. `remove_webhook.begin` e `remove_webhook.success`.
+5. `takeover.begin` e `takeover.success`.
+
+Para diagnosticar bem, separe o problema em três perguntas:
+
+1. O tenant e o `client_code` foram resolvidos corretamente?
+2. A Meta aceitou a etapa externa e devolveu identificadores válidos?
+3. O diretório local foi atualizado com o estado certo?
+
+## 12. Limites e pegadinhas
+
+Alguns limites confirmados no código merecem destaque:
+
+1. O fluxo depende de credenciais Meta válidas por tenant; ele não funciona sem isso.
+2. `phone_number_id` não é opcional nas etapas posteriores ao registro inicial.
+3. O takeover não substitui o import; ele pressupõe que o número já esteja conhecido localmente.
+4. Idempotência protege replay, mas não corrige configuração errada de tenant ou webhook.
+5. Este manual é só de WhatsApp. Provisionamento de Instagram é outro fluxo, com outro router e outro serviço.
+
+## 13. Troubleshooting rápido
+
+### 13.1 O `/start` falhou dizendo que o número já existe
+
+Causa provável: o telefone já foi registrado localmente antes. O caminho correto passa a ser verificar se o fluxo precisa de `/verify`, `/import-existing` ou `/takeover`, em vez de refazer onboarding do zero.
+
+### 13.2 O `/verify` diz que o fluxo não foi iniciado
+
+Causa provável: não existe registro local pendente para esse telefone. Confirme se o `/start` concluiu e se o `phone_number_id` retornado foi preservado.
+
+### 13.3 O `/verify` acusa código inválido
+
+Causa provável: SMS incorreto ou expirado. O router já trata esse caso como erro operacional específico.
+
+### 13.4 O webhook não assumiu no takeover
+
+Causa provável: o número não foi importado antes, ou a configuração de webhook do tenant está incompleta. Confirme presença local do número e valores de `callback_url` e `verify_token`.
+
+### 13.5 O fluxo externo parece certo, mas o número não aparece ativo
+
+Causa provável: falha na persistência local. Consulte os logs do endpoint e do diretório para verificar se o `register_whatsapp_phone` concluiu após a chamada externa.
+
+## 14. Explicação 101
+
+Pense nesse fluxo como um cadastro de linha telefônica com três camadas.
+
+1. A Meta entrega o identificador técnico do número e valida que ele existe de verdade.
+2. O produto guarda esse número no diretório do cliente para não se perder entre uma etapa e outra.
+3. O webhook conecta o número ao ambiente certo, para que as mensagens futuras cheguem nesta plataforma.
+
+Sem essas três camadas juntas, o número até pode existir na Meta, mas a operação do tenant fica cega. Com elas, o onboarding vira um processo rastreável e repetível.
+
+## 15. Evidências no código
+
+1. `src/channel_layer/services/whatsapp_meta_onboarding.py`: credenciais, perfil do telefone, integração assíncrona com a Meta e manager multi-tenant.
+2. `src/api/routers/whatsapp_provision_router.py`: endpoints públicos, validações HTTP, idempotência e persistência no diretório.
+3. `src/api/service_api.py`: inclusão do router no boundary HTTP da aplicação.

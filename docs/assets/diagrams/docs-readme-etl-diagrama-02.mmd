@@ -1,0 +1,26 @@
+flowchart LR
+        subgraph API
+                A1["/rag/etl"]
+                A2["ExtractTransformLoadService"]
+        end
+
+        subgraph Worker
+                W1["ExtractTransformLoadOrchestrator"]
+                W2["BaseApifyETLPipeline"]
+                W3["Booking ou Hotels.com ou TripAdvisor"]
+                W4["TableSchemaMetadataETLProcessor"]
+        end
+
+        subgraph Infra
+                I1["RabbitMQ"]
+                I2["Redis"]
+                I3["Hospitality DB"]
+                I4["Schema DB"]
+                I5["Providers externos"]
+        end
+
+        A1 --> I1 --> A2 --> W1
+        W1 --> W2 --> W3 --> I5
+        W3 --> I3
+        W1 --> W4 --> I4
+        I2 --> A1

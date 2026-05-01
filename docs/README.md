@@ -1,215 +1,190 @@
-# Documentação da Plataforma
+# Como Ler Esta Documentação
 
-Este índice organiza a leitura principal da documentação com base no
-runtime atual.
-A regra prática é simples: escolha o documento dono do assunto e trate
-o código como fonte de verdade quando houver dúvida.
+Esta documentação foi reorganizada para responder perguntas de arquitetura e operação, não para ensinar alguém a caçar arquivo. O objetivo é simples: permitir que quem trabalha com o projeto entenda a lógica do sistema, o papel de cada domínio, os contratos importantes e os pontos de diagnóstico sem depender de um mapa manual do repositório.
 
-## Por onde começar
+## 1. Qual problema este índice resolve
 
-- README-ARQUITETURA.md para visão macro do sistema.
-- GUIA-COMERCIAL-PLATAFORMA.md para visão estratégica do produto e dos
-  módulos principais.
-- API-ENDPOINTS-SWAGGER.md para famílias de rota e leitura do OpenAPI.
-- README-SERVICE-API.md para o boundary consolidado da FastAPI.
-- README-INGESTAO.md para ingestão e leitura operacional.
-- README-ETL.md para ETL dedicado.
-- README-RAG.md para consulta e runtime moderno de QA.
-- README-AG-UI.md para protocolo de interface agentic, endpoint SSE,
-  sidecar e telas demo PDV.
-- README-HUMAN-IN-THE-LOOP.md para contrato de pausa humana, envelope
-  `hil`, componente compartilhado de revisão e retomada governada.
-- tutorial-101-generative-ui.md para onboarding guiado do AG-UI atual,
-  do endpoint `/ag-ui/runs` até as telas estáticas da demo.
-- tutorial-101-human-in-the-loop.md para onboarding guiado de HIL
-  Generative UI entre DeepAgent, WebChats e sidecar AG-UI.
-- tutorial-101-processo-completo-de-ingestao-e-rag.md para uma visão
-  guiada, ponta a ponta, do fluxo combinado de ingestão e RAG.
-- README-INTEGRACOES-GOVERNADAS.md para catálogo governado de integrações.
-- README-CACHING.md para cache de infraestrutura, sessão e runtime.
-- README-TESTS.MD para a suíte oficial e seus artefatos.
-- metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md para onboarding de
-  desenvolvimento assistido por Copilot, agentes, instruções e validação.
-- GUIA-USUARIO-TOOLS.md para catálogo e famílias de tools.
-- faq-onboarding.md para perguntas rápidas de onboarding.
+O problema anterior era de navegação conceitual. Havia muitos documentos, mas a entrada principal ainda induzia um comportamento ruim: escolher o próximo texto pelo nome do arquivo, e não pela dúvida real.
 
-## Sequência recomendada de leitura técnica
+Este índice corrige isso organizando a leitura por intenção.
 
-- Primeiro README-ARQUITETURA.md para entender processos, fronteiras e
-  infraestrutura comum.
-- Depois README-INGESTAO.md e README-ETL.md para entender os domínios
-  assíncronos do worker.
-- Depois README-RAG.md para entender o runtime moderno de consulta que
-  roda sobre o acervo já preparado.
-- Em seguida, tutorial-101-processo-completo-de-ingestao-e-rag.md se a
-  meta for seguir a história inteira do request até o efeito final.
+- Entender a plataforma como sistema.
+- Entender como o acervo é produzido.
+- Entender como a plataforma consulta esse acervo.
+- Entender como fluxos agentic são governados.
+- Entender como operar, investigar e validar.
 
-Em linguagem simples: a ordem mais segura é plataforma primeiro,
-produção do acervo depois, consulta por último.
+## 2. Se você quer entender a plataforma inteira
 
-## Documentos donos por assunto
+Comece por [README-ARQUITETURA.md](./README-ARQUITETURA.md). Esse documento explica a separação entre API, worker e scheduler, o papel do YAML, o uso de correlation_id e a diferença entre produção de acervo, consulta e execução assíncrona.
 
-- Arquitetura: README-ARQUITETURA.md
-- Estratégia e posicionamento: GUIA-COMERCIAL-PLATAFORMA.md
-- API e OpenAPI: API-ENDPOINTS-SWAGGER.md
-- Service API: README-SERVICE-API.md
-- Ingestão: README-INGESTAO.md
-- ETL: README-ETL.md
-- RAG: README-RAG.md
-- AG-UI: README-AG-UI.md
-- Human in the Loop: README-HUMAN-IN-THE-LOOP.md
-- AG-UI tutorial guiado: tutorial-101-generative-ui.md
-- HIL tutorial guiado: tutorial-101-human-in-the-loop.md
-- Integrações governadas: README-INTEGRACOES-GOVERNADAS.md
-- Tools: GUIA-USUARIO-TOOLS.md
-- YAML: README-CONFIGURACAO-YAML.md
-- Caching: README-CACHING.md
-- Testes: README-TESTS.MD
-- Logging: README-LOGGING.md
-- Scheduler: README-SCHEDULER.md
-- Autenticação: README-SISTEMA-AUTENTICACAO.md
-- MFA web: README-AUTENTICACAO-MFA.md
-- Autorização: README-AUTORIZACAO.md
-- Governança do Copilot: copilot-instructions-framework.md
-- Metodologia de desenvolvimento assistido por Copilot:
-  metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md
-- AST agentic: README-AST-AGENTIC-DESIGNER.md
-- Supervisor: README-AGENTE-SUPERVISOR.md
-- DeepAgent: README-DEEPAGENTS-SUPERVISOR.md
-- Workflow: README-AGENTE-WORKFLOW.md
-- Schema de banco: README-SCHEMA-BANCO.md
+Depois leia [README-INGESTAO.md](./README-INGESTAO.md) e [README-RAG.md](./README-RAG.md). Essa sequência é importante porque RAG faz mais sentido quando você já entendeu como o acervo foi criado.
 
-## Como escolher a leitura certa
+## 3. Se você quer entender produção de acervo
 
-- Se o problema for rota, payload ou permissão, leia
-  API-ENDPOINTS-SWAGGER.md.
-- Se o problema for wiring da aplicação FastAPI, middlewares ou startup,
-  leia README-SERVICE-API.md.
-- Se o problema for worker, scheduler ou topologia do runtime, leia
-  README-ARQUITETURA.md.
-- Se o problema for ingestão, fan-out, status ou runs, leia
-  README-INGESTAO.md.
-- Se o problema for ETL, leia README-ETL.md.
-- Se o problema for retrieval ou resposta ruim do QA, leia
-  README-RAG.md.
-- Se o problema for uma tela recebendo eventos de agente, sidecar,
-  dashboard dinâmico ou endpoint `/ag-ui/runs`, leia README-AG-UI.md.
-- Se o problema for pausa humana, envelope `hil`, `thread_id`,
-  `resume_endpoint`, `HilContract` ou `HilReviewPanel`, leia
-  README-HUMAN-IN-THE-LOOP.md.
-- Se o problema for onboarding rápido do slice AG-UI, navegação entre
-  telas demo ou primeiros passos locais, leia
-  tutorial-101-generative-ui.md.
-- Se o problema for onboarding rápido do HIL atual, reaproveitamento do
-  review panel entre WebChat/Admin/AG-UI ou a ponte entre renderização e
-  continue formal, leia tutorial-101-human-in-the-loop.md.
-- Se o problema for importação Swagger, testes seguros ou catálogo
-  técnico e funcional de integrações, leia
-  README-INTEGRACOES-GOVERNADAS.md.
-- Se o problema for invalidação, Redis, cache de sessão ou cache de
-  runtime, leia README-CACHING.md.
-- Se o problema for validação oficial, artefatos da suíte ou status do
-  repositório, leia README-TESTS.MD.
-- Se o problema for como desenvolver, corrigir, testar ou documentar usando
-  Copilot e os agentes do repositório, leia
-  metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md.
-- Se o problema for gerar SQL proposta a partir de linguagem natural,
-  dyn_sql, proc_sql ou schema_rag_sql, leia
-  README-DYNAMIC-SQL-TOOLS.md.
-- Se o problema for dyn_sql, dyn_api ou schema_rag_sql, leia
-  GUIA-USUARIO-TOOLS.md.
-- Se o problema for login web, access key, sessão ou conta pessoal, leia
-  README-SISTEMA-AUTENTICACAO.md.
-- Se o problema for desafio TOTP ou política de segundo fator, leia
-  README-AUTENTICACAO-MFA.md.
-- Se o problema for autoria governada por linguagem natural, leia
-  README-AST-AGENTIC-DESIGNER.md.
+Use esta trilha.
 
-## Rotas rápidas por assunto
+1. [README-INGESTAO.md](./README-INGESTAO.md) para o fluxo documental oficial.
+2. [README-ETL.md](./README-ETL.md) quando a dúvida for transformação estruturada e não ingestão documental.
+3. [tutorial-101-processo-completo-de-ingestao-e-rag.md](./tutorial-101-processo-completo-de-ingestao-e-rag.md) quando a meta for seguir a história inteira, do pedido até a resposta.
 
-Use estas sequências quando você já sabe o tema e quer navegar entre os
-documentos principais sem ficar caçando link isolado.
+O ponto conceitual aqui é este: ingestão produz acervo consultável; ETL transforma dados; nenhum dos dois deve ser entendido como sinônimo de consulta.
 
-### Arquitetura e operação
+## 4. Se você quer entender consulta e resposta
 
-- Comece em [README-ARQUITETURA.md](./README-ARQUITETURA.md)
-- Depois vá para [README-SERVICE-API.md](./README-SERVICE-API.md)
-- Feche com [GUIA-DIDATICO-EXECUCAO-CANAIS.md](./GUIA-DIDATICO-EXECUCAO-CANAIS.md)
+Use esta trilha.
 
-### Ingestão até resposta RAG
+1. [README-RAG.md](./README-RAG.md) para entender runtime moderno, análise de pergunta, retrieval, fusão e geração.
+2. [README-CACHING.md](./README-CACHING.md) se a dúvida for reaproveitamento de contexto, invalidação ou comportamento de runtime.
+3. [tutorial-101-rag.md](./tutorial-101-rag.md) se você precisa de uma leitura didática e guiada antes do manual técnico completo.
 
-- Comece em [README-INGESTAO.md](./README-INGESTAO.md)
-- Depois vá para [README-RAG.md](./README-RAG.md)
-- Feche com [tutorial-101-processo-completo-de-ingestao-e-rag.md](./tutorial-101-processo-completo-de-ingestao-e-rag.md)
+## 5. Se você quer entender YAML, AST e governança agentic
 
-### Supervisor, DeepAgent e Workflow
+Esse assunto precisa ser lido pela lógica de decisão, não por jargão.
 
-- Comece em [README-AGENTE-SUPERVISOR.md](./README-AGENTE-SUPERVISOR.md)
-- Depois compare com [README-DEEPAGENTS-SUPERVISOR.md](./README-DEEPAGENTS-SUPERVISOR.md)
-- Feche com [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md)
+- [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md) explica o modelo mental.
+- [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md) explica por que a AST existe e como ela governa edição, validação e compilação.
+- [README-DEEPAGENTS-SUPERVISOR.md](./README-DEEPAGENTS-SUPERVISOR.md) explica agentes governados.
+- [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md) explica grafo determinístico e execução por nós.
 
-### YAML agentic e montagem governada
+## 6. Se você quer entender a API e a operação
 
-- Comece em [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md)
-- Depois vá para [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md)
-- Feche com [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md)
+A ordem mais produtiva costuma ser esta.
 
-### Human in the Loop e Generative UI de revisão
+1. [README-SERVICE-API.md](./README-SERVICE-API.md) para entender o boundary HTTP real.
+2. [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md) para entender como a configuração vira runtime executável.
+3. [API-ENDPOINTS-SWAGGER.md](./API-ENDPOINTS-SWAGGER.md) para ver o contrato público atual.
+4. [GUIA-DIDATICO-EXECUCAO-CANAIS.md](./GUIA-DIDATICO-EXECUCAO-CANAIS.md) se a dúvida envolver topologia operacional, filas e runners.
+5. [README-LOGGING.md](./README-LOGGING.md) quando o problema for rastreabilidade e correlação.
+6. [README-TESTS.MD](./README-TESTS.MD) quando a pergunta for validação oficial.
 
-- Comece em [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md)
-- Depois vá para [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md)
-- Feche com [README-AG-UI.md](./README-AG-UI.md)
-  se a dúvida envolver sidecar, eventos ou renderização da pausa humana
+## 7. Se você quer entender UI agentic e pausa humana
 
-### AG-UI e telas agentic
+Esses dois assuntos se cruzam, mas não são a mesma coisa.
 
-- Comece em [README-AG-UI.md](./README-AG-UI.md)
-- Depois vá para [tutorial-101-generative-ui.md](./tutorial-101-generative-ui.md)
-- Feche com [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md)
-  ou [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md)
-  se a dúvida envolver pausa humana, review panel ou continue formal
+- [README-AG-UI.md](./README-AG-UI.md) cobre o protocolo de interface orientado a eventos e o sidecar compartilhado.
+- [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md) cobre a pausa humana, o envelope de aprovação e a retomada governada.
+- [tutorial-101-generative-ui.md](./tutorial-101-generative-ui.md) e [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md) ajudam quando você precisa primeiro de uma história guiada antes da visão técnica completa.
 
-### Metodologia de desenvolvimento com Copilot
+## 8. Ordem recomendada para onboarding técnico
 
-- Comece em [metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md](./metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md)
-- Depois vá para [metodologia-desenv/README-METODOLOGIA-DESENV-ONBOARDING.md](./metodologia-desenv/README-METODOLOGIA-DESENV-ONBOARDING.md)
-- Feche com [metodologia-desenv/README-METODOLOGIA-DESENV-FLUXOS-TRABALHO.md](./metodologia-desenv/README-METODOLOGIA-DESENV-FLUXOS-TRABALHO.md)
-  quando a dúvida for qual agente acionar em cada tipo de tarefa
+Se você está chegando agora no projeto, a ordem mais segura é esta.
 
-## Como usar esta documentação
+1. Arquitetura.
+2. Ingestão.
+3. RAG.
+4. Assembly agentic.
+5. API e operação.
+6. Tutoriais 101 especializados.
 
-1. Consulte primeiro o documento dono do assunto.
-2. Confirme no código qualquer decisão de contrato sensível.
-3. Use o OpenAPI do runtime antes de integrar um endpoint.
-4. Em YAML agentic, prefira o fluxo AST quando a mudança afetar
-   workflows, multi_agents, selected_workflow, selected_supervisor ou
-   tools_library.
+Essa ordem reduz um erro comum: tentar entender um slice muito específico sem antes entender o contrato macro da plataforma.
 
-## Como rodar e validar
+Se a necessidade for uma entrada rápida em linguagem simples, complemente essa trilha com [faq-onboarding.md](./faq-onboarding.md).
 
-1. Suba o ambiente local com os papéis necessários.
-2. Acesse /docs com uma credencial autorizada.
-3. Valide um endpoint curto e um endpoint assíncrono.
-4. Correlacione request, task_id e correlation_id antes de concluir.
+## 9. Catálogo completo de READMEs e tutoriais 101
 
-## Evidência no código
+Além das trilhas por intenção, este índice também precisa cumprir uma função operacional: servir como catálogo rastreável dos manuais principais e dos tutoriais 101 da pasta docs. Isso evita dois problemas práticos: documento importante esquecido fora da navegação e leitura errada guiada só por busca textual.
 
-- src/api/service_api.py
-- src/api/routers/
-- src/api/routers/config_resolution.py
-- src/config/config_cli/configuration_factory.py
-- src/config/agentic_assembly/
-- src/services/ingestion_service.py
-- src/services/etl_service.py
-- src/qa_layer/content_qa_system.py
+### 9.1 Plataforma, arquitetura e operação
 
-## Lacunas no código
+- [README-ARQUITETURA.md](./README-ARQUITETURA.md): visão macro da plataforma, separação entre API, worker, scheduler, YAML-first e contratos transversais.
+- [README-SERVICE-API.md](./README-SERVICE-API.md): boundary HTTP, responsabilidades da API e como o runtime expõe capacidades para clientes e operação.
+- [README-LOGGING.md](./README-LOGGING.md): rastreabilidade, correlação e leitura operacional de logs.
+- [README-TESTS.MD](./README-TESTS.MD): estratégia oficial de validação automatizada.
+- [README-SCHEDULER.md](./README-SCHEDULER.md): processamento agendado, responsabilidades do scheduler e relação com o restante do runtime.
 
-Não encontrado no código.
+### 9.2 Produção de acervo, ingestão e ETL
 
-Onde deveria estar:
+- [README-INGESTAO.md](./README-INGESTAO.md): pipeline oficial de ingestão documental.
+- [README-ETL.md](./README-ETL.md): transformação estruturada de dados quando o problema não é ingestão documental.
+- [tutorial-101-ingestao.md](./tutorial-101-ingestao.md): introdução guiada à ingestão.
+- [tutorial-101-ingestao-pdf.md](./tutorial-101-ingestao-pdf.md): leitura 101 do pipeline de ingestão de PDF.
+- [tutorial-101-ingestao-excel-e-rag-de-excel.md](./tutorial-101-ingestao-excel-e-rag-de-excel.md): ingestão e consulta sobre planilhas.
+- [tutorial-101-etl.md](./tutorial-101-etl.md): tutorial didático sobre ETL no contexto da plataforma.
+- [tutorial-101-processo-completo-de-ingestao-e-rag.md](./tutorial-101-processo-completo-de-ingestao-e-rag.md): narrativa ponta a ponta do pedido até a resposta.
+- [tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag.md](./tutorial-101-auto-config-e-bm25-no-pipeline-de-ingestao-e-rag.md): ajuste de comportamento de retrieval dentro do pipeline.
+- [tutorial-101-bm25-vs-auto-config-dnit.md](./tutorial-101-bm25-vs-auto-config-dnit.md): comparação guiada de estratégias de recuperação em um caso real.
 
-- um gerador automático de índice Markdown a partir do OpenAPI e do
-  catálogo de tools;
-- uma exportação administrativa pronta dos documentos donos e suas
-  superfícies reais do runtime.
+### 9.3 Consulta, RAG e caching
+
+- [README-RAG.md](./README-RAG.md): runtime moderno de pergunta e resposta com retrieval e geração.
+- [README-CACHING.md](./README-CACHING.md): reaproveitamento de contexto, invalidação e impacto operacional do cache.
+- [README_RAG_DNIT.md](./README_RAG_DNIT.md): leitura aplicada do caso DNIT.
+- [tutorial-101-rag.md](./tutorial-101-rag.md): introdução 101 ao funcionamento de RAG.
+- [tutorial-101-status-feature-geracao-sql-linguagem-natural.md](./tutorial-101-status-feature-geracao-sql-linguagem-natural.md): estado atual e limites da geração SQL por linguagem natural.
+
+### 9.4 YAML, AST, assembly e fluxos agentic
+
+- [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md): ciclo de vida da configuração até o runtime.
+- [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md): modelo mental inicial do ecossistema agentic.
+- [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md): AST como fonte tipada de verdade do assembly agentic.
+- [README-AGENTIC-CONTRATO-COMUM.md](./README-AGENTIC-CONTRATO-COMUM.md): contrato compartilhado entre espinhas dorsais agentic.
+- [README-AGENTE-SUPERVISOR.md](./README-AGENTE-SUPERVISOR.md): supervisor clássico e seus contratos.
+- [README-DEEPAGENTS-SUPERVISOR.md](./README-DEEPAGENTS-SUPERVISOR.md): deepagents governados por supervisor.
+- [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md): workflow determinístico baseado em grafo.
+- [tutorial-101-agentes.md](./tutorial-101-agentes.md): explicação introdutória do conceito de agentes.
+- [tutorial-101-deepagents.md](./tutorial-101-deepagents.md): leitura 101 sobre deepagents.
+- [tutorial-101-workflow.md](./tutorial-101-workflow.md): tutorial guiado sobre workflows.
+- [tutorial-101-criacao-de-agentes-via-yaml.md](./tutorial-101-criacao-de-agentes-via-yaml.md): criação orientada por YAML.
+- [tutorial-101-nl2yaml.md](./tutorial-101-nl2yaml.md): tradução de linguagem natural para YAML.
+- [tutorial-101-tecnica-nl-para-yaml-e-dsl.md](./tutorial-101-tecnica-nl-para-yaml-e-dsl.md): fundamentos da técnica de NL para YAML e DSL.
+- [tutorial-101-configuracao-yaml-execucao-local-e-nl-para-sql.md](./tutorial-101-configuracao-yaml-execucao-local-e-nl-para-sql.md): combinação entre configuração local e NL para SQL.
+
+### 9.5 Tools, schemas, integrações e superfícies especializadas
+
+- [README-DYNAMIC-API-TOOLS.md](./README-DYNAMIC-API-TOOLS.md): tools dinâmicas orientadas a APIs.
+- [README-DYNAMIC-SQL-TOOLS.md](./README-DYNAMIC-SQL-TOOLS.md): tools dinâmicas orientadas a SQL.
+- [README-SCHEMA-BANCO.md](./README-SCHEMA-BANCO.md): organização e papel do schema do banco.
+- [README-SQL-SCHEMA-RAG-TOOL.md](./README-SQL-SCHEMA-RAG-TOOL.md): tool especializada no schema SQL do RAG.
+- [README-GOOGLE-UCP.md](./README-GOOGLE-UCP.md): integração e contrato do fluxo Google UCP.
+- [README-MCP.md](./README-MCP.md): capacidades ligadas ao ecossistema MCP.
+- [README-INTEGRACOES-GOVERNADAS.md](./README-INTEGRACOES-GOVERNADAS.md): integração com controles e governança explícita.
+- [README-EXEMPLOS-INTEGRACAO-API.md](./README-EXEMPLOS-INTEGRACAO-API.md): documento explicitamente voltado a exemplos completos de uso de APIs.
+- [tutorial-101-exemplos-api-deepagent-hil-execute-continue.md](./tutorial-101-exemplos-api-deepagent-hil-execute-continue.md): tutorial de exemplos completos de API para deepagent com pausa humana.
+
+### 9.6 Interface, pausa humana e canais externos
+
+- [README-AG-UI.md](./README-AG-UI.md): protocolo e arquitetura de interface agentic.
+- [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md): pausa humana, aprovação e retomada governada.
+- [README-INSTAGRAM-PROVISIONING.md](./README-INSTAGRAM-PROVISIONING.md): provisionamento e contratos do canal Instagram.
+- [README-WHATSAPP-PROVISIONING.md](./README-WHATSAPP-PROVISIONING.md): provisionamento e contratos do canal WhatsApp.
+- [tutorial-101-generative-ui.md](./tutorial-101-generative-ui.md): leitura guiada de UI generativa.
+- [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md): tutorial introdutório de pausa humana.
+- [tutorial-101-provisionamento-instagram.md](./tutorial-101-provisionamento-instagram.md): visão 101 do provisionamento Instagram.
+- [tutorial-101-provisionamento-whatsapp.md](./tutorial-101-provisionamento-whatsapp.md): visão 101 do provisionamento WhatsApp.
+
+### 9.7 Segurança e controle de acesso
+
+- [README-AUTENTICACAO-MFA.md](./README-AUTENTICACAO-MFA.md): autenticação com múltiplos fatores.
+- [README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md): visão do sistema de autenticação como capacidade de plataforma.
+- [README-AUTORIZACAO.md](./README-AUTORIZACAO.md): regras e impacto de autorização.
+
+### 9.8 Metodologia de desenvolvimento
+
+- [metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md](./metodologia-desenv/README-METODOLOGIA-DESENV-INDICE.md): ponto de entrada da metodologia.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-GOVERNANCA-COPILOT.md](./metodologia-desenv/README-METODOLOGIA-DESENV-GOVERNANCA-COPILOT.md): governança de uso do Copilot.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-ARTEFATOS-GITHUB.md](./metodologia-desenv/README-METODOLOGIA-DESENV-ARTEFATOS-GITHUB.md): artefatos e disciplina de trabalho no GitHub.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-MELHORIA-CONTINUA.md](./metodologia-desenv/README-METODOLOGIA-DESENV-MELHORIA-CONTINUA.md): melhoria contínua aplicada ao fluxo do time.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-SUITE-TESTES.md](./metodologia-desenv/README-METODOLOGIA-DESENV-SUITE-TESTES.md): estratégia de suíte oficial dentro da metodologia.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-ONBOARDING.md](./metodologia-desenv/README-METODOLOGIA-DESENV-ONBOARDING.md): onboarding do processo de desenvolvimento.
+- [metodologia-desenv/README-METODOLOGIA-DESENV-FLUXOS-TRABALHO.md](./metodologia-desenv/README-METODOLOGIA-DESENV-FLUXOS-TRABALHO.md): fluxo operacional do trabalho de engenharia.
+
+## 10. O que este índice evita por design
+
+Este índice foi escrito para evitar quatro antipadrões.
+
+- Catálogo de arquivos sem explicação.
+- Lista de links sem critério de leitura.
+- Mistura entre documento conceitual e inventário operacional.
+- Falsa sensação de entendimento baseada só em nomes de módulos.
+
+## 11. Explicação 101
+
+Se você resumir este índice para alguém novo, a mensagem é esta: não escolha leitura pelo nome do arquivo. Escolha pela pergunta que você está tentando responder sobre o sistema.
+
+## 12. Evidências no código
+
+- [src/api/service_api.py](../src/api/service_api.py): boundary HTTP da plataforma.
+- [src/services/ingestion_service.py](../src/services/ingestion_service.py): serviço de ingestão usado pelo caminho oficial.
+- [src/qa_layer/content_qa_system.py](../src/qa_layer/content_qa_system.py): fachada principal do runtime de QA.
+- [src/config/agentic_assembly/assembly_service.py](../src/config/agentic_assembly/assembly_service.py): orquestração do assembly agentic.

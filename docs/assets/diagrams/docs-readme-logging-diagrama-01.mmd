@@ -1,0 +1,9 @@
+flowchart LR
+        A["Requisição ou tarefa"] --> B["correlation_id"]
+        B --> C["create_logger_with_correlation"]
+        C --> D["Evento sanitizado"]
+        D --> E["Arquivo dedicado quando aplicável"]
+        D --> F["Logger compartilhado quando aplicável"]
+        E --> G["Provider canônico"]
+        F --> G
+        G --> H["Listagem download análise"]
