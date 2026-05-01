@@ -1,0 +1,206 @@
+version: 1
+files:
+  common: docs/README-AGENTIC-CONTRATO-COMUM.md
+  workflow: docs/README-AGENTE-WORKFLOW.md
+  supervisor: docs/README-AGENTE-SUPERVISOR.md
+  deepagent: docs/README-DEEPAGENTS-SUPERVISOR.md
+
+workflow:
+  runtime_nodes_expected:
+    - agent
+    - set
+    - if
+    - function
+    - tool
+    - merge
+    - router
+    - rule_router
+    - transform
+    - planner
+    - executor
+    - schema_validator
+    - sub_workflow
+    - whatsapp_media_resolver
+    - whatsapp_send
+  required_sections:
+    - "## 1. Escopo e Seleção de Workflow"
+    - "## 2. Modos de Execução"
+    - "## 3. Contrato `workflows[].edges` (Edge-first)"
+    - "## 4. Estado e Metadados do Workflow"
+    - "## 5. Campos Comuns de Node"
+    - "## 6. Referência Completa de Nodes"
+    - "## 8. Matriz de Compatibilidade"
+  required_tokens:
+    - "selected_workflow"
+    - "workflows_defaults"
+    - "local_tools_configuration"
+    - "workflows[].edges"
+    - "from"
+    - "to"
+    - "when"
+    - "default"
+    - "retry_policy"
+    - "human_approval"
+    - "output_schema"
+    - "auto_retry"
+    - "execution_trace"
+    - "workflow_path"
+    - "max_iterations"
+    - "WORKFLOW_EDGE_TRANSITION"
+  node_required_tokens:
+    agent:
+      - "### Node `agent`"
+      - "prompt.system"
+      - "output_schema"
+      - "auto_retry"
+      - "retry_policy"
+    router:
+      - "### Node `router`"
+      - "router.allowed_labels"
+      - "router.go_to_node"
+      - "router.fallback_node"
+    planner:
+      - "### Node `planner`"
+      - "settings.output_key"
+      - "settings.cursor_key"
+      - "settings.coerce_json"
+    executor:
+      - "### Node `executor`"
+      - "settings.failure_policy"
+      - "settings.retry_policy"
+      - "loop_more_label"
+      - "loop_done_label"
+    if:
+      - "### Node `if`"
+      - "condition"
+      - "true_go_to"
+      - "false_go_to"
+    set:
+      - "### Node `set`"
+      - "params.assign"
+    merge:
+      - "### Node `merge`"
+      - "params.strategy"
+      - "params.aliases"
+    function:
+      - "### Node `function`"
+      - "params.expression"
+      - "params.script"
+      - "timeout_seconds"
+      - "result_var"
+    transform:
+      - "### Node `transform`"
+      - "filter_messages"
+      - "json_map"
+      - "regex_replace"
+      - "string_ops"
+    rule_router:
+      - "### Node `rule_router`"
+      - "params.rules"
+      - "params.default_label"
+    tool:
+      - "### Node `tool`"
+      - "params.tool_id"
+      - "params.arguments"
+      - "params.extract"
+    schema_validator:
+      - "### Node `schema_validator`"
+      - "params.schema"
+      - "params.source"
+      - "params.on_error"
+    sub_workflow:
+      - "### Node `sub_workflow`"
+      - "params.workflow_id"
+      - "inherit_variables"
+      - "result_path"
+    whatsapp_media_resolver:
+      - "### Node `whatsapp_media_resolver`"
+      - "payload_path"
+      - "cache_ttl_seconds"
+      - "allow_url_fallback"
+      - "channel"
+    whatsapp_send:
+      - "### Node `whatsapp_send`"
+      - "payload_path"
+      - "write_path"
+      - "product_list_key"
+      - "text_key"
+
+supervisor:
+  required_sections:
+    - "## 1. Escopo"
+    - "## 3. Seleção do Supervisor Ativo"
+    - "## 4. Contrato de `multi_agents[]`"
+    - "## 5. Contrato de `agents[]`"
+    - "## 7. Precedência de Configuração de Tools"
+    - "## 8. Memória no Supervisor Clássico"
+    - "## 9. Execução e Payload de Retorno"
+  required_tokens:
+    - "execution.type"
+    - "execution.type=agent"
+    - "local_tools_configuration"
+    - "global_tools_configuration"
+    - "tools_library"
+    - "limits.timeout_s"
+    - "limits.max_tool_calls"
+    - "limits.token_budget"
+    - "execution.default_mode"
+    - "memory.checkpointer"
+    - "memory.agent_conversation_history"
+    - "execution_timeline"
+    - "tools_usage"
+
+
+deepagent:
+  required_sections:
+    - "## 1. Escopo"
+    - "## 2. Ativação do modo deepagent"
+    - "## 4. Contrato de `deepagent_memory`"
+    - "## 5. Contrato de `agents[]` (subagentes)"
+    - "## 6. Middleware Chain"
+    - "## 7. Limites e Retries"
+    - "## 10. Execução e Retorno"
+  required_tokens:
+    - "execution.type=deepagent"
+    - "deepagent_memory"
+    - "backend: \"redis\""
+    - "redis.url"
+    - "key_prefix"
+    - "ttl_seconds"
+    - "ToolCallLimitMiddleware"
+    - "ModelCallLimitMiddleware"
+    - "LLMToolSelectorMiddleware"
+    - "ToolRetryMiddleware"
+    - "ModelRetryMiddleware"
+    - "ContextEditingMiddleware"
+    - "ClearToolUsesEdit"
+    - "FilesystemMiddleware"
+    - "ShellToolMiddleware"
+    - "ToolSelectionAuditMiddleware"
+    - "ToolExecutionMiddleware"
+    - "ResponsePostProcessingMiddleware"
+    - "ErrorHandlingMiddleware"
+
+common:
+  required_sections:
+    - "## 1. Estrutura raiz canônica"
+    - "## 2. Bloco `tools_library`"
+    - "## 3. Blocos de configuração de ferramentas"
+    - "## 4. Bloco `memory`"
+    - "## 5. Blocos reutilizáveis de execução"
+    - "## 6. DSL de expressões seguras"
+    - "## 7. Caminhos de dados (`reads` e `writes`)"
+    - "## 8. Templates de prompt e valores"
+  required_tokens:
+    - "tools_library"
+    - "global_tools_configuration"
+    - "local_tools_configuration"
+    - "memory.checkpointer"
+    - "memory.agent_conversation_history"
+    - "memory.qa_short_history"
+    - "memory.qa_long_memory"
+    - "retry_policy"
+    - "human_approval"
+    - "failure_policy"
+    - "SAFE_FUNCTIONS"
+    - "${VAR}"
