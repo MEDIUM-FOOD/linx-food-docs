@@ -17,8 +17,12 @@ o código como fonte de verdade quando houver dúvida.
 - README-RAG.md para consulta e runtime moderno de QA.
 - README-AG-UI.md para protocolo de interface agentic, endpoint SSE,
   sidecar e telas demo PDV.
+- README-HUMAN-IN-THE-LOOP.md para contrato de pausa humana, envelope
+  `hil`, componente compartilhado de revisão e retomada governada.
 - tutorial-101-generative-ui.md para onboarding guiado do AG-UI atual,
   do endpoint `/ag-ui/runs` até as telas estáticas da demo.
+- tutorial-101-human-in-the-loop.md para onboarding guiado de HIL
+  Generative UI entre DeepAgent, WebChats e sidecar AG-UI.
 - tutorial-101-processo-completo-de-ingestao-e-rag.md para uma visão
   guiada, ponta a ponta, do fluxo combinado de ingestão e RAG.
 - README-INTEGRACOES-GOVERNADAS.md para catálogo governado de integrações.
@@ -53,7 +57,9 @@ produção do acervo depois, consulta por último.
 - ETL: README-ETL.md
 - RAG: README-RAG.md
 - AG-UI: README-AG-UI.md
+- Human in the Loop: README-HUMAN-IN-THE-LOOP.md
 - AG-UI tutorial guiado: tutorial-101-generative-ui.md
+- HIL tutorial guiado: tutorial-101-human-in-the-loop.md
 - Integrações governadas: README-INTEGRACOES-GOVERNADAS.md
 - Tools: GUIA-USUARIO-TOOLS.md
 - YAML: README-CONFIGURACAO-YAML.md
@@ -88,9 +94,15 @@ produção do acervo depois, consulta por último.
   README-RAG.md.
 - Se o problema for uma tela recebendo eventos de agente, sidecar,
   dashboard dinâmico ou endpoint `/ag-ui/runs`, leia README-AG-UI.md.
+- Se o problema for pausa humana, envelope `hil`, `thread_id`,
+  `resume_endpoint`, `HilContract` ou `HilReviewPanel`, leia
+  README-HUMAN-IN-THE-LOOP.md.
 - Se o problema for onboarding rápido do slice AG-UI, navegação entre
   telas demo ou primeiros passos locais, leia
   tutorial-101-generative-ui.md.
+- Se o problema for onboarding rápido do HIL atual, reaproveitamento do
+  review panel entre WebChat/Admin/AG-UI ou a ponte entre renderização e
+  continue formal, leia tutorial-101-human-in-the-loop.md.
 - Se o problema for importação Swagger, testes seguros ou catálogo
   técnico e funcional de integrações, leia
   README-INTEGRACOES-GOVERNADAS.md.
@@ -142,18 +154,20 @@ documentos principais sem ficar caçando link isolado.
 - Depois vá para [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md)
 - Feche com [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md)
 
-### Human in the Loop e canais
+### Human in the Loop e Generative UI de revisão
 
 - Comece em [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md)
-- Depois vá para [README-WHATSAPP-PROVISIONING.md](./README-WHATSAPP-PROVISIONING.md)
-- Feche com [GUIA-DIDATICO-EXECUCAO-CANAIS.md](./GUIA-DIDATICO-EXECUCAO-CANAIS.md)
+- Depois vá para [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md)
+- Feche com [README-AG-UI.md](./README-AG-UI.md)
+  se a dúvida envolver sidecar, eventos ou renderização da pausa humana
 
 ### AG-UI e telas agentic
 
 - Comece em [README-AG-UI.md](./README-AG-UI.md)
 - Depois vá para [tutorial-101-generative-ui.md](./tutorial-101-generative-ui.md)
 - Feche com [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md)
-  se a dúvida envolver pausa humana e retomada
+  ou [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md)
+  se a dúvida envolver pausa humana, review panel ou continue formal
 
 ### Metodologia de desenvolvimento com Copilot
 

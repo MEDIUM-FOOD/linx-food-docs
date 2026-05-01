@@ -28,6 +28,13 @@ Este README continua sendo o documento dono do assunto. O tutorial 101 é
 o atalho prático para onboarding, navegação pelos arquivos e primeiros
 passos de validação local.
 
+Se o foco for a pausa humana renderizada dentro da interface, complemente
+essa leitura com [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md)
+e [tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md).
+Esses dois materiais explicam o contrato `hil`, o componente de revisão
+compartilhado e a fronteira correta entre renderização da pendência e
+retomada formal da execução.
+
 ## Por que existe
 
 A plataforma já tinha caminhos para conversa e execução de agentes, mas
@@ -662,6 +669,14 @@ painel e continua mostrando aprovar e rejeitar. Quando o evento trouxer
 dados mais ricos, a mesma peça visual já estará pronta para materializar
 essa revisão sem criar um segundo renderer.
 
+O ponto operacional decisivo é que o sidecar não faz a retomada sozinho.
+Ele reaproveita o `HilReviewPanel` para materializar a revisão e entrega
+a decisão ao host da interface por callback. A tela dona do fluxo é quem
+decide se aquela decisão vira chamada formal para `/agent/continue` ou
+`/workflow/continue`. Em linguagem simples: AG-UI já transporta e mostra
+a pausa humana, mas o continue oficial continua explícito e fora de
+`/ag-ui/runs`.
+
 ### Explicação simples da interrupção HIL
 
 Pense no AG-UI como o canal que avisa a tela sobre o andamento do trabalho
@@ -686,6 +701,8 @@ decisões novas por conta própria.
 - Quando o evento chega apenas com `interrupts` simples, o sidecar faz um
   adaptador explícito para continuar mostrando aprovar e rejeitar sem
   inventar contrato novo no browser.
+- O sidecar já entrega a decisão humana para o host da interface via
+  callback, mantendo o wiring de continue fora do renderer visual.
 - Uma UI rica de HIL deve consumir o contrato estruturado do backend, não
   inferir estado por mensagem textual.
 - Novas telas que combinem AG-UI e HIL precisam validar a retomada no

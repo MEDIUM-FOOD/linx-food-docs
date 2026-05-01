@@ -4,7 +4,12 @@
 
 ## 📋 Visão Geral
 
-O sistema Human-in-the-Loop (HIL) da Plataforma de Agentes de IA permite intervenção humana inteligente em workflows de agentes autônomos, combinando automação eficiente com supervisão humana quando necessário. Este documento detalha a implementação técnica usando interrupts do motor de workflow, `create_human_gate_tool` e endpoints de API específicos.
+O sistema Human-in-the-Loop (HIL) da Plataforma de Agentes de IA permite intervenção humana inteligente em execuções agentic sensíveis, combinando automação eficiente com supervisão humana quando necessário. Este documento detalha a implementação técnica do produto atual, cobrindo o HIL padrão de DeepAgent por envelope `hil`, o caminho de workflow com `human_gate` e os endpoints de API usados para pausa, revisão e retomada.
+
+Se o seu objetivo é entender a experiência completa de HIL Generative UI,
+com o contrato compartilhado do frontend e o reaproveitamento entre
+WebChat v3, Admin WebChat e sidecar AG-UI, leia também
+[tutorial-101-human-in-the-loop.md](./tutorial-101-human-in-the-loop.md).
 
 ## 📌 Nota de escopo para DeepAgent
 
@@ -855,6 +860,14 @@ Na prática, isso significa que WebChat v3, Admin WebChat e sidecar AG-UI
 passaram a compartilhar a mesma base visual de revisão. Cada tela mantém
 apenas o seu wiring fino: onde mostrar o painel, como coletar edição
 quando existir e para qual fluxo local enviar a decisão.
+
+O ponto mais importante dessa divisão é este: `HilReviewPanel` não faz
+rede por conta própria e não escolhe o endpoint de retomada. WebChat v3
+e Admin WebChat usam `HilContract` para montar `resume.decisions` e
+chamam o continue formal do agente. No AG-UI, o sidecar reaproveita o
+mesmo renderer visual, mas a interface dona do fluxo ainda precisa ligar
+o callback da decisão ao continue formal correspondente. Isso preserva a
+fronteira do backend e evita um segundo contrato escondido no browser.
 
 ### Fluxo funcional
 
@@ -2194,6 +2207,7 @@ class HILMetrics:
 ### 🔗 Links Úteis
 
 - [Tutorial de DeepAgent com HIL via API](./tutorial-101-exemplos-api-deepagent-hil-execute-continue.md)
+- [Tutorial 101 de HIL Generative UI](./tutorial-101-human-in-the-loop.md)
 - [Tutorial de DeepAgents](./tutorial-101-deepagents.md)
 - [Configuração YAML da plataforma](./README-CONFIGURACAO-YAML.md)
 - [AST agentic e fluxo validate/confirm](./README-AST-AGENTIC-DESIGNER.md)

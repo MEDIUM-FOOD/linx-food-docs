@@ -502,3 +502,45 @@ Onde no código:
 - src/api/routers/config_assembly_router.py
 - src/config/agentic_assembly/assembly_service.py
 - src/agentic_layer/supervisor/tools_factory.py
+
+### 31
+
+Pergunta:
+Onde eu mexo quando a dúvida é HIL Generative UI?
+Resposta:
+Comece pelo contrato HIL e depois siga para o frontend compartilhado.
+O backend publica a pausa humana no envelope `hil`.
+O frontend normaliza esse envelope e renderiza a revisão com um
+componente reaproveitável.
+Se a tela for AG-UI, o sidecar entra só como transporte e apresentação
+da pendência.
+Na prática, HIL Generative UI aqui não é HTML gerado pelo agente; é uma
+revisão humana montada a partir de dados estruturados autorizados pelo
+backend.
+Onde no código:
+
+- src/api/routers/agent_router.py
+- app/ui/static/js/shared/ui-webchat-hil-contract.js
+- app/ui/static/js/shared/hil-review-panel.js
+- app/ui/static/js/shared/ag-ui-sidecar-chat.js
+
+### 32
+
+Pergunta:
+O AG-UI já continua um HIL sozinho?
+Resposta:
+Não.
+O sidecar AG-UI já mostra a pendência e já entrega a decisão humana por
+callback.
+Mas a retomada formal continua sendo responsabilidade da interface dona
+do fluxo, que precisa chamar o endpoint correto de continue.
+Isso evita esconder regra crítica dentro do sidecar e mantém a fronteira
+de backend explícita.
+Na prática, ver o painel de aprovação na tela não prova que a retomada
+já está ligada no servidor.
+Onde no código:
+
+- app/ui/static/js/shared/ag-ui-sidecar-chat.js
+- src/api/schemas/ag_ui_models.py
+- src/api/routers/agent_router.py
+- src/api/routers/workflow_router.py

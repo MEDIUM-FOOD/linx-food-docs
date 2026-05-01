@@ -605,6 +605,13 @@ de projeto porque uma nova frente não precisa redesenhar a aprovação do
 zero. Ela pluga o contrato HIL na mesma peça visual e mantém só o wiring
 específico do seu fluxo.
 
+Esse detalhe importa comercialmente porque reduz tempo de implantação e
+reduz risco de inconsistência entre canais. Em vez de uma aprovação por
+chat, outra por tela administrativa e outra por sidecar nascerem como
+três projetos diferentes, a software house pode vender uma fundação
+única de revisão humana. O cliente percebe a mesma lógica de governança,
+mesmo quando a experiência visual muda conforme o contexto operacional.
+
 Para o decisor de TI, o ponto central é governança. A interface não
 inventa botões, não descobre estado por texto livre e não muda o fluxo de
 retomada. Ela materializa apenas o que o backend autorizou. Isso reduz
@@ -1149,6 +1156,13 @@ WebChat v3, Admin WebChat e sidecar AG-UI. Novos domínios ainda precisam
 de adapter, validação e testes, mas a direção arquitetural é reutilizável:
 o backend governa a pausa e a interface materializa a decisão de forma
 segura.
+
+Ao mesmo tempo, isso evita prometer um atalho perigoso. No slice atual,
+o sidecar AG-UI já transporta a interrupção e já mostra a revisão humana,
+mas a retomada oficial continua explícita na interface dona do fluxo. Em
+termos práticos, a plataforma já entrega a experiência de HIL Generative
+UI e já protege a fronteira de governança, sem esconder o continue dentro
+de um canal paralelo difícil de auditar.
 
 ### Vantagens comerciais e competitivas
 
