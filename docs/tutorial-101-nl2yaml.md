@@ -1,240 +1,616 @@
-# Tutorial 101: NL2YAML
+# Tutorial 101 e manual técnico, executivo, comercial e estratégico: NL2YAML
 
-## 1. O que NL2YAML significa neste projeto
+## 1. O que é esta feature
 
-NL2YAML aqui não significa pedir qualquer YAML para uma IA e aceitar o resultado como verdade.
+NL2YAML, nesta plataforma, é a capacidade de transformar um objetivo escrito em linguagem natural em um YAML governado do ecossistema agentic, sem pular a esteira oficial de validação, confirmação e publicação.
 
-No código atual, NL2YAML significa usar a esteira governada do assembly agentic para transformar um objetivo em linguagem natural em AST canônica validada e, só no fim, em YAML final.
+O ponto central é este: o sistema não recebe um texto e cospe um arquivo arbitrário. Ele converte o objetivo em uma estrutura intermediária validável, passa por checagens de prontidão, produz um rascunho AST, valida esse rascunho contra o contrato oficial e só depois monta o YAML final.
 
-Esse detalhe importa porque o produto não trata YAML e AST como dois contratos soltos. O assembly usa a AST como fonte de verdade e o YAML final como artefato compilado e confirmado.
+Em linguagem simples, NL2YAML aqui é um tradutor assistido com freios de engenharia. Ele ajuda a sair do briefing para a configuração, mas não autoriza atalhos frágeis.
 
-## 2. O problema que essa feature resolve
+## 2. Que problema ela resolve
 
-Sem NL2YAML governado, cada criação de workflow ou supervisor agentic cairia em um dos dois extremos ruins:
+Sem essa feature, a criação de workflows e supervisores agentic tende a cair em um dos dois extremos ruins.
 
-1. edição manual lenta, difícil para quem ainda não domina a sintaxe;
-2. geração automática solta, sem validação semântica e sem controle de publicação.
+O primeiro extremo é a edição manual, que exige conhecimento alto da sintaxe e torna a criação lenta, frágil e dependente de telas técnicas.
 
-A feature existe para resolver essa tensão. Ela acelera a criação, mas sem abrir mão de validação, perguntas bloqueantes, diff e confirmação explícita.
+O segundo extremo é a geração automática solta, em que um modelo produz YAML sem governança semântica, sem diff confiável, sem perguntas de clarificação e sem caminho controlado de publicação.
 
-## 3. A ideia central em linguagem simples
+NL2YAML existe para resolver exatamente essa tensão: acelerar a criação sem abrir mão de contrato, validação e controle operacional.
 
-Pense no NL2YAML como uma linha de projeto técnico em quatro etapas:
+## 3. Visão conceitual
 
-1. verificar se o pedido tem contexto mínimo;
-2. gerar um rascunho estruturado;
-3. validar se esse rascunho faz sentido no contrato real;
-4. só então montar o YAML final e decidir se ele será salvo.
+Conceitualmente, NL2YAML é um pipeline AST-first com interface de negócio na frente e contrato técnico forte atrás.
 
-O sistema não pula da intenção para o arquivo final. Ele passa por uma montagem governada.
+Isso significa que o texto do usuário não vira YAML direto. Primeiro ele vira uma representação estruturada do documento agentic. Depois essa representação é validada e compilada até chegar a um YAML final governado.
 
-## 4. Os quatro estágios que você precisa decorar
+Essa decisão importa porque evita tratar YAML e AST como duas verdades independentes. O fluxo real do produto assume que o documento tipado é a base da consistência e que o YAML final é um artefato controlado desse processo.
 
-### 4.1 Preflight
+## 4. Visão tática
 
-É a checagem inicial. O objetivo é responder se o ambiente e o pedido estão prontos para avançar.
+Taticamente, NL2YAML serve melhor em cenários como estes.
 
-### 4.2 Draft
+- quando um consultor ou operador sabe descrever o resultado desejado, mas não domina a sintaxe interna do YAML;
+- quando um time precisa produzir um primeiro draft rápido para revisão técnica posterior;
+- quando o objetivo envolve ambiguidade natural e a plataforma precisa devolver perguntas concretas em vez de inventar resposta;
+- quando é importante separar preview de publicação;
+- quando o arquivo final precisa ser salvo apenas dentro da área governada de configuração.
 
-É a geração do rascunho AST. Nesta etapa, o sistema ainda pode devolver perguntas em vez de avançar.
+Ele serve menos para casos em que o time já tem um AST totalmente definido e deseja apenas aplicar uma alteração técnica direta, porque aí o modo administrativo especializado tende a ser mais eficiente.
 
-### 4.3 Validate
+## 5. Visão técnica
 
-É a validação semântica forte do payload AST. Aqui o sistema verifica se o documento montado respeita o contrato do assembly e do alvo escolhido.
+Tecnicamente, o núcleo do NL2YAML está no método `objective_to_yaml` do serviço de assembly agentic. Esse método encadeia um fluxo fixo e comprovado por testes.
 
-### 4.4 Confirm
+1. `preflight`
+2. `draft`
+3. `validate`
+4. `confirm` em dry-run
 
-É a etapa que compila o fragmento governado, faz merge no `base_yaml` e produz o YAML final. Quando `apply=false`, ela gera preview. Quando `apply=true`, ela persiste o resultado no root governado.
+O endpoint público desse fluxo é `POST /config/assembly/objective-to-yaml`, exposto pelo router de config assembly.
 
-## 5. Como o fluxo direto funciona de verdade
+A experiência de usuário final fica em um Studio próprio, com briefing, respostas para perguntas pendentes, preview do YAML, diff, AST retornado, rastro de decisão e publicação assistida.
 
-O serviço principal é `AgenticAssemblyService`.
+## 6. Visão executiva
 
-O método `objective_to_yaml` executa uma ordem fixa confirmada no código:
+Para liderança, NL2YAML reduz o atrito entre intenção de negócio e configuração operacional. Ele diminui a dependência da edição técnica manual para montar a primeira versão de um fluxo, sem abrir mão de governança.
 
-1. `preflight`;
-2. `draft`;
-3. `validate`;
-4. `confirm` em dry-run.
+Na prática, isso reduz tempo de preparação, melhora a previsibilidade de revisão e torna mais simples criar um processo assistido entre áreas funcionais e áreas técnicas.
 
-Isso significa que o caminho direto `objective-to-yaml` não é um atalho mágico. Ele é só uma composição oficial das quatro etapas canônicas.
+## 7. Visão comercial
 
-## 6. O que pode sair da resposta
+Comercialmente, essa feature ajuda a mostrar que a plataforma não depende exclusivamente de especialistas em YAML para sair do zero. Um briefing bem escrito já permite iniciar a configuração com perguntas guiadas, preview de saída e publicação controlada.
 
-Quando o fluxo roda, a resposta pode seguir dois caminhos principais.
+O benefício vendável não é “qualquer pessoa cria qualquer automação sozinha”. O benefício real é: a plataforma aproxima a linguagem do negócio da configuração técnica, com guardrails suficientes para reduzir erro e retrabalho.
 
-### 6.1 Caminho feliz
+## 8. Visão estratégica
 
-Quando tudo fecha, a resposta devolve YAML final, versão textual do YAML, diff preview e o rastro das decisões tomadas.
+Estratégicamente, NL2YAML fortalece a proposta da plataforma como sistema YAML-first governado por assembly, e não como simples editor de arquivos.
 
-### 6.2 Caminho bloqueado
+Ele cria uma camada de tradução entre intenção humana e contrato técnico. Isso aumenta reutilização, reduz dependência de interface técnica para o primeiro passo e prepara o produto para experiências assistidas mais avançadas sem abandonar a disciplina de validação.
 
-Quando falta contexto ou quando o draft ou a validação travam, a resposta devolve perguntas, diagnósticos e um `blocking_stage` explícito.
+## 9. Conceitos necessários para entender
 
-O valor prático disso é enorme: a UI e a operação não precisam adivinhar por que o fluxo parou.
+### 9.1. AST-first
 
-## 7. Como o alvo é escolhido
+Significa que a plataforma não trata o YAML final como único contrato interno. O texto do usuário vira primeiro uma estrutura intermediária tipada e validável. Isso é o que permite detectar ambiguidade, bloquear publicação e gerar diff governado antes do arquivo final.
 
-O assembly trabalha com três espinhas dorsais principais:
+### 9.2. Preflight
 
-1. workflow;
-2. supervisor clássico de agente;
-3. supervisor deepagent.
+É a checagem de prontidão antes da geração. O sistema verifica se o ambiente, o target e o modo escolhido estão prontos para continuar com segurança.
 
-Quando o payload chega com `target=auto`, o `IntentParser` ajuda a resolver qual dessas estruturas faz mais sentido para o pedido. Isso reduz ambiguidade, mas não elimina a necessidade de contexto claro.
+### 9.3. Draft
 
-## 8. Os modos de geração
+É a etapa que monta o rascunho AST a partir do briefing. Esse rascunho ainda pode conter lacunas. Quando isso acontece, o sistema devolve perguntas em vez de avançar automaticamente.
 
-No contrato atual, o draft pode ser pedido em três modos:
+### 9.4. Validate
 
-1. `heuristic`;
-2. `llm_schema`;
-3. `auto`.
+É a validação semântica forte do payload AST. Aqui o sistema confere se a estrutura montada realmente respeita o contrato canônico do target escolhido.
 
-### 8.1 `heuristic`
+### 9.5. Confirm
 
-É o caminho mais determinístico. Ele não depende do provider estruturado do LLM para ser útil.
+É a etapa que compila o documento, faz merge com o `base_yaml`, gera o YAML final e, opcionalmente, persiste o arquivo.
 
-### 8.2 `llm_schema`
+### 9.6. `blocking_stage`
 
-É o caminho que tenta gerar o rascunho via LLM estruturado, com envelope JSON validado.
+É o indicador oficial do estágio onde o fluxo travou. Os valores confirmados no contrato são `preflight`, `draft`, `validate` e `confirm`.
 
-### 8.3 `auto`
+### 9.7. `questions`
 
-É o modo que tenta escolher melhor estratégia. No código atual, o fallback heurístico não deve acontecer por impulso escondido. Ele depende de opt-in explícito.
+São perguntas estruturadas que a API devolve quando ainda faltam decisões humanas obrigatórias para fechar a configuração.
 
-## 9. O que acontece quando faltam informações
+### 9.8. `decision_trace`
 
-Se o pedido ainda não está pronto para virar YAML final, o fluxo não inventa respostas.
+É o rastro simples das decisões críticas do fluxo, como alvo resolvido, estratégia aplicada e tools efetivamente inferidas ou confirmadas.
 
-Os sinais mais importantes são:
+### 9.9. `chosen_tools`
 
-1. `questions`, quando ainda falta decisão humana concreta;
-2. `diagnostics`, quando existe problema técnico ou contratual;
-3. `blocking_stage`, quando já é possível dizer em qual etapa o fluxo travou.
+É a lista de ferramentas que o fluxo identificou no resultado gerado, com origem e caminhos lógicos. Isso ajuda revisão e suporte.
 
-Isso é especialmente importante para times juniores, porque evita tratar um rascunho incompleto como se fosse um YAML publicável.
+### 9.10. `base_yaml`
 
-## 10. Quando a publicação acontece de verdade
+É o YAML de partida usado como contexto e como base de merge. Ele não é enfeite. Ele altera o que o sistema considera disponível, permitido e já existente.
 
-Gerar preview não é o mesmo que publicar.
+## 10. Como a feature funciona por dentro
 
-No assembly, a persistência real só acontece na confirmação com `apply=true`. É nesse momento que o serviço valida `output_path`, respeita o root governado de saída e grava o resultado.
+O fluxo começa quando o cliente chama `POST /config/assembly/objective-to-yaml` com um briefing, um e-mail operacional, um target e, opcionalmente, um `base_yaml`, um template e constraints de geração.
 
-Na prática, o produto separa duas intenções:
+O router resolve ou injeta `correlation_id`, checa feature flag, valida permissão `config.generate` e delega o processamento para o serviço principal.
 
-1. ver o que seria gerado;
-2. salvar de fato o YAML confirmado.
+No serviço, o primeiro passo é resolver o YAML base e o target efetivo. Se o target vier como `auto`, o sistema tenta classificá-lo com base em sinais do briefing. Se a classificação continuar ambígua, o fluxo não inventa. Ele produz pergunta de clarificação.
 
-## 11. O que já está pronto hoje
+Depois disso vem o preflight. Se o preflight disser que o ambiente não está pronto, o fluxo retorna bloqueio ainda antes do draft.
 
-Pelo código lido, já está claro que o projeto possui:
+Se o preflight liberar, o draft tenta montar o documento AST. Esse draft pode vir por heurística, por LLM estruturado ou por modo automático com fallback heurístico explicitamente autorizado.
 
-1. o serviço canônico de assembly;
-2. o fluxo direto `objective-to-yaml` com ordem definida;
-3. contratos de request e response tipados;
-4. modo heurístico;
-5. modo LLM estruturado;
-6. confirmação com preview e com persistência.
+Se o draft produzir perguntas obrigatórias ou se a própria validação preliminar do draft falhar, o fluxo para nesse ponto e devolve `questions`, `diagnostics` e `blocking_stage=draft`.
 
-## 12. O que ainda depende de contexto real
+Se o draft ficar consistente, o sistema chama `validate` para a validação semântica forte. Só se essa etapa passar é que a confirmação em dry-run acontece.
 
-Mesmo com a feature implementada, a qualidade do resultado ainda depende de contexto real do tenant e do pedido.
+Na confirmação em dry-run, o serviço compila o fragmento governado, faz merge com o `base_yaml`, aplica carimbo de hash governado e produz `final_yaml`, `final_yaml_text` e `diff_preview`.
 
-Os fatores mais sensíveis são:
+## 11. Divisão em etapas ou submódulos
 
-1. clareza do objetivo em linguagem natural;
-2. qualidade do `base_yaml` de partida;
-3. disponibilidade do provider estruturado quando o modo usa LLM;
-4. escolha correta do alvo ou qualidade da inferência em `auto`.
+### 11.1. Boundary HTTP oficial
 
-## 13. O que acontece em caso de sucesso
+Esse submódulo expõe o endpoint público, injeta correlação e traduz falhas de validação para respostas HTTP utilizáveis.
 
-Quando tudo dá certo:
+Valor entregue: a feature fica disponível como operação formal da API, não como chamada interna solta.
+
+### 11.2. Resolução de target
+
+Esse submódulo decide se o objetivo representa melhor um workflow, um supervisor clássico ou um deepagent supervisor.
+
+Valor entregue: o produto não exige que todo usuário já saiba a espinha dorsal correta antes de começar.
+
+### 11.3. Geração de draft
+
+Esse submódulo tenta montar a AST inicial com base no briefing, no contexto do YAML base e no catálogo de tools.
+
+Valor entregue: aceleração inicial da criação com preservação de contexto.
+
+### 11.4. Perguntas pendentes
+
+Esse submódulo transforma ambiguidade em perguntas estruturadas, com opções quando aplicável.
+
+Valor entregue: evita que o backend complete lacunas com suposições perigosas.
+
+### 11.5. Validação semântica
+
+Esse submódulo verifica se a AST respeita o contrato real do target e do assembly.
+
+Valor entregue: o preview só chega à frente quando a configuração faz sentido no sistema real.
+
+### 11.6. Confirmação e merge
+
+Esse submódulo compila o fragmento, faz merge com a base, gera diff e produz o YAML final.
+
+Valor entregue: o usuário deixa de revisar fragmentos abstratos e passa a revisar o documento final que realmente seria salvo.
+
+### 11.7. Publicação assistida
+
+Esse submódulo só entra quando o usuário decide persistir o YAML. Ele exige `output_path`, normaliza o caminho, limita a publicação à raiz governada e respeita o modo `force`.
+
+Valor entregue: separar preview de gravação real e impedir gravação fora da área permitida.
+
+### 11.8. Studio NL2YAML
+
+Esse submódulo é a experiência de usuário final. Ele organiza briefing, perguntas, preview, diagnóstico, correlação e publicação guiada sem obrigar o usuário a abrir a tela técnica completa.
+
+Valor entregue: tornar o pipeline operacionalmente acessível para quem pensa primeiro no resultado de negócio.
+
+## 12. Fluxo principal ponta a ponta
+
+```mermaid
+flowchart TD
+    A[Briefing em linguagem natural] --> B[Router objective-to-yaml]
+    B --> C[Resolve correlation_id, permissao e feature flag]
+    C --> D[Resolve target e YAML base]
+    D --> E[Preflight]
+    E -->|bloqueado| F[Retorna blocking_stage preflight]
+    E -->|pronto| G[Draft AST]
+    G -->|faltam decisoes| H[Retorna questions e blocking_stage draft]
+    G -->|rascunho consistente| I[Validate]
+    I -->|invalido| J[Retorna blocking_stage validate]
+    I -->|valido| K[Confirm dry-run]
+    K -->|falha| L[Retorna blocking_stage confirm]
+    K -->|sucesso| M[Retorna final_yaml, texto, diff e rastro]
+    M --> N[Studio revisa preview]
+    N --> O[Confirm com apply true]
+    O --> P[Normaliza output_path em app/yaml e salva]
+```
+
+O ponto mais importante desse diagrama é que a publicação é uma etapa separada da geração. O fluxo oficial não trata preview e persistência como a mesma coisa.
+
+## 13. Targets suportados e por que isso importa
+
+O contrato atual trabalha com quatro opções de target.
+
+- `workflow`
+- `agent_supervisor`
+- `deepagent_supervisor`
+- `auto`
+
+O modo `auto` existe para reduzir atrito, mas não para mascarar ambiguidade. Quando o briefing ainda não diferencia bem um workflow de um supervisor ou deepagent, o parser retorna pergunta de clarificação em vez de seguir por adivinhação.
+
+Isso importa porque a plataforma tem três espinhas dorsais com sintaxe própria. Resolver o target errado cedo demais contaminaria todo o documento final.
+
+## 14. Modos de geração e suas diferenças
+
+O draft aceita três modos oficiais.
+
+### 14.1. `heuristic`
+
+É o caminho mais determinístico. Ele é útil quando o sistema não deve depender de LLM estruturado para continuar o trabalho.
+
+Os testes confirmam que esse modo não bloqueia o preflight apenas porque um provider estruturado específico não está disponível.
+
+### 14.2. `llm_schema`
+
+É o modo que usa geração estruturada por LLM com envelope JSON obrigatório. O LLM não devolve texto livre para ser interpretado depois. Ele precisa respeitar um envelope com `ast_payload` e `questions`.
+
+Esse ponto é importante porque evita respostas vagas ou markup ambíguo do modelo.
+
+### 14.3. `auto`
+
+É o modo que tenta escolher a melhor estratégia. No contrato atual, o fallback heurístico não pode entrar silenciosamente por conveniência. Ele depende de opt-in explícito via constraint.
+
+O Studio já envia essa autorização quando o operador escolhe o modo auto apropriado.
+
+## 15. Como o LLM é usado sem perder governança
+
+O gerador estruturado de draft não pede “qualquer YAML”. Ele monta um prompt com:
+
+- envelope JSON esperado;
+- target obrigatório;
+- snapshot resumido do YAML base;
+- constraints;
+- catálogo compacto de tools;
+- schema do target;
+- schema comum;
+- regras explícitas de não inventar campos e de devolver perguntas quando faltar informação.
+
+Na prática, isso muda completamente o papel do LLM. Ele deixa de ser um gerador livre de arquivo e passa a ser um produtor supervisionado de rascunho AST dentro de um contrato fechado.
+
+## 16. Como o Studio NL2YAML funciona
+
+O Studio foi desenhado como uma experiência em quatro passos.
+
+### 16.1. Passo 1: briefing e estratégia
+
+O usuário informa o objetivo, escolhe o tipo de configuração, define o modo de geração e, se quiser, sincroniza ou cola um YAML base.
+
+### 16.2. Passo 2: perguntas pendentes
+
+Se a API devolver perguntas, o Studio mostra apenas as decisões que faltam para consolidar o preview. Isso evita mandar o usuário para uma tela técnica completa só para fechar uma ambiguidade pontual.
+
+### 16.3. Passo 3: revisão do YAML final
+
+O Studio mostra o `final_yaml_text`, os diagnósticos, o diff, o AST retornado, o target resolvido, as tools escolhidas e o `correlation_id` da execução.
+
+### 16.4. Passo 4: publicação assistida
+
+O Studio monta o `output_path` a partir de um destino controlado e de um slug. Ele também exige confirmação visual antes de liberar a gravação real.
+
+Isso é relevante porque a UI não dá um campo livre irrestrito para gravar em qualquer lugar. Ela já orienta a publicação para o espaço governado.
+
+## 17. Publicação segura e `output_path`
+
+No backend, `apply=true` só é aceito se houver `output_path`. Esse caminho passa por normalização obrigatória.
+
+As regras confirmadas no serviço são estas.
+
+- o arquivo precisa ser `.yaml` ou `.yml`;
+- o caminho precisa permanecer dentro de `app/yaml`;
+- o backend rejeita saída fora da raiz governada;
+- o `saved_path` retornado ao cliente é formatado de volta relativo ao repositório quando possível.
+
+No frontend, a publicação assistida oferece dois destinos controlados.
+
+- configurações do tenant em `app/yaml`
+- catálogo do sistema em `app/yaml/system`
+
+O valor prático dessa combinação é simples: a experiência de negócio facilita a publicação, mas a camada de serviço continua sendo a guardiã final do caminho de gravação.
+
+## 18. Contratos, entradas e saídas
+
+As entradas principais do fluxo são:
+
+- `prompt`
+- `user_email`
+- `target`
+- `base_yaml`
+- `template_path`
+- `constraints`
+- `generation_mode`
+- `correlation_id`
+
+As saídas mais importantes do fluxo único são:
+
+- `success`
+- `requested_target`
+- `resolved_target`
+- `blocking_stage`
+- `final_yaml`
+- `final_yaml_text`
+- `ast_payload`
+- `diff_preview`
+- `chosen_tools`
+- `decision_trace`
+- `questions`
+- `diagnostics`
+- `preflight_ready`
+- `preflight_summary`
+- `preflight_checks`
+- `validation_report`
+- `correlation_id`
+
+Isso mostra que o endpoint não entrega só um arquivo final. Ele entrega também contexto operacional para entender por que o fluxo avançou, travou ou precisa de decisão adicional.
+
+## 19. O que acontece em caso de sucesso
+
+Quando tudo corre bem, a ordem comprovada pelos testes é esta.
 
 1. o preflight libera o caminho;
-2. o draft consegue montar AST útil;
+2. o draft monta AST utilizável;
 3. a validação semântica passa;
-4. o confirm em dry-run produz `final_yaml`;
-5. a publicação opcional salva o arquivo no caminho governado.
+4. o confirm em dry-run gera o YAML final;
+5. o cliente recebe `final_yaml_text`, diff, target resolvido, `chosen_tools` e `decision_trace`;
+6. se o operador desejar, a publicação real acontece depois via confirm com `apply=true`.
 
-## 14. O que acontece em caso de erro
+O ponto importante é que preview e persistência continuam separados mesmo no caminho feliz.
 
-Os cenários de falha mais importantes confirmados no código são estes:
+## 20. O que acontece em caso de erro ou bloqueio
 
-### 14.1 Bloqueio no draft
+Os cenários principais confirmados no código são estes.
 
-Se o rascunho sair incompleto ou ambíguo, o fluxo para no draft e devolve perguntas em vez de forçar validação e confirmação.
+### 20.1. Bloqueio no preflight
 
-### 14.2 Bloqueio no validate
+Se o ambiente não estiver pronto, o fluxo para cedo e devolve `blocking_stage=preflight`.
 
-Se a AST parecer válida à primeira vista, mas quebrar o contrato semântico do assembly, o fluxo para na validação.
+### 20.2. Bloqueio no draft por perguntas pendentes
 
-### 14.3 Bloqueio no confirm
+Se o rascunho depender de decisão obrigatória, o fluxo não continua para validate e confirm. Os testes confirmam esse comportamento explicitamente.
 
-Se o dry-run não conseguir produzir um YAML final utilizável, o fluxo marca bloqueio em `confirm`.
+### 20.3. Bloqueio no validate
 
-### 14.4 Feature flag desligada
+Se a AST parecer promissora, mas quebrar o contrato semântico real do target, o fluxo retorna `blocking_stage=validate`.
 
-O boundary do assembly protege os endpoints principais por feature flag. Se ela estiver desligada, o produto não deve fingir disponibilidade da feature.
+### 20.4. Bloqueio no confirm
 
-## 15. Como colocar para funcionar sem se perder
+Se a confirmação em dry-run não conseguir produzir um YAML final utilizável, o fluxo retorna `blocking_stage=confirm`.
 
-A sequência mental correta para operar a feature é esta:
+### 20.5. Falha por permissão
 
-1. subir a API do projeto;
-2. garantir que a flag do assembly agentic esteja ativa no ambiente alvo;
-3. entrar pela UI ou endpoint oficial do assembly;
-4. começar pelo preview, não pela publicação;
-5. só salvar quando o resultado vier sem bloqueios.
+O endpoint é protegido por permissão `config.generate`. Sem essa permissão, o fluxo não fica disponível.
 
-## 16. Como pensar a feature com uma analogia
+### 20.6. Falha por feature flag
 
-Imagine que você quer construir uma casa.
+O boundary do assembly protege a feature por flag. Se o assembly agentic estiver desligado no ambiente, a API não deve simular disponibilidade.
 
-O texto do usuário é o pedido do cliente. A AST é a planta técnica. A validação é a revisão do engenheiro. O YAML final é o projeto executivo. Publicar com `apply=true` é protocolar esse projeto no lugar certo.
+### 20.7. Falha de publicação
 
-Ninguém sério pega um pedido informal e manda direto para a obra. O assembly existe exatamente para impedir esse tipo de salto.
+Se `apply=true` vier sem `output_path`, se o caminho sair de `app/yaml` ou se houver conflito de escrita sem `force`, a gravação real é bloqueada.
 
-## 17. Checklist de entendimento
+## 21. Observabilidade e diagnóstico
 
-Se você entendeu estes pontos, o essencial do NL2YAML já ficou sólido:
+NL2YAML foi desenhado para ser observável em vez de “mágico”.
 
-1. entendi que NL2YAML aqui é AST-first, não texto para YAML direto;
-2. entendi que o fluxo direto roda `preflight -> draft -> validate -> confirm`;
-3. entendi que `questions` e `blocking_stage` são parte do contrato oficial;
-4. entendi que preview e publicação são etapas diferentes;
-5. entendi que `heuristic`, `llm_schema` e `auto` não significam a mesma coisa.
+Os elementos de diagnóstico mais úteis são:
 
-## 18. Exercícios guiados
+- `correlation_id`
+- `blocking_stage`
+- `preflight_checks`
+- `diagnostics`
+- `validation_report`
+- `decision_trace`
+- `chosen_tools`
+- `diff_preview`
 
-### Exercício 1
+Na UI, o operador já consegue baixar o log correlacionado e também o `system.log`, o que mostra que a experiência foi pensada para operação real e não só para uso feliz.
 
-Objetivo: entender a ordem do pipeline.
+## 22. Vantagens práticas
 
-Passos:
+As vantagens reais confirmadas pelo desenho do produto são estas.
 
-1. leia o método `objective_to_yaml`;
-2. identifique em que momento `validate` é chamado;
-3. identifique em que momento `confirm` entra como dry-run.
+- reduz dependência de edição manual para montar a primeira versão do YAML;
+- separa geração, clarificação, revisão e publicação;
+- transforma ambiguidade em perguntas estruturadas;
+- mantém a validação no contrato oficial do assembly;
+- preserva rastro de decisão e correlação operacional;
+- limita a gravação à raiz governada de YAML;
+- permite começar pelo modo de negócio e migrar para o modo técnico quando necessário;
+- oferece um caminho de preview antes de qualquer persistência.
 
-Resposta esperada: o fluxo direto só chama `confirm` depois que o draft e a validação passam.
+## 23. Limites e pegadinhas
 
-### Exercício 2
+Também existem limites importantes.
 
-Objetivo: entender por que o sistema devolve perguntas.
+- NL2YAML não elimina a necessidade de revisão técnica quando o caso é sensível ou complexo.
+- Um briefing ruim continua produzindo ambiguidade, perguntas ou bloqueios.
+- `auto` não é licença para fallback escondido; o opt-in precisa existir.
+- O Studio facilita a publicação, mas o backend continua sendo a autoridade final do caminho salvo.
+- O fato de existir `final_yaml_text` não significa que o arquivo já foi salvo.
+- O produto aproxima linguagem de negócio da configuração, mas não substitui o contrato canônico do sistema.
 
-Passos:
+## 24. Exemplos práticos guiados
 
-1. leia a montagem do draft no service;
-2. depois observe como a resposta do fluxo direto trata `questions`.
+### 24.1. Caso feliz para workflow
 
-Resposta esperada: perguntas não são falha cosmética; são o mecanismo oficial para impedir que o backend invente decisões faltantes.
+Cenário: um usuário descreve um fluxo de vendas consultivas e escolhe `workflow`.
 
-## 19. Evidências no código
+O que acontece: a API gera AST válida, confirma em dry-run, devolve `selected_workflow`, o YAML final textual, o diff, a tool escolhida e o rastro de decisão.
 
-1. `src/config/agentic_assembly/assembly_service.py`: serviço principal e ordem oficial do fluxo.
-2. `src/config/agentic_assembly/models.py`: contratos tipados de request, response e `blocking_stage`.
-3. `src/config/agentic_assembly/nl/intent_parser.py`: resolução de alvo quando o pedido usa `auto`.
-4. `src/config/agentic_assembly/nl/llm_draft_generator.py`: geração estruturada do draft via LLM.
-5. `src/api/routers/config_assembly_router.py`: boundary HTTP do assembly.
+Valor para o negócio: uma primeira configuração aparece rapidamente sem a pessoa precisar abrir a tela técnica completa.
+
+### 24.2. Caso com ambiguidade de tool
+
+Cenário: o briefing exige uma tool obrigatória, mas o sistema não consegue escolher com segurança qual delas usar.
+
+O que acontece: o fluxo para no draft, devolve pergunta obrigatória e não chama validate nem confirm.
+
+Valor para operação: a plataforma prefere pedir decisão ao operador a publicar um YAML incorreto.
+
+### 24.3. Caso com fallback heurístico explícito
+
+Cenário: o operador escolhe modo `auto` com fallback heurístico autorizado.
+
+O que acontece: a UI envia a constraint apropriada e o preflight deixa claro que esse fallback foi autorizado conscientemente.
+
+Valor técnico: o comportamento não fica escondido nem “mágico” para suporte e auditoria.
+
+### 24.4. Caso de publicação assistida
+
+Cenário: o preview já está pronto e o operador quer salvar o resultado no catálogo do sistema.
+
+O que acontece: a UI calcula o caminho em `app/yaml/system`, exige confirmação visual e só então chama confirm com `apply=true`.
+
+Valor operacional: reduz risco de gravação em local incorreto.
+
+## 25. Explicação 101
+
+Imagine que o usuário escreveu um pedido como se estivesse explicando para um consultor: “quero um fluxo que faça triagem, consulte o CRM e finalize com um resumo”.
+
+Em um sistema ingênuo, isso viraria um YAML direto, com risco alto de erro. Nesta plataforma, o pedido passa por uma equipe invisível de verificação.
+
+Primeiro alguém checa se o pedido está pronto. Depois alguém monta uma planta técnica inicial. Depois outro passo revisa se essa planta respeita as regras da casa. Só no fim essa planta vira o arquivo final. E salvar o arquivo é uma decisão separada.
+
+Essa é a lógica do NL2YAML aqui.
+
+## 26. Troubleshooting
+
+### 26.1. O endpoint não gera nada útil
+
+Sintoma: o fluxo responde com bloqueio cedo demais.
+
+Causa provável: o briefing está vazio, a feature flag não está ativa, falta permissão ou o target ainda está ambíguo.
+
+### 26.2. O fluxo sempre devolve perguntas
+
+Sintoma: o preview final nunca aparece.
+
+Causa provável: faltam decisões obrigatórias no briefing, especialmente sobre tools, estrutura do fluxo ou contexto do target.
+
+### 26.3. O preview aparece, mas a publicação falha
+
+Sintoma: a UI mostra YAML final, porém o arquivo não é salvo.
+
+Causa provável: `output_path` ausente, caminho fora de `app/yaml`, conflito de escrita ou confirmação visual não marcada.
+
+### 26.4. O resultado do modo auto surpreende a equipe
+
+Sintoma: o comportamento parece ter mudado entre tentativas.
+
+Causa provável: diferença entre `llm_schema`, `heuristic` e `auto` com fallback explícito, além da qualidade do `base_yaml` e do próprio briefing.
+
+### 26.5. O diagnóstico técnico parece complexo demais
+
+Sintoma: a área usuária não entende o retorno.
+
+Causa provável: a equipe está olhando o AST bruto em vez de começar por `blocking_stage`, `questions`, `preflight_summary`, `decision_trace` e `validation_report`.
+
+## 27. Impacto técnico
+
+Tecnicamente, NL2YAML reduz o salto bruto entre briefing e configuração persistida. Ele encapsula complexidade em um pipeline com estágios explícitos, melhora auditabilidade com correlação e bloqueios formais e reduz a chance de YAML manual inconsistente entrar no repositório sem revisão adequada.
+
+## 28. Impacto executivo
+
+Executivamente, ele encurta o caminho entre intenção de negócio e prototipação operacional. Isso melhora velocidade de preparação, reduz gargalo nas etapas iniciais de modelagem e torna a colaboração entre times técnicos e funcionais menos dependente de tradução manual.
+
+## 29. Impacto comercial
+
+Comercialmente, NL2YAML ajuda a demonstrar maturidade de produto. Em vez de vender uma promessa genérica de “IA que escreve configuração”, o sistema mostra uma esteira assistida com perguntas guiadas, preview revisável, diff e publicação controlada.
+
+Isso responde melhor a clientes que querem produtividade, mas não aceitam improviso técnico.
+
+## 30. Impacto estratégico
+
+Estratégicamente, a feature prepara a plataforma para experiências assistidas de alto nível sem abandonar o núcleo YAML-first e AST-governado. Ela reforça a ideia de que a plataforma pode receber intenção em linguagem natural, mas continua respondendo dentro de contratos fortes e auditáveis.
+
+## 31. Como colocar para funcionar
+
+O caminho confirmado no código para usar NL2YAML exige:
+
+- API ativa com o router de config assembly disponível;
+- feature flag do assembly habilitada no ambiente;
+- usuário com permissão `config.generate`;
+- briefing não vazio;
+- target explícito ou passível de classificação;
+- quando aplicável, `base_yaml` coerente com o contexto do tenant;
+- se houver gravação real, `output_path` governado dentro de `app/yaml`.
+
+Na UI, o uso prático é:
+
+1. abrir o Studio NL2YAML;
+2. informar briefing, target e modo de geração;
+3. revisar perguntas pendentes, se houver;
+4. revisar preview, diff, diagnóstico e correlação;
+5. publicar apenas depois da confirmação visual.
+
+## 32. Checklist de entendimento
+
+- Entendi que NL2YAML aqui é AST-first e governado.
+- Entendi que o fluxo único roda `preflight -> draft -> validate -> confirm`.
+- Entendi que preview e publicação são etapas separadas.
+- Entendi que `questions` existem para evitar adivinhação do backend.
+- Entendi o papel de `blocking_stage`.
+- Entendi a diferença entre `heuristic`, `llm_schema` e `auto`.
+- Entendi que `auto` só pode usar fallback heurístico com opt-in explícito.
+- Entendi que o `output_path` real precisa ficar dentro de `app/yaml`.
+- Entendi que o Studio foi feito para operação guiada, não para edição irrestrita.
+
+## 33. Diagramas
+
+### 33.1. Sequência macro do fluxo único
+
+```mermaid
+sequenceDiagram
+    participant User as Operador
+    participant UI as Studio NL2YAML
+    participant API as Router config assembly
+    participant Service as AgenticAssemblyService
+    participant Draft as Draft AST
+    participant Confirm as Confirm dry-run
+
+    User->>UI: escreve briefing e escolhe target
+    UI->>API: POST objective-to-yaml
+    API->>Service: objective_to_yaml
+    Service->>Service: preflight
+    Service->>Draft: gerar rascunho AST
+    Draft-->>Service: ast_payload ou questions
+    Service->>Service: validate
+    Service->>Confirm: confirm apply false
+    Confirm-->>Service: final_yaml e diff
+    Service-->>API: resposta consolidada
+    API-->>UI: preview, diagnostics, decision_trace
+    User->>UI: confirma publicação
+    UI->>API: POST confirm apply true
+```
+
+Esse diagrama mostra a separação entre gerar e persistir. A publicação só acontece depois de o preview já existir.
+
+## 34. Evidências no código
+
+- `src/api/routers/config_assembly_router.py`
+  - Motivo da leitura: endpoint oficial de objective-to-yaml.
+  - Comportamento confirmado: permissão `config.generate`, injeção de `correlation_id`, logs de início e fim, resposta consolidada e tradução de erros HTTP.
+
+- `src/config/agentic_assembly/assembly_service.py`
+  - Motivo da leitura: pipeline canônico do NL2YAML.
+  - Comportamento confirmado: ordem `preflight -> draft -> validate -> confirm`, bloqueios por estágio, merge governado, diff preview e publicação com `apply=true`.
+
+- `src/config/agentic_assembly/models.py`
+  - Motivo da leitura: contrato tipado do fluxo.
+  - Comportamento confirmado: request, response, `blocking_stage`, `questions`, `chosen_tools`, `decision_trace`, `validation_report` e contratos de preflight/confirm.
+
+- `src/config/agentic_assembly/nl/intent_parser.py`
+  - Motivo da leitura: resolução do target e geração de perguntas de clarificação.
+  - Comportamento confirmado: classificação de `workflow`, `agent_supervisor` e `deepagent_supervisor`, com retorno explícito de ambiguidade.
+
+- `src/config/agentic_assembly/nl/llm_draft_generator.py`
+  - Motivo da leitura: uso governado de LLM no draft.
+  - Comportamento confirmado: envelope JSON obrigatório, schemas do target, regras de não inventar campos e obrigação de devolver perguntas quando faltar contexto.
+
+- `app/ui/static/ui-plataforma-nl2yaml-studio.html`
+  - Motivo da leitura: experiência funcional do usuário final.
+  - Comportamento confirmado: briefing, seleção de target, perguntas pendentes, preview, correlação, publicação assistida e diagnóstico técnico.
+
+- `app/ui/static/js/objective-yaml-studio.js`
+  - Motivo da leitura: lógica operacional do Studio.
+  - Comportamento confirmado: chamada a `/config/assembly/objective-to-yaml`, consolidação de perguntas via confirm, cálculo de `output_path`, confirmação visual e publicação final.
+
+- `tests/unit/test_agentic_assembly_service.py`
+  - Motivo da leitura: provas do comportamento do pipeline.
+  - Comportamento confirmado: ordem de etapas, bloqueio em draft com perguntas, sucesso em modo heurístico e autorização explícita de fallback no modo auto.
+
+- `tests/frontend/nl2yaml_studio_contract.test.js`
+  - Motivo da leitura: contrato funcional da UI.
+  - Comportamento confirmado: preenchimento do preview, liberação de publicação apenas com AST utilizável, reaproveitamento de autenticação do YAML e opt-in explícito do fallback heurístico.
+
+- `tests/unit/test_config_assembly_router_http.py`
+  - Motivo da leitura: boundary HTTP do endpoint.
+  - Comportamento confirmado: serialização de `final_yaml_text`, propagação de `correlation_id` e resposta com rastro de decisão e tools escolhidas.
+
+- `tests/unit/test_agentic_assembly_runtime_guardrails.py`
+  - Motivo da leitura: prova do fluxo HTTP real.
+  - Comportamento confirmado: retorno válido para workflow, `blocking_stage` nulo e presença de `decision_trace` no caminho feliz.

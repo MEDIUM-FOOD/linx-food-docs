@@ -1,4 +1,597 @@
-# AG-UI na Plataforma
+# Manual técnico, executivo, comercial e estratégico: AG-UI
+
+## 1. O que é esta feature
+
+AG-UI, neste projeto, é um protocolo de interface agentic orientado por eventos. Ele foi implementado para permitir que uma aplicação cliente envie um pedido de execução, mantenha uma conexão HTTP aberta e receba a história da execução em tempo real: início do run, etapas, chamadas de tool, snapshots e deltas de estado, texto incremental do assistente, erros e encerramento.
+
+O ponto central não é apenas “ter streaming”. O ponto central é dar à interface um contrato canônico para acompanhar uma execução agentic sem precisar conhecer os detalhes internos do runtime do backend. Em vez de cada tela inventar seu próprio formato de progresso, o sistema publica um protocolo estável de eventos AG-UI.
+
+Em linguagem simples, AG-UI é a camada que transforma uma execução interna da plataforma em uma conversa técnica compreensível para uma interface.
+
+## 2. Que problema ela resolve
+
+Sem AG-UI, uma aplicação cliente que quisesse acompanhar uma execução agentic teria três opções ruins.
+
+A primeira seria esperar só a resposta final. Isso empobrece a experiência, porque o usuário não vê etapa, tool, materialização parcial, nem sabe se o processo ainda está trabalhando ou travou.
+
+A segunda seria criar polling e contratos ad hoc por tela. Isso multiplica endpoints, formatos de payload e custo de manutenção.
+
+A terceira seria empurrar lógica de orquestração para o frontend. Isso aumenta acoplamento, enfraquece a segurança e obriga cada aplicação consumidora a aprender detalhes internos do runtime.
+
+AG-UI resolve esse problema oferecendo uma fronteira única: a aplicação cliente envia um run, o backend continua sendo a autoridade da execução e o frontend recebe um stream de eventos tipados e reconstituíveis.
+
+## 3. Visão conceitual
+
+Conceitualmente, AG-UI não é uma tela específica e não é um framework de frontend. Ele é o contrato entre uma execução agentic e uma interface consumidora.
+
+Neste repositório, isso aparece de forma clara no código: existe um modelo canônico de eventos, uma rota dedicada para runs AG-UI, um encoder SSE, um orquestrador que conhece apenas o lifecycle do protocolo e adapters que traduzem um domínio interno para esse contrato externo.
+
+Isso significa que a UI não conversa diretamente com a engine de domínio. Ela conversa com o protocolo AG-UI.
+
+## 4. Visão técnica
+
+Tecnicamente, a implementação atual tem cinco camadas principais.
+
+A primeira camada é o contrato tipado de protocolo em `src/api/schemas/ag_ui_models.py`. É ali que o sistema define `AgUiRunRequest`, `AgUiRunStartedEvent`, `AgUiRunFinishedEvent`, `AgUiRunErrorEvent`, eventos de tool, texto, snapshot, delta, activity, custom e raw, tudo com Pydantic estrito e aliases oficiais do protocolo.
+
+A segunda camada é a borda HTTP em `src/api/routers/ag_ui_router.py`. A rota `POST /ag-ui/runs` exige fonte explícita de configuração, valida permissão, resolve `correlation_id`, cria o contexto de execução e devolve `text/event-stream`.
+
+A terceira camada é a bridge de lifecycle em `src/api/services/ag_ui_run_orchestrator.py`. Ela emite `RUN_STARTED`, resolve o adapter por `executionKind`, propaga os eventos emitidos pelo adapter e garante evento terminal coerente em caso de sucesso, erro de adapter não encontrado ou falha interna.
+
+A quarta camada é o adapter de domínio. Hoje, o adapter concretamente registrado é `retail_demo`, implementado em `src/api/services/ag_ui_retail_demo_adapter.py`. Ele traduz capabilities governadas do domínio PDV em eventos AG-UI.
+
+A quinta camada é o runtime compartilhado do frontend, com cliente SSE, store de estado, sidecar, renderizadores e controllers reutilizáveis em JavaScript puro.
+
+## 5. Visão executiva
+
+Para liderança, AG-UI é importante porque transforma uma execução agentic em um ativo visual e auditável. Em vez de entregar só uma resposta final, a plataforma entrega uma trilha operacional que outras aplicações podem consumir sem reinventar integração de streaming.
+
+Isso melhora previsibilidade, reduz custo de integração entre times e acelera a entrega de experiências agentic mais ricas. Também reduz o risco de cada frente do produto criar seu próprio protocolo informal de andamento de execução.
+
+Em termos executivos, AG-UI reduz duplicação de solução e aumenta reutilização de plataforma.
+
+## 6. Visão comercial
+
+Comercialmente, AG-UI é uma vantagem porque ajuda a vender a ideia de interface agentic integrada, não apenas de backend inteligente. O cliente não vê um sistema que responde “depois”. Ele vê um sistema que mostra o que está fazendo, quais passos executou, quando um dashboard está sendo materializado e quando uma ação está pronta.
+
+Isso é especialmente valioso em demonstrações, provas de conceito e cenários de decisão operacional, onde confiança e transparência aumentam a percepção de valor.
+
+O discurso comercial correto não é “temos SSE”. O discurso correto é “temos um protocolo de interface agentic que permite integrar outras aplicações a execuções assistidas, com progresso, ferramentas, estado e materialização segura”.
+
+## 7. Visão estratégica
+
+Estratégicamente, AG-UI fortalece a plataforma em quatro pontos.
+
+O primeiro é padronização. Uma nova aplicação consumidora não precisa inventar um modelo próprio de eventos.
+
+O segundo é desacoplamento. O backend publica eventos estáveis; o cliente só precisa saber consumir o protocolo.
+
+O terceiro é extensibilidade. Novos domínios podem entrar por novos adapters sem quebrar a rota nem o modelo de transporte.
+
+O quarto é velocidade de produto. A plataforma consegue criar novas superfícies agentic reaproveitando o mesmo endpoint, o mesmo cliente SSE, o mesmo sidecar e o mesmo store compartilhado.
+
+## 8. Conceitos necessários para entender
+
+### 8.1. Run AG-UI
+
+Um run é uma execução rastreável do protocolo. Ele carrega `threadId`, `runId`, `executionKind`, `user_email`, entrada, metadata e uma fonte explícita de configuração.
+
+### 8.2. SSE
+
+SSE, ou Server-Sent Events, é o transporte usado pela rota AG-UI. O servidor mantém a conexão HTTP aberta e envia eventos ao longo do tempo.
+
+### 8.3. Adapter
+
+Adapter é a peça que traduz uma execução interna de domínio para eventos AG-UI. O orquestrador não conhece o domínio de negócio; ele só conhece adapters.
+
+### 8.4. Snapshot e delta
+
+Snapshot é uma fotografia completa do estado. Delta é uma alteração incremental, no caso desta implementação, modelada por JSON Patch. Os dois coexistem porque algumas telas precisam de baseline completa e outras de atualização incremental precisa.
+
+### 8.5. DashboardSpec
+
+DashboardSpec é o contrato seguro para dashboards dinâmicos. Em vez de o agente devolver HTML ou JavaScript, ele devolve uma especificação controlada de layout, widgets, fontes e políticas de segurança.
+
+### 8.6. Outcome de interrupção
+
+O protocolo suporta `RUN_FINISHED` com outcome do tipo `interrupt`, contendo interrupções estruturadas para HIL. O código e os testes confirmam esse suporte no contrato e no runtime compartilhado do frontend.
+
+### 8.7. Backend como autoridade
+
+No modelo atual, o navegador não decide a verdade da execução, não cria `correlation_id` e não escolhe livremente a tool ou a query efetiva. O backend continua sendo a fonte autorizada do processo.
+
+## 9. O protocolo AG-UI implementado aqui
+
+O protocolo implementado neste repositório tem três blocos principais: request, stream de eventos e metadados de execução.
+
+### 9.1. Request
+
+O request de `POST /ag-ui/runs` exige:
+
+- `threadId`;
+- `runId`;
+- `executionKind`;
+- `user_email`;
+- `input` opcional;
+- `parentRunId` opcional;
+- `metadata` opcional;
+- ao menos uma fonte explícita de configuração entre `yaml_config`, `yaml_inline_content` ou `encrypted_data`.
+
+Se nenhuma fonte de configuração estiver presente, o endpoint falha com `400`.
+
+### 9.2. Transporte
+
+O transporte é `text/event-stream`. O encoder SSE serializa cada `AgUiBaseEvent` como:
+
+- `event: <TYPE>`;
+- `data: <JSON oficial do evento>`.
+
+O backend ainda devolve `X-Correlation-Id` no header. O cliente lê esse valor; não deve inventá-lo.
+
+### 9.3. Eventos oficiais
+
+O contrato canônico lido no código suporta, entre outros:
+
+- `RUN_STARTED`;
+- `RUN_FINISHED`;
+- `RUN_ERROR`;
+- `STEP_STARTED`;
+- `STEP_FINISHED`;
+- `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` e `TEXT_MESSAGE_CHUNK`;
+- `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT` e `TOOL_CALL_CHUNK`;
+- `STATE_SNAPSHOT`;
+- `STATE_DELTA`;
+- `MESSAGES_SNAPSHOT`;
+- `ACTIVITY_SNAPSHOT`;
+- `ACTIVITY_DELTA`;
+- `RAW`;
+- `CUSTOM`.
+
+### 9.4. Regras de contrato importantes
+
+Os testes confirmam algumas regras fortes:
+
+- os nomes oficiais usam camelCase nos campos serializados;
+- modelos extras são proibidos por `extra="forbid"`;
+- `TEXT_MESSAGE_CONTENT` não aceita delta vazio;
+- o boundary tipado rejeita payloads fora do contrato oficial;
+- `STATE_DELTA` usa JSON Patch;
+- interrupção HIL via outcome `interrupt` é parte do protocolo, não evento inventado lateralmente.
+
+## 10. Como a feature funciona por dentro
+
+O fluxo começa no router AG-UI. A rota valida a permissão, exige contexto YAML explícito, resolve `correlation_id`, monta `AgUiRunContext` e cria o encoder SSE.
+
+Depois disso, o `AgUiRunOrchestrator` entra em ação. Ele emite `RUN_STARTED`, resolve o adapter a partir de `executionKind` e consome o stream de eventos desse adapter. Se o adapter não emitir um evento terminal, o orquestrador fecha o run com `RUN_FINISHED` e outcome de sucesso. Se o adapter não existir, emite `RUN_ERROR` com `AG_UI_ADAPTER_NOT_FOUND`. Se o adapter recusar a execução com `AgUiExecutionError`, o erro viaja para a interface com o código de domínio informado.
+
+Na implementação registrada hoje, `executionKind=retail_demo` aponta para `RetailDemoAgUiAdapter.default()`.
+
+## 11. Implementação atual na plataforma
+
+### 11.1. Montagem na API
+
+O router AG-UI está montado na API principal. Os testes confirmam que `/ag-ui/runs` coexiste com os endpoints legados de agente e streaming, em vez de substituí-los.
+
+### 11.2. Bridge desacoplada
+
+O orquestrador AG-UI não conhece regras de negócio do varejo, do dashboard nem de SQL. Ele conhece só o lifecycle do protocolo. Essa separação reduz acoplamento e permite registrar novos adapters sem alterar o contrato de transporte.
+
+### 11.3. Adapter governado de varejo
+
+O adapter `retail_demo` implementa dois caminhos concretos.
+
+O primeiro é o caminho de capability fixa, como `sales_summary`, `checkout_funnel`, `catalog_opportunities` e `customer_segments`. Nesse caso, o adapter resolve a capability, escolhe uma query aprovada do catálogo interno, executa a tool dinâmica governada e emite os eventos de tool, snapshot e mensagem textual.
+
+O segundo é o caminho `dashboard_dynamic`. Nesse caso, ele não executa a consulta fixa; delega a uma materialização de `DashboardSpec` segura e progressiva.
+
+### 11.4. Materialização de dashboard
+
+O serviço de materialização valida o `DashboardSpec`, emite um snapshot inicial com estado `materializing`, publica eventos customizados de início, validação, binding de fontes, adição de widgets e estado pronto, e usa deltas para adicionar fontes e widgets ao estado.
+
+Se a spec falhar, o sistema publica estado `validation_failed`, devolve lista estruturada de erros e gera uma mensagem textual curta avisando que a renderização foi recusada.
+
+### 11.5. Runtime compartilhado do frontend
+
+No frontend, a implementação reutilizável já existe em JavaScript puro:
+
+- cliente SSE com retry explícito e cancelamento;
+- store de estado AG-UI;
+- renderizadores de status, mensagens e timeline de tools;
+- sidecar compartilhado;
+- controller base para páginas da demo de varejo.
+
+Isso é importante porque o valor da feature não está apenas no backend. Está também em ter um cliente e uma ergonomia de consumo reaproveitáveis.
+
+## 12. Por que AG-UI ajuda a plataforma
+
+AG-UI ajuda a plataforma porque separa claramente três responsabilidades.
+
+A primeira é a execução de negócio, que continua no backend.
+
+A segunda é o protocolo de observabilidade e interface, que fica em AG-UI.
+
+A terceira é a apresentação da tela, que pode variar por aplicação sem obrigar reescrita do backend.
+
+Na prática, isso ajuda em quatro frentes:
+
+- reduz a necessidade de polling e contratos específicos por tela;
+- permite interface progressiva e auditável;
+- facilita reaproveitamento do mesmo backend por múltiplas superfícies;
+- mantém o controle crítico de correlação, tool e erro no servidor.
+
+## 13. Por que isso acelera outras aplicações
+
+AG-UI acelera o uso por outras aplicações porque entrega um ponto de integração simples e estável.
+
+Uma aplicação que queira usar a plataforma não precisa aprender o detalhe interno do adapter PDV, nem o shape interno do runtime de tool, nem inventar um mecanismo de progresso. Ela precisa só:
+
+- fazer `POST` para `/ag-ui/runs`;
+- enviar o contrato AG-UI do run;
+- ler o stream SSE;
+- reagir aos eventos tipados.
+
+Isso acelera outras aplicações por cinco motivos.
+
+O primeiro é transporte simples. HTTP + SSE são baratos de integrar e amplamente suportados.
+
+O segundo é contrato estável. O modelo de evento já está centralizado e protegido por testes.
+
+O terceiro é desacoplamento por adapter. Novos casos de uso podem entrar sem obrigar uma nova API por tela.
+
+O quarto é runtime compartilhado no frontend. Páginas estáticas do admin já provam que a integração não depende de React.
+
+O quinto é observabilidade pronta. O consumidor recebe `RUN_STARTED`, progresso, tools, snapshots, deltas, erros e `RUN_FINISHED` sem desenhar isso do zero.
+
+Em termos práticos, AG-UI reduz o esforço de “colar” uma nova aplicação à plataforma.
+
+## 14. Vantagens do protocolo nesta arquitetura
+
+As vantagens concretas observadas aqui são:
+
+- uma rota dedicada sem quebrar contratos legados;
+- backend como autoridade da execução;
+- `correlation_id` vindo do backend, não do browser;
+- fronteira tipada e estrita para eventos;
+- deltas em JSON Patch para reconstrução incremental;
+- suporte de protocolo para HIL sem inventar outro canal;
+- possibilidade de novos adapters por `executionKind`;
+- reuse de cliente, store, sidecar e renderizadores no frontend.
+
+Essas vantagens não são abstratas. Elas aparecem na implementação e nos testes existentes.
+
+## 15. Casos reais de uso já comprovados no projeto
+
+### 15.1. Cockpit de vendas
+
+Há uma tela AG-UI fixa para cockpit de vendas. O caminho real confirmado dispara a capability `sales_summary`, usa a tool `dyn_sql<pdv_vendas_kpis_periodo>`, abre o sidecar, recebe `correlation_id` do backend e atualiza o DOM com o resultado governado.
+
+### 15.2. Radar de checkout
+
+Há uma tela AG-UI fixa para radar de checkout. O fluxo confirmado usa `checkout_funnel`, resolve a query governada `pdv_checkout_funil_status` e entrega o resultado pela mesma rota AG-UI.
+
+### 15.3. Central de catálogo
+
+Há uma tela AG-UI fixa para catálogo. O adapter resolve `catalog_opportunities` e usa o catálogo interno para mapear a capability à query aprovada correspondente.
+
+### 15.4. Dashboard dinâmico
+
+Existe uma tela AG-UI de dashboard dinâmico. Ela envia `capability=dashboard_dynamic`, passa `DashboardSpec`, o backend valida a spec, materializa um canvas progressivamente e os testes Playwright confirmam um cenário real em que a interface sai de estado vazio para um canvas com quatro widgets, histórico atualizado e sidecar aberto com `correlation_id` retornado pela API.
+
+Esse é o caso mais rico do slice AG-UI atual porque mostra o protocolo servindo não só para chat, mas para montar interface por fases.
+
+## 16. Pipeline ou fluxo principal
+
+```mermaid
+flowchart TD
+    A[Aplicacao cliente envia POST para /ag-ui/runs] --> B[Router valida permissao e fonte de configuracao]
+    B --> C[Router resolve correlation_id e cria AgUiRunContext]
+    C --> D[Orquestrador emite RUN_STARTED]
+    D --> E[Orquestrador resolve adapter por executionKind]
+    E --> F{executionKind atual}
+    F -- retail_demo capability fixa --> G[Adapter resolve capability e query governada]
+    F -- retail_demo dashboard_dynamic --> H[Adapter delega para materializacao de DashboardSpec]
+    G --> I[Eventos de step, tool, snapshot e mensagem]
+    H --> J[Eventos custom, snapshot, deltas e mensagem de validacao ou prontidao]
+    I --> K[Encoder serializa BaseEvent em SSE]
+    J --> K
+    K --> L[Cliente SSE atualiza sidecar e tela]
+    L --> M[RUN_FINISHED ou RUN_ERROR]
+```
+
+Esse fluxo mostra um detalhe importante: a UI sempre fala com a mesma rota, mas o backend decide como traduzir aquela execução para eventos AG-UI.
+
+## 17. Sequência do dashboard dinâmico
+
+```mermaid
+sequenceDiagram
+    participant UI as Tela AG-UI Dashboard
+    participant Router as /ag-ui/runs
+    participant Orch as AgUiRunOrchestrator
+    participant Adapter as RetailDemoAgUiAdapter
+    participant Materializer as DashboardMaterializationService
+
+    UI->>Router: POST com executionKind=retail_demo e capability=dashboard_dynamic
+    Router->>Orch: run(context)
+    Orch->>Adapter: execute(context)
+    Adapter->>Materializer: build_events(dashboardSpec)
+    Materializer-->>Adapter: snapshot inicial + eventos custom + deltas
+    Adapter-->>Orch: stream de eventos AG-UI
+    Orch-->>Router: RUN_STARTED + eventos do dashboard + RUN_FINISHED
+    Router-->>UI: SSE com correlation_id no header
+```
+
+Essa sequência explica por que o dashboard dinâmico acelera outras aplicações: o consumidor não precisa conhecer a lógica de materialização; ele só consome o stream.
+
+## 18. O que acontece em caso de sucesso
+
+No caminho feliz, a aplicação cliente envia um request com fonte de configuração válida, o backend resolve o adapter correto, o orquestrador emite `RUN_STARTED`, o adapter produz os eventos do domínio e o frontend recebe a sequência inteira até `RUN_FINISHED`.
+
+No caso das telas fixas de varejo, o sucesso inclui timeline de tool, snapshot de resultado e texto curto do assistente.
+
+No caso do dashboard dinâmico, o sucesso inclui snapshot inicial, binding de fontes, adição incremental de widgets e mudança final de estado para `ready`.
+
+## 19. O que acontece em caso de erro
+
+Os erros confirmados no código lido incluem estes.
+
+### 19.1. Ausência de fonte de configuração
+
+Se o request não enviar `yaml_config`, `yaml_inline_content` nem `encrypted_data`, o router retorna `400`.
+
+### 19.2. Falta de autenticação ou permissão
+
+Sem autenticação apropriada, o endpoint falha fechado.
+
+### 19.3. Adapter não registrado
+
+Se `executionKind` não tiver adapter correspondente, o orquestrador emite `RUN_ERROR` com `AG_UI_ADAPTER_NOT_FOUND`.
+
+### 19.4. SQL livre no payload PDV
+
+O adapter de varejo bloqueia payloads com chaves como `sql`, `raw_sql`, `sql_query` e `statement`, emitindo erro explícito de SQL livre bloqueado.
+
+### 19.5. Capability ausente ou não permitida
+
+Se a capability do domínio PDV não for reconhecida, o adapter devolve erro de capability obrigatória ou capability não permitida.
+
+### 19.6. Configuração PDV incompleta
+
+Sem `DATABASE_VAREJO_DSN` ou `DATABASE_VAREJO_SCHEMA`, o adapter falha com `AG_UI_RETAIL_CONFIG_MISSING`.
+
+### 19.7. DashboardSpec inválido
+
+Se a spec do dashboard contiver fonte inexistente, parâmetro proibido, conteúdo inseguro ou layout impossível, a materialização muda o estado para `validation_failed` e devolve erros estruturados.
+
+## 20. Observabilidade e diagnóstico
+
+AG-UI melhora observabilidade porque torna a sequência operacional visível para a interface e para o log.
+
+Os principais sinais úteis são:
+
+- `X-Correlation-Id` devolvido pela API;
+- `RUN_STARTED`, `RUN_FINISHED` e `RUN_ERROR`;
+- `STEP_STARTED` e `STEP_FINISHED`;
+- timeline de `TOOL_CALL_*`;
+- `STATE_SNAPSHOT` e `STATE_DELTA`;
+- eventos customizados do dashboard dinâmico.
+
+A ordem correta de diagnóstico é esta:
+
+1. Confirmar se o request tinha fonte de configuração válida.
+2. Confirmar se a rota respondeu `text/event-stream`.
+3. Confirmar o `correlation_id` retornado no header.
+4. Confirmar o `executionKind` enviado.
+5. Confirmar se houve `RUN_STARTED`.
+6. Confirmar se o erro veio do router, do orquestrador, do adapter PDV ou do validador de dashboard.
+7. Só então investigar o detalhe da capability ou da spec.
+
+## 21. Decisões técnicas e trade-offs
+
+### 21.1. Rota própria em vez de reaproveitar endpoints legados
+
+Ganho: o protocolo AG-UI fica isolado e não quebra contratos antigos.
+
+Custo: existe mais uma fronteira HTTP para manter.
+
+### 21.2. Orquestrador desacoplado do domínio
+
+Ganho: adapters novos entram sem alterar o lifecycle do protocolo.
+
+Custo: o adapter precisa assumir responsabilidade explícita de tradução do domínio.
+
+### 21.3. Backend como fonte única de `correlation_id`
+
+Ganho: reduz falsificação e divergência de rastreabilidade.
+
+Custo: o frontend depende do header do backend para exibir o identificador.
+
+### 21.4. DashboardSpec em vez de HTML livre
+
+Ganho: materialização segura, validável e governada.
+
+Custo: o canvas fica mais restrito do que um ambiente arbitrário de templating.
+
+### 21.5. Capability governada em vez de SQL livre
+
+Ganho: menor risco de abuso e maior previsibilidade do domínio.
+
+Custo: menos liberdade improvisada no cliente.
+
+## 22. O que já está pronto e o que ainda é limite
+
+O que está comprovado no código atual:
+
+- protocolo canônico de eventos AG-UI;
+- rota `POST /ag-ui/runs` com SSE;
+- encoder SSE;
+- bridge por adapter;
+- adapter `retail_demo` registrado;
+- capabilities fixas de varejo;
+- dashboard dinâmico materializado com contrato seguro;
+- cliente SSE, sidecar e controller compartilhados em JS puro;
+- testes de contrato, testes de frontend e testes Playwright cobrindo o caso real.
+
+O que exige cuidado ao comunicar:
+
+- o adapter concretamente registrado hoje é `retail_demo`;
+- o protocolo suporta interrupção HIL, mas o slice concreto de demo lido aqui está centrado em varejo e dashboard, não em um adapter de produção genérico com todos os cenários agentic da plataforma;
+- AG-UI não substitui automaticamente WebChat nem todos os endpoints de agente.
+
+## 23. Exemplos práticos guiados
+
+### 23.1. Aplicação administrativa que quer transparência de consulta
+
+Cenário: uma tela de vendas quer mostrar não só o número final, mas também qual consulta governada foi acionada.
+
+Como AG-UI ajuda: a tela faz um POST para `/ag-ui/runs`, recebe `RUN_STARTED`, eventos de `TOOL_CALL_*`, snapshot com resultado e `RUN_FINISHED`.
+
+Valor prático: a interface mostra execução, resultado e trilha da tool sem inventar um backend específico para aquela tela.
+
+### 23.2. Aplicação que precisa materializar interface por fases
+
+Cenário: um dashboard nasce a partir de uma spec segura e precisa aparecer aos poucos.
+
+Como AG-UI ajuda: o backend emite snapshot inicial com `materializing`, depois fontes e widgets por eventos e deltas, e por fim estado `ready`.
+
+Valor prático: a tela acompanha o nascimento do dashboard em vez de ficar cega até a resposta final.
+
+### 23.3. Outra aplicação interna que quer reutilizar a plataforma
+
+Cenário: um portal interno diferente do admin quer consumir a mesma execução agentic.
+
+Como AG-UI ajuda: em vez de acoplar ao runtime interno, o portal reaproveita o protocolo, a rota e o cliente SSE.
+
+Valor prático: reduz esforço de integração e evita criar um novo endpoint de progresso dedicado.
+
+## 24. Explicação 101
+
+Pense no AG-UI como uma cabine de transmissão ao vivo da execução do agente. Em vez de esperar só o placar final, a aplicação acompanha o jogo acontecendo: começou, chamou uma ferramenta, atualizou o estado, montou um widget, terminou ou falhou.
+
+Isso é útil porque outras aplicações não precisam saber jogar o jogo por dentro. Elas só precisam assistir à transmissão do jeito certo.
+
+## 25. Limites e pegadinhas
+
+Algumas interpretações erradas precisam ser evitadas.
+
+A primeira é achar que AG-UI, neste repositório, é sinônimo de React ou CopilotKit. Não é. O slice comprovado usa HTML estático e JavaScript puro.
+
+A segunda é achar que o frontend pode inventar `correlation_id`. Os testes Playwright confirmam explicitamente que o payload enviado não deve carregar `correlationId` nem `correlation_id`.
+
+A terceira é achar que o adapter PDV aceita SQL livre. O código faz o oposto.
+
+A quarta é tratar `DashboardSpec` como canal para HTML ou código arbitrário. O validador bloqueia esse tipo de conteúdo.
+
+A quinta é presumir que qualquer `executionKind` já existe. O orquestrador depende de adapter registrado.
+
+## 26. Troubleshooting
+
+### 26.1. A aplicação abre a conexão, mas não recebe eventos
+
+Sintoma: a interface não evolui.
+
+Causa provável: resposta não veio como `text/event-stream`, erro de autenticação ou falha anterior ao `RUN_STARTED`.
+
+Como confirmar: verificar status HTTP, header `X-Correlation-Id` e presença de `event: RUN_STARTED` no stream.
+
+### 26.2. O run termina com erro de adapter
+
+Sintoma: `RUN_ERROR` com código de adapter.
+
+Causa provável: `executionKind` sem adapter ou erro explícito do domínio.
+
+Como confirmar: revisar `executionKind` enviado e o código do erro retornado.
+
+### 26.3. A capability PDV falha imediatamente
+
+Sintoma: `RUN_ERROR` no começo da execução.
+
+Causa provável: capability ausente, parâmetros inválidos, SQL livre no payload ou configuração incompleta do banco demo.
+
+Como confirmar: revisar input do run e o código de erro do adapter.
+
+### 26.4. O dashboard dinâmico não materializa
+
+Sintoma: estado `validation_failed` ou ausência de widgets.
+
+Causa provável: `DashboardSpec` inválido ou inseguro.
+
+Como confirmar: revisar os erros estruturados de validação retornados no stream.
+
+## 27. Checklist de entendimento
+
+- Entendi que AG-UI é um protocolo de interface agentic, não uma tela específica.
+- Entendi que a rota dedicada é `/ag-ui/runs`.
+- Entendi que o transporte é SSE.
+- Entendi que o contrato de eventos é tipado e estrito.
+- Entendi que o backend continua sendo a autoridade da execução.
+- Entendi o papel do orquestrador e do adapter.
+- Entendi que o adapter registrado hoje é `retail_demo`.
+- Entendi que as telas fixas usam capabilities governadas e não SQL livre.
+- Entendi que o dashboard dinâmico usa `DashboardSpec` seguro e materialização incremental.
+- Entendi por que isso acelera outras aplicações.
+- Entendi os limites atuais do slice.
+
+## 28. Evidências no código
+
+- `src/api/schemas/ag_ui_models.py`
+  - Motivo da leitura: contrato oficial do protocolo.
+  - Comportamento confirmado: request AG-UI, eventos tipados, aliases camelCase, deltas em JSON Patch e suporte a outcome `interrupt`.
+
+- `src/api/routers/ag_ui_router.py`
+  - Motivo da leitura: fronteira HTTP real.
+  - Comportamento confirmado: rota `POST /ag-ui/runs`, exigência de fonte de configuração, SSE e header `X-Correlation-Id`.
+
+- `src/api/services/ag_ui_event_encoder.py`
+  - Motivo da leitura: transporte SSE.
+  - Comportamento confirmado: serialização `event:` + `data:` por `AgUiBaseEvent`.
+
+- `src/api/services/ag_ui_run_orchestrator.py`
+  - Motivo da leitura: lifecycle independente do domínio.
+  - Comportamento confirmado: `RUN_STARTED`, resolução de adapter, finalização automática e tratamento de erros canônicos.
+
+- `src/api/services/ag_ui_retail_demo_adapter.py`
+  - Motivo da leitura: implementação concreta registrada hoje.
+  - Comportamento confirmado: capabilities PDV, bloqueio de SQL livre e tool `dyn_sql<query_id>`.
+
+- `src/api/services/ag_ui_dashboard_materialization.py`
+  - Motivo da leitura: materialização progressiva do dashboard.
+  - Comportamento confirmado: snapshot inicial, eventos customizados, deltas, validação falha e estado `ready`.
+
+- `src/api/schemas/ag_ui_dashboard_models.py`
+  - Motivo da leitura: contrato seguro do dashboard.
+  - Comportamento confirmado: widgets permitidos, fontes `dyn_sql`, parâmetros declarados e bloqueio de conteúdo inseguro.
+
+- `app/ui/static/js/shared/ag-ui-client.js`
+  - Motivo da leitura: cliente compartilhado do frontend.
+  - Comportamento confirmado: POST SSE, retry, cancelamento, leitura do header `X-Correlation-Id` e ausência de geração local de `correlation_id`.
+
+- `app/ui/static/js/shared/ag-ui-sidecar-chat.js`
+  - Motivo da leitura: sidecar compartilhado.
+  - Comportamento confirmado: renderização reutilizável de mensagens, timeline de tools, correlation id e interrupções HIL.
+
+- `app/ui/static/js/shared/ag-ui-retail-demo-page.js`
+  - Motivo da leitura: controller base de telas AG-UI de varejo.
+  - Comportamento confirmado: montagem do payload do run, uso de `/ag-ui/runs`, resolução da fonte de configuração e atualização do resultado principal.
+
+- `tests/unit/test_ag_ui_protocol_contract.py`
+  - Motivo da leitura: proteção do protocolo.
+  - Comportamento confirmado: serialização oficial, rejeição de payload fora do contrato e suporte formal a interruption outcome.
+
+- `tests/unit/test_ag_ui_router.py`
+  - Motivo da leitura: proteção do boundary HTTP.
+  - Comportamento confirmado: autenticação, fonte de configuração obrigatória e stream SSE.
+
+- `tests/unit/test_ag_ui_retail_demo_adapter.py`
+  - Motivo da leitura: proteção do adapter real.
+  - Comportamento confirmado: capabilities PDV, bloqueio de SQL livre e materialização do dashboard dinâmico.
+
+- `tests/playwright/test_ag_ui_varejo_demo_pages.py`
+  - Motivo da leitura: caso real das telas fixas.
+  - Comportamento confirmado: sidecar, `correlation_id` vindo do backend, atualização do DOM e payload sem `correlationId` no browser.
+
+- `tests/playwright/test_ag_ui_dashboard_dinamico.py`
+  - Motivo da leitura: caso real do dashboard dinâmico.
+  - Comportamento confirmado: canvas saindo de vazio para quatro widgets, histórico atualizado e spec segura sem `correlationId` liberado.# AG-UI na Plataforma
 
 ## Visão geral
 

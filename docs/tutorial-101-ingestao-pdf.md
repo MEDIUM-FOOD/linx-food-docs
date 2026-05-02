@@ -1,4 +1,931 @@
-# Tutorial 101: pipeline de ingestao de PDF
+# Manual tecnico, executivo, comercial e estrategico: pipeline de ingestao de PDF
+
+## 1. O que e esta feature
+
+O pipeline de ingestao de PDF e a esteira especializada que transforma um PDF bruto em conteudo utilizavel pelo restante da plataforma. Ele nao existe apenas para tirar texto de um arquivo. Ele existe para decidir se o documento precisa de OCR antes do parsing, escolher a fila correta de engines, consolidar metadados, preservar sinais de estrutura, decidir se o documento precisa de OCR complementar, abrir o ramo multimodal quando fizer sentido e, no fim, produzir chunks e telemetria operacional confiavel.
+
+Em linguagem simples: este modulo e o ponto em que a plataforma deixa de tratar PDF como um anexo opaco e passa a trata-lo como um documento com estrategia propria de leitura.
+
+## 2. Que problema ele resolve
+
+PDF parece um formato unico, mas no runtime real ele esconde problemas muito diferentes.
+
+- Alguns PDFs ja nascem digitais e permitem extracao textual direta.
+- Outros sao escaneados e quase nao tem texto nativo.
+- Outros tem texto, mas com layout, tabelas e imagens que afetam a qualidade do acervo.
+- Outros exigem mais estrutura para RAG do que um parser linear consegue oferecer.
+
+Sem um pipeline especializado, a plataforma cairia em tres erros comuns.
+
+- Trataria OCR como remendo unico para qualquer caso.
+- Misturaria engines leves e pesadas sem criterio operacional.
+- Perderia a capacidade de explicar por que um PDF foi bem ou mal ingerido.
+
+## 3. Visao executiva
+
+Para lideranca, o pipeline de PDF importa porque muitos projetos corporativos sao julgados pela qualidade com que tratam contratos, laudos, regulamentos, cadernos tecnicos, relatorios e normativos. Se a ingestao de PDF for ruim, o produto transmite baixa confianca mesmo quando outras partes da arquitetura estao corretas.
+
+O valor executivo desta feature esta em reduzir risco de base de conhecimento incompleta, de resposta fraca por parsing inadequado e de suporte caro por falta de observabilidade. O pipeline existe para trocar improviso por governanca.
+
+## 4. Visao comercial
+
+Comercialmente, esta feature sustenta uma promessa muito concreta: a plataforma nao trata PDF como upload generico. Ela aplica tecnicas diferentes para PDF digital, PDF pobre em texto, PDF tabular e PDF visualmente rico.
+
+Isso ajuda em conversas com clientes que perguntam se o sistema le normas, contratos, manuais de engenharia, laudos escaneados e documentos cheios de quadros. A resposta suportada pelo codigo e sim, mas com estrategia configuravel por engine e por etapa. O que nao pode ser prometido e leitura perfeita para qualquer PDF sem configuracao, sem dependencia e sem tuning.
+
+## 5. Visao estrategica
+
+Estrategicamente, o pipeline de PDF fortalece a plataforma em cinco frentes.
+
+- Separa OCR documental, parsing textual, limpeza, multimodal e chunking em responsabilidades diferentes.
+- Mantem configuracao YAML como fonte de verdade da fila de parsing.
+- Permite trocar e ordenar engines sem reescrever o processor.
+- Cria um contrato canonico de resultado para qualquer engine.
+- Melhora observabilidade com manifest, metadados, breaker e resultado deterministico.
+
+## 6. Conceitos necessarios para entender
+
+### PDF documental versus PDF visual
+
+PDF documental e o que ja traz texto nativo suficiente para leitura direta. PDF visual e o que depende mais de imagem, layout, tabela ou OCR para produzir valor.
+
+### OCR documental
+
+OCR documental e o pre-processamento do PDF inteiro antes do parsing principal. Ele existe para casos em que o documento parece escaneado ou pobre em texto ja na amostra inicial.
+
+### OCR por pagina
+
+OCR por pagina nao e a mesma coisa que OCR documental. Ele acontece dentro de algumas engines durante o parsing, quando uma pagina especifica nao oferece texto suficiente.
+
+### OCR multimodal
+
+OCR multimodal e o OCR aplicado sobre imagens extraidas do PDF dentro do fluxo multimodal. Ele nao tenta salvar o PDF inteiro; ele tenta enriquecer a leitura de imagens relevantes.
+
+### Parsing engine
+
+Parsing engine e a implementacao especializada que extrai texto, e em alguns casos tabelas, imagens, anexos e metadados. O pipeline nao pressupoe uma unica engine universal.
+
+### Engine deterministica
+
+A engine deterministica nao e um parser especifico. Ela e o orquestrador que le a fila ordenada do YAML, testa uma engine de cada vez e decide se continua ou encerra o parse.
+
+### Failure policy
+
+Failure policy e a politica usada quando nenhuma engine retorna sucesso formal. O codigo confirma duas politicas: `strict_first_success` e `best_effort`.
+
+### Circuit breaker
+
+Circuit breaker e o mecanismo que evita insistir em engine quebrada repetidamente. Ele nao escolhe a melhor engine; ele protege a esteira contra insistencia em runtime defeituoso.
+
+### Materializacao de resultado canonico
+
+Qualquer engine precisa devolver um `PdfParsingEngineResult` com campos padronizados como texto, paginas processadas, paginas vazias, paginas com OCR, `pages_info`, tabelas, imagens, anexos e metadata. Isso permite que o resto do pipeline nao precise conhecer os detalhes internos de cada provider.
+
+## 7. Como o pipeline funciona por dentro
+
+O fluxo real do PDF comeca no `PDFContentProcessor`, mas ele nao monta tudo sozinho. Primeiro o runtime PDF e inicializado por `PdfRuntimeCoordinator`. Esse bootstrap resolve configuracoes, liga OCR, tabelas, metadata, pipelines e suporte multimodal. Depois `PdfParsingRuntimeBuilder` monta os servicos de apoio e resolve a engine principal de parsing.
+
+Com o runtime pronto, o pipeline de extracao executa quatro etapas fixas.
+
+- `ValidatePdfBytesStage`
+- `ApplyDocumentOcrStage`
+- `ParseViaEngineStage`
+- `ApplyEngineResultStage`
+
+Quando a extracao termina, o pipeline textual processa o texto em tres etapas.
+
+- `PreserveStructureStage`
+- `RemoveBasicArtifactsStage`
+- `FixSimpleOcrArtifactsStage`
+
+Depois disso, o `PdfRichProcessingApplicationService` decide se precisa de OCR basico complementar e se o documento deve entrar no trilho multimodal. Se o multimodal nao entrar, o fluxo fecha no chunking. Se entrar, `PdfMultimodalApplicationService` executa extracao de imagens, OCR multimodal, descricao visual e eventual embedding visual, sempre com status operacional explicito.
+
+## 8. Divisao em etapas ou submodulos
+
+### 8.1. Bootstrap do runtime PDF
+
+O que e: a fase que prepara configuracao, servicos auxiliares e pipelines internos.
+
+Por que existe: para impedir que o processor principal vire uma god class cheia de wiring.
+
+Tecnica usada: `PdfRuntimeCoordinator` e `PdfParsingRuntimeBuilder`.
+
+O que recebe: configuracao YAML ja resolvida do profile PDF.
+
+O que entrega: OCR service, document OCR service, table service, metadata builder, pages info builder e a engine efetiva de parsing.
+
+O que pode dar errado: configuracao invalida, engine nao suportada, dependencia ausente ou wiring de Docling inconsistente.
+
+### 8.2. Validacao do arquivo PDF
+
+O que e: a etapa `ValidatePdfBytesStage`.
+
+Por que existe: o pipeline falha cedo se o arquivo nao tem bytes ou nao comeca com assinatura `%PDF`.
+
+Tatica: abortar antes de OCR ou parse quando o documento ja esta invalidado na entrada.
+
+Valor tecnico: evita diagnostico enganoso em etapas posteriores.
+
+### 8.3. OCR documental condicional
+
+O que e: a etapa `ApplyDocumentOcrStage`, apoiada por `PdfDocumentOcrService`.
+
+Por que existe: alguns PDFs precisam ser regravados com OCR antes do parsing principal.
+
+Tatica: analisar uma amostra do documento, medir texto, densidade e sinais suspeitos e decidir se o OCR document-level deve entrar.
+
+Tecnica: `PdfDocumentOcrAnalyzer` calcula razoes de paginas vazias, baixo texto, media de caracteres e texto suspeito. A decisao consolidada pode ser forcada por configuracao ou disparada por sinais objetivos.
+
+Valor tecnico: separa o problema de "o PDF inteiro esta ruim" do problema de "algumas paginas estao ruins".
+
+### 8.4. Parsing via engine
+
+O que e: a etapa `ParseViaEngineStage`.
+
+Por que existe: o sistema precisa de uma fila ordenada de engines, nao de um parser unico fixo.
+
+Tatica: usar uma engine deterministica que chama engines concretas na ordem do YAML e decide a continuidade com base em excecao, `None` ou `is_successful=False`.
+
+Tecnica: `PdfParsingEngineResolver` monta `DeterministicLegoPdfParsingEngine` a partir de `processing.parsing.base.options` e aplica `failure_policy`.
+
+Valor tecnico: permite trocar estrategia sem mexer no restante do pipeline.
+
+### 8.5. Aplicacao do resultado da engine
+
+O que e: a etapa `ApplyEngineResultStage`.
+
+Por que existe: o pipeline precisa transformar o retorno da engine em texto extraido e payload de persistencia controlada.
+
+Tatica: consolidar texto, tabelas, imagens, anexos e resumo de OCR num contrato unico.
+
+Valor tecnico: reduz acoplamento entre engine concreta e processor.
+
+### 8.6. Limpeza e normalizacao do texto
+
+O que e: o pipeline `pdf_text_processing`.
+
+Por que existe: o parse bruto ainda pode conter marcas de pagina, `form feed`, espacos excessivos e artefatos simples de OCR.
+
+Etapas confirmadas:
+
+- `PreserveStructureStage` preserva estrutura e normaliza marcadores de pagina.
+- `RemoveBasicArtifactsStage` remove `form feed` e artefatos basicos de whitespace.
+- `FixSimpleOcrArtifactsStage` tenta corrigir palavras cujas letras ficaram separadas por espacos.
+
+### 8.7. Fluxo rico: OCR basico complementar e decisao multimodal
+
+O que e: a orquestracao de `PdfRichProcessingApplicationService`.
+
+Por que existe: depois do parse principal, o sistema ainda pode precisar complementar OCR ou abrir o trilho multimodal.
+
+Tatica: primeiro preserva a extracao existente; so depois avalia OCR basico complementar. Em seguida decide se o documento e visual o suficiente para multimodal.
+
+Valor tecnico: evita jogar OCR em cima de texto que ja esta bom e evita abrir multimodal em qualquer PDF sem criterio.
+
+### 8.8. Trilha multimodal
+
+O que e: o fluxo `PdfMultimodalApplicationService`.
+
+Por que existe: alguns PDFs carregam valor em imagens, nao apenas em texto corrido.
+
+Tatica: extrair imagens, aplicar OCR multimodal, descricao visual e possivel embedding visual, mantendo status por etapa.
+
+Valor tecnico: separa enriquecimento visual do parsing textual comum.
+
+### 8.9. Chunking final
+
+O que e: a etapa que transforma o texto final em chunks indexaveis.
+
+Por que existe: RAG nao consome PDF inteiro como bloco unico.
+
+Tatica: `PdfChunkingService` usa Strategy Pattern, analisa tipo de conteudo, paginas detectadas e estrategia disponivel. Se nenhuma estrategia servir, cai em fallback explicito.
+
+Valor tecnico: torna o chunking observavel e ajustavel, em vez de uma quebra cega por tamanho fixo.
+
+## 9. Pipeline principal de ponta a ponta
+
+```mermaid
+flowchart TD
+  A[PDF bruto chega ao processor] --> B[Bootstrap do runtime PDF]
+  B --> C[ValidatePdfBytesStage]
+  C --> D[ApplyDocumentOcrStage]
+  D --> E[ParseViaEngineStage]
+  E --> F[ApplyEngineResultStage]
+  F --> G[Pipeline textual]
+  G --> H[Decisao de OCR basico complementar]
+  H --> I{Documento pede multimodal?}
+  I -->|Nao| J[PdfChunkingService]
+  I -->|Sim| K[PdfMultimodalApplicationService]
+  K --> L[Chunks multimodais ou fallback textual]
+  J --> M[Persistencia e telemetria]
+  L --> M[Persistencia e telemetria]
+```
+
+O fluxo importa porque mostra a regra principal do desenho: o parse textual nao e o final do pipeline, mas tambem nao pode ser atropelado por OCR e multimodal sem criterio.
+
+## 10. Mecanismo de engines
+
+O mecanismo de engines e o coracao tecnico deste modulo.
+
+### 10.1. Contrato canonico
+
+Toda engine implementa o protocolo `PdfParsingEngine`, que define:
+
+- `engine_id`
+- `parse(raw_pdf_bytes, source_path)`
+- `is_successful(result)`
+- `log_progress(...)`
+
+O resultado canonico e `PdfParsingEngineResult`, com campos como texto, paginas totais, paginas processadas, paginas vazias, paginas falhas, paginas com OCR, `pages_info`, tabelas, `tables_summary`, `images_summary`, `attachments_summary`, `quality_summary`, `classification_overview`, `pdf_metadata`, `encrypted` e `text_extraction_method`.
+
+Na pratica, isso significa que qualquer engine precisa devolver um objeto que o resto do pipeline consiga entender sem conhecer o provider interno.
+
+### 10.2. Heuristica de sucesso
+
+A heuristica padrao de sucesso e simples: o parse e considerado util quando ha texto nao vazio ou pelo menos uma tabela. Isso evita declarar fracasso quando o documento e majoritariamente tabular.
+
+### 10.3. Fila ordenada pelo YAML
+
+O resolver monta a fila a partir de `processing.parsing.base.options`. A ordem declarada nessa lista e a ordem executada pela engine deterministica.
+
+Regra pratica confirmada no codigo:
+
+- a engine atual roda;
+- se der excecao, `None` ou retorno sem sucesso formal, a proxima pode entrar;
+- se houver sucesso formal, o pipeline para ali;
+- nao existe fallback implicito fora da fila declarada.
+
+### 10.4. Failure policy
+
+O codigo confirma duas politicas.
+
+- `strict_first_success`: se nenhuma engine tiver sucesso formal, o parse aborta.
+- `best_effort`: se nenhuma engine tiver sucesso formal, o melhor resultado parcial pode ser devolvido, com isso registrado em logs e metadados.
+
+### 10.5. Disponibilidade e fail closed
+
+Antes de montar algumas engines opcionais, o resolver testa dependencias. Quando a engine esta indisponivel:
+
+- se o modo configurado for `default` ou `always`, o wiring falha fechado;
+- se o modo tolerar indisponibilidade, a fila pode receber uma `DisabledPdfParsingEngine`, que marca explicitamente o salto para a proxima opcao.
+
+### 10.6. Circuit breaker
+
+Quase todas as engines efetivas entram embrulhadas por `BreakerAwarePdfParsingEngine`. Esse wrapper consulta um registro de circuit breaker antes de parsear. Se o circuito estiver aberto, a engine e substituida por uma `DisabledPdfParsingEngine` com motivo `circuit_breaker_open`. Se a engine falhar em runtime, o breaker registra a falha e o cooldown.
+
+Em linguagem simples: o sistema nao fica batendo repetidamente na mesma engine quebrada durante um periodo ruim.
+
+## 11. Catalogo das engines de parsing
+
+### 11.1. Engines de orquestracao e protecao
+
+#### DeterministicLegoPdfParsingEngine
+
+Conceito: nao extrai PDF por conta propria. Ela roteia entre engines concretas.
+
+Tatica: respeitar a ordem do YAML e a `failure_policy`.
+
+Tecnica: normaliza contrato, escolhe a melhor tentativa valida e registra diagnostico de handoff.
+
+Visao conceitual: e a fila de despacho do parsing.
+
+Visao tecnica: remove logica de fallback do processor e centraliza no roteador deterministico.
+
+Visao executiva: aumenta governanca porque a ordem de decisao deixa de ser hardcoded.
+
+Visao comercial: permite falar em "estrategia configuravel de leitura" sem vender magia; a fila e explicita.
+
+#### BreakerAwarePdfParsingEngine
+
+Conceito: wrapper de resiliencia.
+
+Tatica: impedir repeticao cega de falhas.
+
+Tecnica: consulta `PdfEngineCircuitBreakerRegistry`, registra falhas e pode devolver uma engine desabilitada temporaria.
+
+Visao executiva: reduz instabilidade operacional quando uma dependencia externa ou local degrada.
+
+Visao comercial: ajuda a manter previsibilidade da plataforma mesmo quando uma engine especifica entra em problema.
+
+#### DisabledPdfParsingEngine
+
+Conceito: engine sentinela de indisponibilidade.
+
+Tatica: nao quebrar a fila de decisao sem explicitar o motivo.
+
+Tecnica: sempre devolve resultado vazio e `is_successful=False`, com razao registrada em `quality_summary`.
+
+Visao executiva: transforma indisponibilidade em sinal auditavel.
+
+Visao comercial: evita a falsa impressao de que o sistema simplesmente ignorou o PDF sem motivo.
+
+### 11.2. Engines concretas de parsing
+
+#### PyMuPDF
+
+Conceito: engine local principal para parsing completo pagina a pagina.
+
+Tatica: aproveitar bem texto nativo e enriquecer o resultado com paginas, tabelas, imagens, anexos, metadata e OCR por pagina quando necessario.
+
+Tecnica: usa `fitz`, `PdfPagesInfoBuilder`, `PdfMetadataBuilder`, `PdfOcrService` e `PdfTableService`. No contrato de capacidade, aparece como `full_fidelity`.
+
+Quando tende a subir na fila: quando o PDF nasce digital, quando a equipe quer velocidade e quando o documento precisa de boa observabilidade por pagina.
+
+Visao executiva: e a engine que melhor equilibra custo, completude e previsibilidade operacional.
+
+Visao comercial: sustenta bem demos e casos reais em que o cliente quer resposta confiavel sem um stack pesado logo de saida.
+
+#### PyMuPDF4LLM
+
+Conceito: engine local focada em saida mais amigavel para LLM.
+
+Tatica: produzir markdown por pagina, preservando estrutura melhor do que um parse puramente linear.
+
+Tecnica: usa `pymupdf4llm.to_markdown` dentro de execucao serializada de runtime nativo. Entrega saida predominantemente textual, nao um pacote rico de tabelas/imagens como o PyMuPDF principal.
+
+Quando tende a subir na fila: quando a prioridade e estrutura textual melhor para chunking e RAG.
+
+Visao executiva: melhora qualidade de leitura para perguntas baseadas em secoes e hierarquia textual.
+
+Visao comercial: ajuda em cenarios de manuais, relatorios e documentos narrativos em que a forma do texto importa para a resposta.
+
+#### pypdf
+
+Conceito: engine textual simples e conservadora.
+
+Tatica: extrair texto basico com o menor numero de componentes possivel.
+
+Tecnica: usa `PdfReader`, percorre paginas e monta texto sem metadados ricos nem OCR.
+
+Quando tende a subir na fila: como opcao minimalista, previsivel e de manutencao facil.
+
+Visao executiva: serve como caminho simples e estavel para documentos menos exigentes.
+
+Visao comercial: e util quando o cliente quer robustez basica antes de sofisticacao estrutural.
+
+#### pdfplumber
+
+Conceito: engine local alternativa para leitura linear de layout simples.
+
+Tatica: percorrer pagina a pagina e extrair texto com boa previsibilidade em PDFs digitais sem forte dependencia de OCR.
+
+Tecnica: usa `pdfplumber.open`, extracao pagina a pagina e resultado textual simples.
+
+Quando tende a subir na fila: como alternativa conservadora ao PyMuPDF quando o dominio lida bem com leitura linear.
+
+Visao executiva: oferece redundancia operacional sem introduzir stack muito pesada.
+
+Visao comercial: fortalece o argumento de que o produto nao depende de uma unica biblioteca para ler PDF.
+
+#### Docling
+
+Conceito: engine estrutural com foco em texto e tabelas.
+
+Tatica: priorizar leitura mais organizada de layout, com opcao de isolamento em subprocesso para reduzir risco operacional do vendor.
+
+Tecnica: pode rodar `in_process` ou em subprocesso, tem configuracoes explicitas para OCR, estrutura de tabela, imagens e paginas parseadas. No contrato de capacidade, aparece como `text_plus_tables`.
+
+Quando tende a subir na fila: quando o PDF exige estrutura documental mais rica ou tabelas melhores do que as opcoes leves entregam.
+
+Visao executiva: oferece um caminho mais sofisticado para documentos complexos, com mais controle de seguranca operacional por subprocesso.
+
+Visao comercial: e relevante em contas que lidam com documentos tecnicos ou regulatorios em que a hierarquia do layout tem valor.
+
+#### Unstructured
+
+Conceito: engine mais pesada para layout complexo.
+
+Tatica: usar estrategias como `fast`, `hi_res` ou `ocr_only` conforme o perfil do documento.
+
+Tecnica: usa `partition_pdf`, pode exigir stack extra para `hi_res` e trabalha melhor quando a extracao local simples nao foi suficiente.
+
+Quando tende a subir na fila: depois das opcoes locais mais leves, quando o documento pede interpretacao estrutural mais agressiva.
+
+Visao executiva: aumenta cobertura de casos dificeis, mas com custo maior de CPU e dependencias.
+
+Visao comercial: ajuda em provas de conceito com PDFs baguncados, mas nao deve ser vendido como caminho barato para todo documento.
+
+#### Marker
+
+Conceito: engine orientada a markdown.
+
+Tatica: transformar o PDF em uma saida mais proxima de markdown estruturado para leitura por LLM.
+
+Tecnica: usa `marker-pdf`, pagina a saida com separador explicito e devolve texto formatado por pagina.
+
+Quando tende a subir na fila: quando a equipe valoriza seccoes e markdown para consumo por RAG.
+
+Visao executiva: pode melhorar a legibilidade do acervo em documentos mais narrativos.
+
+Visao comercial: e util em cenarios onde o cliente percebe valor em estrutura textual mais amigavel para IA generativa.
+
+#### GMFT
+
+Conceito: engine hibrida para casos em que tabela importa muito.
+
+Tatica: usar PyMuPDF para texto e GMFT para detectar e formatar tabelas a partir da imagem da pagina.
+
+Tecnica: renderiza a pagina, extrai tabelas por imagem e consolida `tables_summary` com foco tabular.
+
+Quando tende a subir na fila: quando o dominio depende fortemente de quadros, grades e dados tabulares tecnicos.
+
+Visao executiva: aumenta acerto em documentos tabulares sem forcar o pipeline inteiro a operar como OCR pesado.
+
+Visao comercial: e importante em engenharia, financeiro, compliance e qualquer area onde tabela nao pode virar ruido textual.
+
+## 12. Etapas detalhadas do pipeline PDF
+
+### Etapa 1. ValidatePdfBytesStage
+
+Entrada: `StorageDocument` e bytes brutos.
+
+O que verifica: existencia de bytes e assinatura `%PDF`.
+
+Decisao principal: falhar imediatamente se o documento nao e um PDF valido no nivel mais basico.
+
+Risco mitigado: gastar OCR, parse e chunking em documento corrompido ou tipo errado.
+
+### Etapa 2. ApplyDocumentOcrStage
+
+Entrada: bytes brutos do PDF.
+
+O que verifica: se a amostra do documento sugere pouco texto, densidade baixa, paginas vazias ou texto suspeito.
+
+Decisao principal: aplicar ou nao OCR documental antes do parse.
+
+Risco mitigado: tentar extrair texto limpo de um documento que praticamente so tem imagem.
+
+### Etapa 3. ParseViaEngineStage
+
+Entrada: bytes possivelmente regravados apos OCR documental.
+
+O que verifica: qual engine concreta da fila deterministica vai executar, como ela se comporta e se o retorno atende a heuristica de sucesso.
+
+Decisao principal: seguir para a proxima engine ou encerrar com sucesso.
+
+Risco mitigado: acoplamento a uma unica biblioteca e fallback escondido no processor.
+
+### Etapa 4. ApplyEngineResultStage
+
+Entrada: `PdfParsingEngineResult`.
+
+O que faz: separa texto, tabelas, imagens, anexos e resumo de OCR em um payload de persistencia final.
+
+Decisao principal: preparar os artefatos finais para o restante do pipeline sem perder metadados.
+
+### Etapa 5. PreserveStructureStage
+
+Entrada: texto extraido.
+
+O que faz: preserva estrutura logica e normaliza marcadores de pagina.
+
+Risco mitigado: perder fronteiras uteis antes do chunking.
+
+### Etapa 6. RemoveBasicArtifactsStage
+
+Entrada: texto ainda bruto.
+
+O que faz: remove `form feed` e whitespace basico em excesso.
+
+Risco mitigado: propagar ruido operacional para o indexador.
+
+### Etapa 7. FixSimpleOcrArtifactsStage
+
+Entrada: texto ja limpo.
+
+O que faz: corrige artefatos simples como letras separadas por espacos.
+
+Risco mitigado: degradacao de recuperacao por tokens quebrados.
+
+### Etapa 8. Decisao de OCR basico complementar
+
+Entrada: texto processado apos parse e limpeza.
+
+O que faz: decidir se ainda vale rodar OCR basico para complementar o texto existente.
+
+Risco mitigado: deixar lacunas obvias de texto quando a extracao principal veio fraca.
+
+### Etapa 9. Decisao multimodal
+
+Entrada: documento, metadata e origem visual.
+
+O que faz: decidir se o PDF realmente deve abrir o fluxo multimodal.
+
+Risco mitigado: acionar pipeline caro em documento sem ganho visual real.
+
+### Etapa 10. Chunking ou multimodal
+
+Entrada: texto final ou artefatos multimodais.
+
+O que faz: criar chunks textuais ou enriquecidos.
+
+Risco mitigado: transformar PDF inteiro em bloco unico e opaco para o RAG.
+
+## 13. O que acontece em caso de sucesso
+
+No caminho feliz, o PDF e validado, o OCR documental entra apenas quando os sinais justificam, a fila de engines encontra uma opcao util, o resultado e consolidado num contrato canonico, o texto e limpo, o OCR complementar so entra se ainda fizer sentido, o multimodal so abre quando o documento e visual e, por fim, os chunks sao produzidos com metadados e telemetria suficientes para rastrear a historia do processamento.
+
+Para o usuario, sucesso significa que o documento entrou no acervo. Para a operacao, sucesso significa tambem saber qual engine venceu, quantas paginas falharam, se houve OCR, se houve multimodal e como o chunking foi resolvido.
+
+## 14. O que acontece em caso de erro
+
+### Erro de assinatura ou bytes
+
+Sintoma: falha antes de OCR e parse.
+
+Causa provavel: arquivo nao e um PDF valido.
+
+Onde o codigo detecta: `ValidatePdfBytesStage`.
+
+### Erro de OCR documental
+
+Sintoma: o documento nao consegue ser pre-processado quando a heuristica manda aplicar OCR.
+
+Causa provavel: dependencia ausente, falha operacional do OCR ou PDF muito problemático.
+
+Onde o codigo detecta: `PdfDocumentOcrService` e `ApplyDocumentOcrStage`.
+
+### Erro de wiring de engine
+
+Sintoma: runtime falha antes do parse real.
+
+Causa provavel: engine configurada com dependencia ausente em modo que falha fechado.
+
+Onde o codigo detecta: `PdfParsingEngineResolver`.
+
+### Erro de runtime da engine
+
+Sintoma: a engine atual quebra durante o parse.
+
+Causa provavel: bug interno, dependencia quebrada ou documento incompatível com aquela engine.
+
+Onde o codigo detecta: engine concreta e `BreakerAwarePdfParsingEngine`.
+
+### Erro multimodal
+
+Sintoma: o documento entra no fluxo multimodal mas termina com fallback textual ou erro parcial.
+
+Causa provavel: falta de imagens uteis, falha em OCR multimodal, descricao visual ou embedding visual.
+
+Onde o codigo detecta: `PdfMultimodalApplicationService`.
+
+## 15. Observabilidade e diagnostico
+
+O melhor jeito de investigar PDF e seguir esta ordem.
+
+1. Confirmar se o arquivo era um PDF valido.
+2. Confirmar se o OCR documental foi pulado, aplicado ou forcado.
+3. Confirmar a fila de `processing.parsing.base.options` e a `failure_policy` ativa.
+4. Confirmar qual engine rodou, qual falhou e se o breaker abriu.
+5. Confirmar se o texto final entrou no pipeline textual.
+6. Confirmar se o fluxo rico rodou OCR basico complementar.
+7. Confirmar se o multimodal entrou e com qual status.
+8. Confirmar como o chunking fechou a historia.
+
+Sinais importantes do codigo lido:
+
+- eventos de extração e chunking PDF registram `stages_executed`;
+- o resultado guarda `text_extraction_method`;
+- o contrato canonico carrega `failed_pages`, `empty_pages` e `pages_with_ocr`;
+- o status multimodal explicita `reason`, `fallback_to_text` e contagem de imagens;
+- o circuit breaker registra falhas consecutivas e cooldown.
+
+## 16. Impacto tecnico
+
+O impacto tecnico desta feature e alto porque ela encapsula o trecho mais heterogeneo da ingestao. O pipeline reduz acoplamento entre parser e processor, separa heuristica de OCR de decisao de multimodal, evita fallback escondido e melhora testabilidade por etapa. Tambem torna a plataforma mais preparada para evoluir engines sem reescrever todo o dominio PDF.
+
+## 17. Impacto executivo
+
+Executivamente, este pipeline reduz risco de base de conhecimento mal formada em um dos formatos mais sensiveis do mercado corporativo. Isso melhora previsibilidade operacional, reduz retrabalho de suporte e aumenta confianca em pilotos, homologacoes e operacoes reguladas.
+
+## 18. Impacto comercial
+
+Comercialmente, o pipeline de PDF ajuda a diferenciar a plataforma de solucoes que so fazem upload e OCR generico. O diferencial suportado pelo codigo e a existencia de uma esteira configuravel por engines, com OCR em niveis diferentes, leitura tabular quando necessario e fluxo multimodal explicito.
+
+## 19. Impacto estrategico
+
+Estrategicamente, este modulo cria uma arquitetura reutilizavel para qualquer futuro formato complexo. O desenho com contrato canonico, engine deterministica, breaker, services especializados e telemetria ja e uma base pronta para evolucoes futuras sem reintroduzir god class ou fallback oculto.
+
+## 20. Exemplos praticos guiados
+
+### Exemplo 1. PDF digital de norma tecnica
+
+Cenario: documento longo, texto nativo razoavel e necessidade de rastreabilidade por pagina.
+
+Fluxo esperado: validacao, OCR documental pulado, `pymupdf` ou `pymupdf4llm` resolvendo o parse, pipeline textual e chunking.
+
+Valor pratico: boa velocidade e observabilidade sem custo multimodal desnecessario.
+
+### Exemplo 2. PDF escaneado com pouco texto nativo
+
+Cenario: laudo ou contrato digitalizado.
+
+Fluxo esperado: OCR documental entra cedo, depois a fila de engines tenta produzir o melhor retorno textual possivel.
+
+Valor pratico: o sistema tenta recuperar o documento inteiro antes de culpar a engine de parsing.
+
+### Exemplo 3. PDF com muitas tabelas
+
+Cenario: caderno de engenharia ou relatorio tecnico tabular.
+
+Fluxo esperado: `gmft` sobe na fila quando o dominio valoriza tabela, enquanto o texto continua vindo de parse local.
+
+Valor pratico: o documento nao perde valor tabular ao virar so texto corrido.
+
+### Exemplo 4. PDF visualmente rico
+
+Cenario: material com diagramas, figuras e capturas importantes.
+
+Fluxo esperado: o parse textual entra, depois o documento e considerado visual e o multimodal abre.
+
+Valor pratico: o sistema nao depende apenas de texto para formar os chunks finais.
+
+## 21. Explicacao 101
+
+Pense neste pipeline como uma oficina especializada em restaurar e organizar livros antigos. Primeiro a equipe verifica se o livro realmente existe e esta inteiro. Depois decide se precisa restaurar todas as paginas antes de ler. Em seguida escolhe o melhor especialista para leitura. Depois limpa o texto lido, corrige pequenos erros, chama especialistas de imagem quando o livro e muito visual e, no final, separa o conteudo em partes menores para o resto da plataforma conseguir usar.
+
+## 22. Limites e pegadinhas
+
+- OCR documental nao substitui OCR por pagina.
+- OCR por pagina nao substitui multimodal.
+- Ter varias engines nao significa que todas vao rodar; a fila para na primeira com sucesso formal.
+- `best_effort` nao significa qualidade garantida; significa retorno parcial controlado.
+- `DisabledPdfParsingEngine` nao e sucesso silencioso; ela e um marcador de indisponibilidade.
+- `pymupdf` e `pymupdf4llm` compartilham ecossistema, mas nao entregam o mesmo tipo de saida.
+- `gmft` melhora tabelas, nao o documento inteiro de forma geral.
+- PDFs visuais nem sempre devem abrir multimodal; o pipeline ainda exige criterio de elegibilidade.
+
+## 23. Troubleshooting
+
+### Sintoma: o PDF falha antes de qualquer parse
+
+Causa provavel: bytes ausentes ou assinatura invalida.
+
+Como confirmar: olhar a etapa `validate_pdf_bytes`.
+
+Acao recomendada: validar a origem do arquivo antes de mexer em OCR ou engine.
+
+### Sintoma: o parse percorre a fila inteira e termina ruim
+
+Causa provavel: fila mal ordenada, `failure_policy` inadequada ou documento muito ruim para as engines ativas.
+
+Como confirmar: revisar `processing.parsing.base.options`, `failure_policy`, `text_extraction_method` e `quality_summary`.
+
+Acao recomendada: ajustar a fila, nao inventar fallback fora do YAML.
+
+### Sintoma: a engine configurada nao sobe
+
+Causa provavel: dependencia ausente, modo que falha fechado ou engine desabilitada pelo breaker.
+
+Como confirmar: revisar logs de wiring, `engine_disabled` e `circuit_breaker_open`.
+
+Acao recomendada: corrigir ambiente ou configuracao; nao esconder o problema no processor.
+
+### Sintoma: o multimodal nao entra
+
+Causa provavel: documento nao foi considerado visual, multimodal desligado ou fonte visual nao resolvida.
+
+Como confirmar: revisar `should_run_multimodal` e `multimodal_status_details`.
+
+Acao recomendada: ajustar elegibilidade e configuracao visual, nao forcar multimodal por atalho.
+
+### Sintoma: o PDF gera texto, mas com muito ruido
+
+Causa provavel: parse ruim, OCR mal aplicado ou pipeline textual insuficiente para o caso.
+
+Como confirmar: comparar o resultado bruto da engine, o texto apos limpeza e a decisao de OCR basico complementar.
+
+Acao recomendada: ajustar a etapa certa em vez de culpar o chunking por um problema anterior.
+
+## 24. Diagramas
+
+```mermaid
+sequenceDiagram
+  participant P as PDFContentProcessor
+  participant R as PdfRuntimeCoordinator
+  participant O as Document OCR
+  participant D as Engine deterministica
+  participant E as Engine concreta
+  participant T as Pipeline textual
+  participant M as Multimodal ou Chunking
+
+  P->>R: Inicializa runtime PDF
+  R-->>P: Serviços e engine principal
+  P->>O: Avalia OCR documental
+  O-->>P: Bytes originais ou regravados
+  P->>D: Executa ParseViaEngineStage
+  D->>E: Tenta engine da fila
+  E-->>D: Resultado canonico ou falha
+  D-->>P: Melhor resultado valido
+  P->>T: Limpa e normaliza texto
+  P->>M: Decide multimodal ou chunking
+  M-->>P: Chunks finais e status operacional
+```
+
+O diagrama mostra que o parser concreto e apenas uma etapa do fluxo. O runtime real envolve coordenacao, OCR, normalizacao, decisao e fechamento operacional.
+
+## 25. Como colocar para funcionar
+
+Pelo codigo lido, o pipeline depende destes pre-requisitos reais.
+
+- Profile PDF habilitado em `ingestion.content_profiles.type_specific.pdf`.
+- Fila de engines declarada em `processing.parsing.base.options`.
+- Configuracao coerente de OCR documental, OCR por pagina e multimodal quando esses recursos forem usados.
+- Dependencias das engines realmente instaladas no ambiente.
+
+O sinal operacional minimo de que tudo esta funcionando e ver o runtime PDF montado, a fila de engines resolvida, `stages_executed` preenchido e o documento final com `text_extraction_method` e status multimodal coerente.
+
+## 26. Exercicios guiados
+
+### Exercicio 1. Entender quem escolhe a engine
+
+Objetivo: localizar o ponto exato da fila deterministica.
+
+Passos: ler `PdfParsingEngineResolver`, depois `DeterministicLegoPdfParsingEngine`.
+
+O que observar: a engine nao e escolhida no processor principal, mas no resolvedor de runtime.
+
+### Exercicio 2. Diferenciar os tres OCRs
+
+Objetivo: nao confundir OCR documental, OCR por pagina e OCR multimodal.
+
+Passos: ler `PdfDocumentOcrService`, depois `PymupdfPdfParsingEngine`, depois `PdfMultimodalApplicationService`.
+
+O que observar: os tres mecanismos atuam em momentos e problemas diferentes.
+
+### Exercicio 3. Identificar onde um PDF ruim pode ser salvo
+
+Objetivo: entender em que etapa o pipeline ainda pode recuperar um documento fraco.
+
+Passos: seguir a ordem `ValidatePdfBytesStage`, `ApplyDocumentOcrStage`, `ParseViaEngineStage`, fluxo rico e chunking.
+
+O que observar: o sistema tenta salvar o documento em mais de um ponto, mas sempre com responsabilidade separada.
+
+## 27. Checklist de entendimento
+
+- Entendi por que PDF tem pipeline proprio.
+- Entendi a diferenca entre OCR documental, OCR por pagina e multimodal.
+- Entendi como a fila de engines e montada.
+- Entendi o papel da `failure_policy`.
+- Entendi a diferenca entre engines concretas, breaker e engine desabilitada.
+- Entendi o que cada etapa do pipeline faz.
+- Entendi quando cada engine faz mais sentido.
+- Entendi o valor executivo e comercial do modulo.
+- Entendi como diagnosticar falhas do parse.
+
+## 28. Evidencias no codigo
+
+### `src/ingestion_layer/processors/pdf_runtime_coordinator.py`
+
+Motivo da leitura: confirmar a ordem real dos pipelines de extracao e texto.
+
+Simbolos relevantes: `build_extraction_pipeline`, `build_text_processing_pipeline`.
+
+Comportamento confirmado: o parse PDF tem quatro etapas fixas e o texto tem tres etapas fixas.
+
+### `src/ingestion_layer/processors/pdf_extraction_application_service.py`
+
+Motivo da leitura: confirmar como o resultado do pipeline de extracao vira `PDFDocument`.
+
+Simbolos relevantes: `build_from_storage`, `extract_pdf_text`.
+
+Comportamento confirmado: o PDF so vira documento final depois de consolidar o pipeline de extracao.
+
+### `src/ingestion_layer/processors/pdf_pipeline/pdf_extraction_stages.py`
+
+Motivo da leitura: confirmar o comportamento de cada etapa de extracao.
+
+Simbolos relevantes: `ValidatePdfBytesStage`, `ApplyDocumentOcrStage`, `ParseViaEngineStage`, `ApplyEngineResultStage`.
+
+Comportamento confirmado: validacao, OCR documental, parse via engine e consolidacao final sao etapas separadas.
+
+### `src/ingestion_layer/processors/pdf_pipeline/pdf_text_processing_stages.py`
+
+Motivo da leitura: confirmar as etapas de limpeza de texto.
+
+Simbolos relevantes: `PreserveStructureStage`, `RemoveBasicArtifactsStage`, `FixSimpleOcrArtifactsStage`.
+
+Comportamento confirmado: ha um pipeline textual explicito apos a extracao.
+
+### `src/ingestion_layer/processors/pdf_document_ocr_service.py`
+
+Motivo da leitura: confirmar heuristica e decisao do OCR documental.
+
+Simbolos relevantes: `PdfDocumentOcrAnalyzer`, `PdfDocumentOcrDecision`, `PdfDocumentOcrResult`.
+
+Comportamento confirmado: OCR document-level e heuristico e nao um passo cego sempre ligado.
+
+### `src/ingestion_layer/processors/pdf_parsing_runtime_builder.py`
+
+Motivo da leitura: confirmar como o runtime de parsing e montado.
+
+Simbolos relevantes: `PdfParsingRuntimeBuilder.build`, `_resolve_pdf_parsing_engine`.
+
+Comportamento confirmado: os servicos de apoio e a engine final nascem de um builder coeso.
+
+### `src/ingestion_layer/processors/pdf_parsing_engine_resolver.py`
+
+Motivo da leitura: confirmar a montagem da fila deterministica e o tratamento de indisponibilidade.
+
+Simbolos relevantes: `PdfParsingEngineResolver.resolve`, `_build_engine`, `resolve_pdf_engine_availability_policy`.
+
+Comportamento confirmado: a fila respeita o YAML e trata indisponibilidade de forma explicita.
+
+### `src/ingestion_layer/pdf_tools/pdf_parsing_engine_contract.py`
+
+Motivo da leitura: confirmar o contrato comum das engines e os perfis de capacidade.
+
+Simbolos relevantes: `PdfParsingEngine`, `PdfParsingEngineResult`, `PdfEngineCapabilityProfile`.
+
+Comportamento confirmado: ha contrato canonico unico e perfis declarativos de capacidade.
+
+### `src/ingestion_layer/pdf_tools/deterministic_lego_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar o roteamento deterministico entre engines.
+
+Simbolos relevantes: `DeterministicLegoPdfParsingEngine`, `LegoEngineOption`.
+
+Comportamento confirmado: a fila e ordenada, reativa e controlada por `failure_policy`.
+
+### `src/ingestion_layer/pdf_tools/breaker_aware_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar o papel do circuit breaker.
+
+Simbolo relevante: `BreakerAwarePdfParsingEngine`.
+
+Comportamento confirmado: engines concretas sao protegidas contra repeticao cega de falhas.
+
+### `src/ingestion_layer/pdf_tools/disabled_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar como o pipeline representa uma engine indisponivel sem esconder o problema.
+
+Simbolo relevante: `DisabledPdfParsingEngine`.
+
+Comportamento confirmado: indisponibilidade vira resultado auditavel, nao silencio.
+
+### `src/ingestion_layer/pdf_tools/pymupdf_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine local principal e suas capacidades ricas.
+
+Simbolo relevante: `PymupdfPdfParsingEngine`.
+
+Comportamento confirmado: esta engine concentra parse por pagina, OCR por pagina, tabelas, imagens, anexos e metadata.
+
+### `src/ingestion_layer/pdf_tools/pymupdf4llm_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine orientada a markdown para LLM.
+
+Simbolo relevante: `PyMuPDF4LLMPdfParsingEngine`.
+
+Comportamento confirmado: a saida e textual e mais amigavel para chunking e RAG.
+
+### `src/ingestion_layer/pdf_tools/pypdf_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine textual simples.
+
+Simbolo relevante: `PypdfPdfParsingEngine`.
+
+Comportamento confirmado: o foco desta engine e texto simples e conservador.
+
+### `src/ingestion_layer/pdf_tools/pdfplumber_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a alternativa local linear.
+
+Simbolo relevante: `PdfplumberPdfParsingEngine`.
+
+Comportamento confirmado: o foco desta engine e leitura linear de layout simples.
+
+### `src/ingestion_layer/pdf_tools/docling_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine estrutural e seu wiring em subprocesso.
+
+Simbolo relevante: `DoclingPdfParsingEngine`.
+
+Comportamento confirmado: Docling pode operar em subprocesso e foca texto mais estrutura de tabela.
+
+### `src/ingestion_layer/pdf_tools/unstructured_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar as estrategias `fast`, `hi_res` e `ocr_only`.
+
+Simbolo relevante: `UnstructuredPdfParsingEngine`.
+
+Comportamento confirmado: a engine e mais pesada e voltada a layout complexo.
+
+### `src/ingestion_layer/pdf_tools/marker_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine orientada a markdown.
+
+Simbolo relevante: `MarkerPdfParsingEngine`.
+
+Comportamento confirmado: Marker devolve texto paginado em formato mais proximo de markdown.
+
+### `src/ingestion_layer/pdf_tools/gmft_pdf_parsing_engine.py`
+
+Motivo da leitura: confirmar a engine hibrida voltada a tabelas.
+
+Simbolo relevante: `GmftPdfParsingEngine`.
+
+Comportamento confirmado: GMFT reforca a extracao tabular em cima da imagem da pagina.# Tutorial 101: pipeline de ingestao de PDF
 
 Se voce acabou de chegar no projeto e abriu este arquivo pensando "onde o PDF entra, quem decide OCR, quando o texto vira chunk e onde o multimodal se mete nisso?", este tutorial foi escrito exatamente para isso. A ideia aqui nao e repetir teoria generica de PDF ou de OCR. A ideia e contar a historia real do runtime deste repositorio, usando o que esta implementado hoje.
 
