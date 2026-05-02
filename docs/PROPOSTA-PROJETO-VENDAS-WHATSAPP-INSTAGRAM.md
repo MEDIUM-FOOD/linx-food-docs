@@ -17,14 +17,16 @@ Esta proposta apresenta uma solução completa de **automação inteligente de v
 O objetivo é transformar canais digitais em **pontos ativos de vendas e atendimento**, funcionando 24x7, com respostas instantâneas, padronizadas, rastreáveis e baseadas no conhecimento oficial da empresa — reduzindo custos operacionais e aumentando conversão.
 
 ### Para quem esta começando (for dummies)
+
 A Plataforma de Agentes de IA responde clientes automaticamente no WhatsApp e Instagram,
 com base no conhecimento oficial da empresa, sem depender de equipe
 humana o tempo todo.
 
 ### Impacto para o usuario
-- Atendimento continuo sem aumentar time.
-- Respostas padronizadas e auditaveis.
-- Conversao maior em campanhas.
+
+* Atendimento continuo sem aumentar time.
+* Respostas padronizadas e auditaveis.
+* Conversao maior em campanhas.
 
 ---
 
@@ -45,7 +47,7 @@ Quando há mais de um canal, esses problemas se multiplicam.
 
 ---
 
-## 3. A Soluçãa Plataforma de Agentes de IA
+## 3. A Solução Plataforma de Agentes de IA
 
 Um **Assistente Virtual Inteligente Multicanal**, que:
 
@@ -63,24 +65,15 @@ Uma única inteligência, múltiplos canais.
 
 ## 4. Arquitetura Multicanal Simplificada
 
-```
-CLIENTES (WhatsApp / Instagram)
-        ↓
-APIs Meta (WhatsApp Business / Instagram Graph API)
-        ↓
-PLATAFORMA PLATAFORMA DE AGENTES DE IA
-• Base única de conhecimento
-• Motor RAG com evidências
-• Agentes especializados
-• Workflows de negócio
-• Memória conversacional
-• Integrações (ERP, CRM, E-commerce)
-        ↓
-RESPOSTAS AUTOMÁTICAS
-• WhatsApp
-• Instagram Direct
-• Comentários em publicações
-```
+Em termos simples, a arquitetura comercial proposta funciona assim:
+
+* clientes interagem por WhatsApp e Instagram;
+* as APIs oficiais da Meta entregam os eventos para a plataforma;
+* a plataforma aplica base de conhecimento, RAG, agentes, workflows e
+  integrações governadas;
+* a resposta volta para o canal apropriado, hoje com base comprovada para
+  WhatsApp e Instagram Direct, e com base tecnica em consolidacao para
+  jornadas originadas por comentarios do Instagram.
 
 ---
 
@@ -88,11 +81,11 @@ RESPOSTAS AUTOMÁTICAS
 
 ### 5.1 Pacote WhatsApp
 
-**Canal incluído**
+#### Canal incluído no pacote WhatsApp
 
 * WhatsApp Business API
 
-**Capacidades**
+#### Capacidades do pacote WhatsApp
 
 * Atendimento automático 24x7
 * Respostas a dúvidas, preços, estoque e políticas
@@ -101,7 +94,7 @@ RESPOSTAS AUTOMÁTICAS
 * Escalação inteligente para humano
 * Histórico completo das conversas
 
-**Indicado para**
+#### Indicado para o pacote WhatsApp
 
 * Atendimento transacional
 * Suporte e vendas diretas
@@ -111,21 +104,25 @@ RESPOSTAS AUTOMÁTICAS
 
 ### 5.2 Pacote Instagram
 
-**Canais incluídos**
+#### Canais incluídos no pacote Instagram
 
 * Instagram Direct (DM)
-* Comentários em posts, reels e publicações de produtos
+* Jornadas assistidas originadas por comentários em posts e publicações,
+  conforme rollout e governança do tenant
 
-**Capacidades**
+#### Capacidades do pacote Instagram
 
-* Respostas automáticas em comentários
-* Conversão de comentários em DM
+* Respostas assistidas a interações originadas em comentários, dentro do
+        escopo efetivamente ativado para o tenant
+* Conversão de comentário em DM quando a jornada estiver configurada e
+        operacionalmente habilitada
 * Atendimento completo via Direct
 * Qualificação automática de leads
-* Follow-up automático
+* Follow-up automático quando houver workflow configurado para o caso de
+        uso
 * Encaminhamento para humano quando necessário
 
-**Indicado para**
+#### Indicado para o pacote Instagram
 
 * Marcas com forte presença no Instagram
 * Marketing orientado à conversão
@@ -135,26 +132,31 @@ RESPOSTAS AUTOMÁTICAS
 
 ### 5.3 Pacote Multicanal (WhatsApp + Instagram)
 
-**Canais incluídos**
+#### Canais incluídos no pacote Multicanal
 
 * WhatsApp Business API
 * Instagram Direct
-* Comentários em publicações
+* Jornadas originadas em comentários do Instagram quando esse escopo
+        estiver habilitado no rollout do cliente
 
-**Diferenciais**
+#### Diferenciais do pacote Multicanal
 
 * Base de conhecimento única
-* Histórico centralizado do cliente
-* Métricas consolidadas
-* Experiência omnichannel real
+* Visão operacional unificada dos canais ativados
+* Métricas consolidadas do que estiver efetivamente instrumentado
+* Evolução para experiência multicanal governada, sem prometer fusão
+        total de jornadas antes da consolidação operacional
 
-**Exemplo de jornada**
+#### Exemplo de jornada do pacote Multicanal
 
 1. Cliente comenta no Instagram
-2. Assistente chama para DM
-3. Conversa evolui
-4. Compra finalizada no WhatsApp
-5. Histórico preservado
+2. Assistente conduz a interação inicial conforme a jornada habilitada
+3. A conversa pode evoluir em DM e, quando o desenho operacional prever,
+        seguir para outro canal
+4. A venda pode ser concluída no canal mais adequado ao processo do
+        cliente
+5. A operação acompanha a trilha disponível nos canais efetivamente
+        ativados
 
 ---
 
@@ -163,7 +165,10 @@ RESPOSTAS AUTOMÁTICAS
 ### Caso de Uso 1 — Comentário no Instagram vira venda em minutos
 
 Cliente comenta “Qual o preço?” em um post.
-O assistente responde publicamente e chama para o Direct, onde informa preço, estoque, frete e pagamento, conduzindo até a compra.
+O assistente responde pela jornada configurada para aquele tenant e, se o
+fluxo de comentário estiver habilitado, convida o cliente para continuar
+no Direct, onde informa preço, estoque, frete e pagamento, conduzindo até
+a compra.
 
 **Resultado:** conversão imediata e nenhum comentário perdido.
 
@@ -280,7 +285,7 @@ Humano assume com **contexto completo**, no mesmo canal.
 4. Testes e validação
 5. Go-live e acompanhamento
 
-**Prazo típico**
+### Prazo típico
 
 * Pacote único: 2–4 semanas
 * Multicanal: 4–6 semanas

@@ -39,17 +39,17 @@ As limitações mais relevantes continuam aparecendo quando a extração estrutu
 - `vector_store.if_exists` é obrigatório quando existe `vector_store`; ausência, tipo inválido ou valor fora de `overwrite`, `skip` e `update` deve falhar fechado.
 - O runtime não deve aplicar `update` por default silencioso, porque isso pode alterar o dataset vivo sem decisão explícita no YAML.
 - `overwrite` significa reconstruir o dataset vivo de forma coerente, sem deixar manifesto antigo, BM25 antigo ou pontos vetoriais antigos visíveis para o mesmo acervo lógico.
-- `update` significa trocar a versão ativa do documento como unidade, sem expor metade do documento novo em um store e metade do documento antigo em outro.
-- `skip` significa não avançar no dataset vivo quando a política do acervo mandar preservar o conjunto atual.
+- `update`, no código lido da política canônica, significa manter o alvo vetorial existente e seguir sem limpeza destrutiva do provider.
+- `skip`, no código lido da política canônica, significa abortar a ingestão quando o alvo físico já existe e a política manda preservar o estado atual.
 - `vector_store.incremental_indexing.respect_last_modified` é alias legado e não faz parte do contrato atual; use `vector_store.incremental_indexing.enabled`.
 - Histórico operacional, auditoria e evidências de run não entram nessa limpeza destrutiva e devem ser tratados separadamente.
 
 ## Componentes canônicos do lifecycle do dataset
 
-- Orquestrador de política do dataset: é o ponto único que decide o efeito operacional de `overwrite`, `update` e `skip` durante o preparo da ingestão. O objetivo prático é impedir que Qdrant e Azure Search mantenham regras próprias e divergentes para o mesmo YAML.
+- Orquestrador de política do dataset: é o ponto único que decide o efeito operacional de `overwrite`, `update` e `skip` sobre o alvo físico do provider vetorial. O objetivo prático é impedir que cada adapter replique sua própria semântica de `if_exists` sem coordenação canônica.
 - Repositório canônico de dataset e gerações: é o componente que registra o dataset lógico por `tenant_code + vectorstore_id`, calcula a próxima geração, guarda os alvos físicos preparados e aponta qual geração está ativa para leitura.
-- BM25 obrigatório no acervo: quando o acervo estiver configurado para usar BM25, a ingestão não pode prosseguir como se estivesse saudável se o índice textual falhar para iniciar, atualizar ou remover. Isso evita que PostgreSQL e banco vetorial avancem enquanto o BM25 fica antigo.
-- Leitura e admin alinhados à geração ativa: busca híbrida, reidratação, drop e reindex do BM25 precisam resolver o `physical_bm25_target` da geração ativa antes de carregar ou alterar o índice. Se o target ativo não existir, o comportamento correto é falhar com erro explícito, não seguir com warning ou consulta vetorial silenciosa.
+- BM25 alinhado ao lifecycle canônico: o código lido registra `physical_bm25_target` junto ao dataset e à geração ativa, e os leitores BM25 falham explicitamente quando esse alvo não pode ser resolvido.
+- Leitura e admin alinhados à geração ativa: busca híbrida, reidratação e operações administrativas do BM25 resolvem o `physical_bm25_target` da geração ativa antes de carregar ou alterar o índice. Se o target ativo não existir, o comportamento observado é erro explícito de resolução, e não fallback silencioso.
 
 Leitura 101: pense nesses três componentes como o gerente, o livro-caixa e o índice da biblioteca. O gerente decide a política do acervo, o livro-caixa registra qual coleção está valendo agora, e o índice textual precisa acompanhar essa mesma coleção. Se um desses três ficar para trás, o dataset vivo deixa de ser íntegro.
 
@@ -221,197 +221,19 @@ Pense nessa flag como um “ajeitar a foto antes de tentar ler”. O sistema nã
 - Se o tenant usa majoritariamente `EasyOCR`, `RapidOCR` ou OCR cloud no multimodal e o time acha que essa flag altera igualmente todas as engines.
 - Se o time precisa de pré-processamento mais pesado, porque o comportamento atual é deliberadamente simples.
 
-#### Exemplo completo de YAML canônico do bloco PDF
+#### Exemplo canônico do bloco PDF
 
-Fonte real usada como referência: `app/yaml/system/rag-config-modelo.yaml`.
+O arquivo de referência canônica continua sendo o modelo YAML oficial do
+repositório, mas este manual não replica o snippet completo porque a
+regra de documentação do projeto proíbe trechos de configuração longos
+em documentos gerais. A leitura correta aqui é conceitual:
 
-```yaml
-content_profiles:
-  type_specific:
-    pdf:
-      enabled: true
-      chunk_size: 1600
-      chunk_overlap: 280
-      extract_images: true
-      preserve_formatting: true
-      extract_tables: true
-      processing:
-        parsing:
-          failure_policy: "strict_first_success"
-          merge_strategy: "nao_perde_sinal"
-          base:
-            options:
-              - engine: "pymupdf"
-                mode: "default"
-              - engine: "docling"
-                mode: "auto"
-        ocr:
-          enabled: true
-          document_preprocessing:
-            enabled: false
-            base:
-              options:
-                - engine: "ocrmypdf"
-                  mode: "default"
-            analyze_max_pages: 12
-            min_text_characters: 60
-            min_text_density: 0.0002
-            min_low_text_page_ratio: 0.6
-            min_empty_page_ratio: 0.5
-            skip_text: true
-            deskew: true
-            clean: false
-            clean_final: false
-            force_ocr: false
-            redo_ocr: false
-            jobs: 1
-            optimize: 0
-            invalidate_digital_signatures: false
-          base:
-            options:
-              - engine: "gemini_flash_page_ocr"
-                mode: "auto"
-              - engine: "tesseract"
-                mode: "auto"
-              - engine: "rapidocr"
-                mode: "auto"
-              - engine: "easyocr"
-                mode: "auto"
-          languages: ["por", "eng"]
-        tables:
-          enabled: true
-          format: "markdown"
-          min_rows: 2
-          max_columns: 12
-          include_caption: true
-          base:
-            options:
-              - engine: "ocr_layout"
-                mode: "auto"
-              - engine: "gmft"
-                mode: "auto"
-              - engine: "pdfplumber"
-                mode: "auto"
-              - engine: "unstructured"
-                mode: "auto"
-          min_text_characters: 60
-          confidence_threshold: 45.0
-          max_tables: 4
-          column_cluster_tolerance: 45
-          max_cells: 450
-          ocr_dpi: 360
-          psm: 6
-          use_hocr: false
-          extra_config: "--oem 1"
-          unstructured_strategy: "hi_res"
-      page_break_strategy: "smart"
-      header_footer_removal: true
-      allow_scanned_documents: true
-      preprocessing:
-        auto_rotate: true
-        deskew: true
-        enhance_contrast: true
-        remove_background_noise: true
-      metadata_enrichment:
-        enabled: true
-        infer_document_type: true
-        custom_tags:
-          dominio: "engenharia-rodoviaria"
-          setor: "infraestrutura"
-      page_classification:
-        enabled: true
-      quality_checks:
-        min_confidence: 0.55
-        reject_blank_pages: true
-        allow_scanned_only: true
-        enforce_text_ratio: 0.1
-      attachment_processing:
-        enabled: true
-        include_drawings: true
-        include_georeferenced_files: false
-      multimodal:
-        enabled: true
-        image_extraction:
-          enabled: true
-          base:
-            options:
-              - engine: "pymupdf"
-                mode: "default"
-          min_image_size_bytes: 0
-          min_page_coverage_ratio: 0.25
-          min_dimensions: [50, 50]
-          extract_embedded: true
-          extract_inline: true
-          preserve_metadata: true
-          preserve_tables: true
-          preserve_diagrams: true
-        ocr:
-          enabled: true
-          base:
-            options:
-              - engine: "tesseract"
-                mode: "default"
-              - engine: "rapidocr"
-                mode: "auto"
-              - engine: "easyocr"
-                mode: "auto"
-              - engine: "gemini_flash_page_ocr"
-                mode: "auto"
-          confidence_threshold: 0.7
-          preprocess_images: true
-          languages: ["por", "eng"]
-          fallback_enabled: false
-          gemini_flash_page_ocr:
-            model: "${GEMINI_2_FLASH}"
-            api_key: "${GEMINI_API_KEY}"
-            endpoint: "https://generativelanguage.googleapis.com/v1beta"
-            timeout_seconds: 30
-            retry_attempts: 5
-            retry_wait_min_seconds: 0.5
-            retry_wait_max_seconds: 8
-            max_output_tokens: 2048
-            temperature: 0.0
-        image_description:
-          enabled: true
-          base:
-            options:
-              - engine: "openai"
-                mode: "default"
-              - engine: "local"
-                mode: "auto"
-          fallback_enabled: false
-          max_description_length: 500
-          include_technical_details: true
-          classify_content: true
-          confidence_threshold: 0.6
-          openai:
-            model: "gpt-4.1"
-            max_tokens: 4000
-            temperature: 0.1
-        vision_embedding:
-          enabled: false
-          base:
-            options:
-              - engine: "google_genai"
-                mode: "default"
-          runtime:
-            dimension: 1408
-            source_unit: "image_bytes"
-            pdf_max_pages_per_segment: 6
-          google_genai:
-            model: "${GEMINI_EMBEDDINGS_MULTIMODAL}"
-            api_key: "${MULTIMODAL_VISION_API_KEY}"
-            retry_attempts: 5
-            retry_wait_min_seconds: 0.5
-            retry_wait_max_seconds: 4.0
-            timeout_seconds: 60.0
-            project_id: "${GCP_PROJECT_ID}"
-            location: "us-central1"
-        context_window: 1000
-        preserve_image_refs: true
-        parallel_processing: true
-        max_concurrent_images: 5
-```
+- o bloco PDF combina parsing base, OCR documental, OCR por página,
+  extração de tabelas e multimodal;
+- cada fila é independente e tem responsabilidades diferentes;
+- o modelo oficial fica no YAML de referência do produto e deve ser
+  consultado apenas quando o objetivo for edição operacional da
+  configuração.
 
 #### Material dono do assunto
 

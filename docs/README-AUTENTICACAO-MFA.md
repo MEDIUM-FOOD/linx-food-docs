@@ -127,8 +127,8 @@ Não encontrado no código.
 Onde deveria estar:
 
 - recovery codes de uso único para TOTP;
-- endpoint para desabilitar TOTP ou revogação administrativa do segundo
-  fator;
+- rota HTTP pública ou fluxo administrativo exposto para desabilitar TOTP
+  e revogar o segundo fator;
 - persistência compartilhada do contador de tentativas entre requisições
   distintas;
 - métricas e observabilidade dedicadas para esse fluxo de MFA.

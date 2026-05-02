@@ -71,7 +71,9 @@ Leitura prática da estratégia `factory`:
 
 ### 2.2 Regras estruturais (obrigatórias)
 
-1. O contrato é estrito: campos fora do schema são rejeitados.
+1. O contrato é estrito no fluxo oficial: campos fora do contrato
+   governado devem ser tratados como inválidos pelos modelos e
+   validadores oficiais, sem depender de tolerância silenciosa.
 2. Toda tool deve informar `strategy`.
 3. `strategy=direct` exige `impl`.
 4. `strategy=factory` exige `factory_impl`, `tool_name`, `factory_function` e `factory_returns`.

@@ -1,134 +1,476 @@
-**Produto:** Plataforma de Agentes de IA
+# Manual técnico, executivo, operacional e estratégico: scheduler, worker oficial e filas operacionais
 
-# Guia Didatico: Scheduler, Worker Oficial e Filas Operacionais
+## 1. O que é esta feature
 
-## Para quem e este guia
+Este documento explica a topologia operacional atual da plataforma para
+quem precisa entender execução real, e não lembrança de arquitetura
+legada.
 
-Este guia foi escrito para quem precisa operar a plataforma sem carregar a arquitetura antiga na cabeca.
+Na prática, a plataforma opera com três papéis diferentes:
 
-Objetivo: explicar, em linguagem simples, quem recebe requisicoes, quem agenda rotinas, quem consome filas e como ler o estado real do dominio operacional ligado a canais, ingestao e ETL.
+- a API atende HTTP e aceita requisições;
+- o scheduler roda em processo próprio para tarefas por tempo;
+- o worker oficial roda em processo próprio para o plano de controle
+  multicanal e para o runtime assíncrono de ingestão e ETL.
 
-## Resumo em uma frase
+O ponto central deste manual é simples: processo web, scheduler e worker
+não são a mesma coisa. Misturar esses papéis leva a diagnóstico errado,
+observabilidade ruim e operação frágil.
 
-Hoje a topologia operacional correta e esta: a API atende HTTP, o scheduler roda em processo proprio para jobs temporais e o worker oficial roda em processo proprio para o plano de controle multicanal e para o consumo assincrono de ingestao e ETL.
+## 2. Que problema ela resolve
 
-## Visao rapida
+Sem essa separação, a operação tende a cometer quatro erros frequentes:
 
-![Visao rapida](assets/diagrams/docs-guia-didatico-execucao-canais-diagrama-01.svg)
+- achar que API viva significa domínio assíncrono saudável;
+- tratar scheduler como detalhe hospedado no processo web;
+- confundir supervisão multicanal com consumo de fila de ingestão e ETL;
+- investigar fila errada quando a execução longa para de andar.
 
-Em termos praticos:
+Esta feature resolve isso ao publicar uma topologia operacional explícita
+e marcadores de prontidão que contam a história do bootstrap e do
+shutdown.
 
-1. API nao deve ser tratada como o lugar onde scheduler e worker vivem por efeito colateral.
-2. Scheduler e worker nao sao a mesma coisa.
-3. Ingestao e ETL assincronos dependem do worker oficial estar realmente pronto.
+## 3. Visão executiva
 
-## O papel de cada processo
+Para liderança e operação, a principal vantagem é previsibilidade.
+Quando cada processo tem papel claro, fica mais fácil saber onde está o
+problema, qual componente precisa ser reiniciado e qual evidência prova
+saúde real.
 
-| Processo | O que faz de verdade | O que nao deve fazer |
-|---|---|---|
-| API | Recebe chamadas HTTP, valida contexto, agenda execucoes assincronas e expoe consultas de status e historico. | Nao deve ser tratada como host do scheduler e do worker por conveniencia. |
-| Scheduler | Roda jobs por tempo, como restauracao de agendamentos e manutencao operacional. | Nao deve consumir a fila assincrona de ingestao e ETL. |
-| Worker oficial | Sobe o plano de controle multicanal, inicializa o runtime assincrono e executa o shutdown coordenado. | Nao deve ser confundido com um segundo worker transitorio ou com consumidor espalhado pela API. |
+Isso reduz tempo de diagnóstico, evita falsa sensação de disponibilidade
+e melhora governança operacional.
 
-## Como canais entram nessa historia
+## 4. Visão comercial
 
-O worker oficial tambem e responsavel por subir o plano de controle multicanal. Em linguagem simples, isso quer dizer que o processo de worker concentra o que precisa ficar vivo para filas e supervisao operacional de canais.
+Do ponto de vista comercial e de implantação, esta separação ajuda a
+demonstrar que a plataforma não roda com automação improvisada dentro do
+servidor web. Há um desenho operacional explícito para API, scheduler e
+worker oficial, o que aumenta confiança de clientes que precisam de
+processamento assíncrono observável.
 
-O sinal minimo de saude aqui e o marker:
+## 5. Visão estratégica
 
-- MULTICHANNEL_SUPERVISOR_READY
+Estrategicamente, essa topologia fortalece a plataforma porque separa
+boundary HTTP, coordenação temporal e consumo assíncrono em papéis
+diferentes. Isso prepara o sistema para crescer sem voltar a acoplamentos
+onde o web process tentava hospedar tudo por conveniência.
 
-Se esse marker nao apareceu, o worker ainda nao provou que o plano de controle multicanal ficou pronto.
+## 6. Conceitos necessários para entender
 
-## Como ingestao e ETL assincronos funcionam
+### API
 
-Para ingestao e ETL assincronos, o contrato operacional atual usa RabbitMQ como backend de fila e Dramatiq como runtime de consumo. O worker unico sobe esse runtime e passa a consumir os dois fluxos no mesmo processo dedicado.
+É o boundary HTTP. Recebe chamada, valida contexto, autentica, agenda
+trabalho e devolve resposta. Não é o lugar onde o trabalho pesado deve
+rodar por efeito colateral.
 
-Os markers operacionais minimos sao:
+### Scheduler
 
-1. INGESTION_READY
-2. ETL_READY
-3. WORKER_READY
+É o processo dedicado a rotinas por tempo, como manutenção e tarefas
+agendadas. Ele não é o consumidor oficial das filas assíncronas de
+ingestão e ETL.
 
-Interpretacao pratica:
+### Worker oficial
 
-1. INGESTION_READY prova que o consumo assincrono de ingestao esta pronto.
-2. ETL_READY prova que o consumo assincrono de ETL esta pronto.
-3. WORKER_READY prova que o processo inteiro terminou o bootstrap e esta apto para operar.
+É o processo responsável por duas funções combinadas:
 
-Se a operacao enxergar somente a API viva, mas nao enxergar esses markers no worker, a leitura correta e: a superficie HTTP pode estar de pe, mas o dominio assincrono ainda nao provou saude completa.
+- subir o plano de controle multicanal;
+- subir o runtime assíncrono que consome ingestão e ETL.
 
-## Onde Redis entra e onde RabbitMQ entra
+### Plano de controle multicanal
 
-Os dois recursos existem, mas com papeis diferentes.
+É a parte viva do domínio de canais e supervisão operacional. Se esse
+plano não sobe, o worker ainda não provou prontidão completa.
 
-| Recurso | Papel operacional atual |
-|---|---|
-| Redis | Lideranca, estados efemeros, progresso, coordenacao e filas de canal quando o contrato daquele canal exigir esse tipo de transporte. |
-| RabbitMQ | Backend obrigatorio do fluxo assincrono de ingestao e ETL no worker unico. |
+### Runtime assíncrono
 
-Isso evita uma confusao comum: Redis nao substitui o contrato assincrono de ingestao e ETL, e RabbitMQ nao substitui os estados operacionais que continuam centralizados em Redis.
+É o componente que consome trabalho enfileirado. No código lido, o
+worker oficial exige backend RabbitMQ e consumer runtime Dramatiq.
 
-## Como ler prontidao do worker sem adivinhacao
+### Marcadores de prontidão
 
-O worker oficial precisa contar a historia completa do bootstrap. A leitura minima esperada e esta:
+São logs estruturados que informam quando o processo realmente ficou
+apto para operar. Eles são mais confiáveis do que apenas ver que o PID
+subiu.
 
-1. MULTICHANNEL_SUPERVISOR_READY
-2. INGESTION_READY
-3. ETL_READY
-4. WORKER_READY
+## 7. Como a feature funciona por dentro
 
-No encerramento coordenado, a trilha minima esperada e esta:
+O worker runner define PROCESS_ROLE=worker e monta o ciclo de vida com
+StartupPolicy, RuntimeBootstrap e WorkerProcessRuntime.
 
-1. WORKER_SHUTDOWN_START
-2. ASYNC_RUNTIME_SHUTDOWN_COMPLETE
-3. RUNTIME_BOOTSTRAP_SHUTDOWN_START
-4. RUNTIME_BOOTSTRAP_SHUTDOWN_COMPLETE
-5. WORKER_SHUTDOWN_COMPLETE
+O RuntimeBootstrap cuida do bootstrap operacional compartilhado entre
+scheduler e worker. Já o WorkerProcessRuntime sobe o plano de controle
+multicanal e o runtime assíncrono na ordem coordenada.
 
-Em linguagem simples: o worker nao esta saudavel so porque o processo abriu. Ele fica operacional quando prova, por markers estruturados, que supervisor multicanal, ingestao e ETL chegaram ao estado de prontidao.
+Essa ordem importa:
 
-## Rotas que o operador precisa conhecer
+1. o worker valida infraestrutura obrigatória;
+2. executa bootstrap operacional compartilhado;
+3. sobe o plano de controle multicanal;
+4. sobe o runtime assíncrono RabbitMQ + Dramatiq;
+5. calcula snapshot de prontidão;
+6. emite markers de supervisor pronto e worker pronto.
 
-| Necessidade | Superficie correta |
-|---|---|
-| Disparar ingestao | /rag/ingest |
-| Disparar ETL | /rag/etl |
-| Consultar historico duravel de ingestao | /ingestion-runs/query |
-| Abrir detalhe operacional da ingestao | /ingestion-runs/detail |
-| Acompanhar status por task_id | /status/{task_id} e stream correspondente |
+O scheduler segue caminho parecido, mas seu papel é diferente. Ele sobe
+como processo scheduler-only, usa o mesmo RuntimeBootstrap compartilhado
+e emite seu próprio marker SCHEDULER_READY quando termina o bootstrap.
 
-## O que nao faz mais parte do desenho final
+## 8. Divisão em etapas ou submódulos
 
-As instrucoes abaixo pertencem a caminhos antigos e nao devem voltar para a operacao:
+### 8.1 Runner de worker
 
-1. tratar scheduler e worker como componentes hospedados no mesmo processo web por padrao;
-2. orientar a operacao a depender de modos transitorios de decisao global para filas;
-3. ensinar que a recuperacao operacional depende de um segundo worker paralelo para ingestao ou ETL;
-4. misturar a leitura do dominio de canais com o contrato assincrono de ingestao e ETL como se fosse a mesma fila.
+É o entrypoint do processo worker-only. Seu papel é preparar ambiente,
+instalar sinais de shutdown, validar infraestrutura, executar bootstrap,
+subir o runtime oficial e registrar markers estruturados.
 
-## Diagnostico rapido
+### 8.2 Bootstrap operacional compartilhado
 
-| Sintoma | Leitura correta |
-|---|---|
-| API responde, mas o dominio assincrono nao anda | Verificar worker oficial e os markers de prontidao. |
-| ETL aceitou 202, mas nao termina | Verificar se ETL_READY apareceu no worker e se o backend RabbitMQ esta configurado. |
-| Ingestao foi aceita, mas a operacao nao sabe o estado final | Consultar /ingestion-runs/query e /ingestion-runs/detail; nao depender so da aceitacao inicial. |
-| Scheduler parece parado | Validar o processo dedicado de scheduler, nao o lifecycle HTTP. |
+É a camada comum entre worker e scheduler. Ela cuida de liderança de
+scheduler, start e stop de schedulers de manutenção, workers de canal e
+outras decisões de startup coordenado.
 
-## Resumo final
+### 8.3 Runtime unificado do worker
 
-Se voce quiser guardar so a mensagem principal, guarde esta:
+É o componente que realmente combina controle multicanal e runtime
+assíncrono. O snapshot dele é a base lógica dos sinais:
 
-1. API atende HTTP.
-2. Scheduler cuida de jobs por tempo em processo proprio.
-3. Worker oficial cuida do plano de controle multicanal e do runtime assincrono de ingestao e ETL.
-4. O worker unico precisa provar prontidao com markers estruturados, nao com suposicao.
+- multichannel_supervisor_ready;
+- ingestion_ready;
+- etl_ready;
+- fan_out_active;
+- ready.
 
-## Evidencia no codigo
+### 8.4 Runtime assíncrono Dramatiq
 
-1. app/runners/worker_runner.py
-2. src/api/services/async_job_dramatiq.py
-3. src/api/startup/runtime_bootstrap.py
-4. app/runners/scheduler_runner.py
-5. docs/README-SCHEDULER.md
+É a execução física do consumo assíncrono. O código confirma que o
+worker oficial falha cedo se o backend não for RabbitMQ ou se o runtime
+de consumo não for Dramatiq.
+
+### 8.5 Runner de scheduler
+
+É o processo scheduler-only. Ele não sobe o runtime assíncrono do worker.
+Seu papel é manter os jobs por tempo e registrar prontidão específica do
+agendamento.
+
+## 9. Pipeline ou fluxo principal
+
+O fluxo operacional correto pode ser resumido assim:
+
+1. A API recebe requisição e, quando necessário, responde com aceitação
+   assíncrona.
+2. O scheduler executa somente o que é temporal e coordenado por agenda.
+3. O worker oficial sobe o plano de controle multicanal.
+4. O mesmo worker oficial sobe o runtime assíncrono de ingestão e ETL.
+5. O worker só é considerado realmente pronto quando os markers de
+   supervisor, ingestão, ETL e worker aparecem de forma consistente.
+6. No shutdown, o worker encerra runtime assíncrono, depois bootstrap
+   compartilhado, e registra a trilha de encerramento.
+
+## 10. Decisões técnicas e trade-offs
+
+### Um worker oficial para controle multicanal e runtime assíncrono
+
+Ganho: o domínio operacional crítico fica concentrado em um único
+processo oficial e observável.
+
+Custo: a operação não pode presumir que um segundo processo informal vai
+resolver consumo de fila.
+
+Impacto prático: reduz caminhos paralelos e melhora diagnóstico.
+
+### Scheduler em processo separado
+
+Ganho: tarefas por tempo não dependem do ciclo de vida HTTP.
+
+Custo: exige tratar scheduler como processo de primeira classe.
+
+Impacto prático: quando o scheduler falha, a investigação certa é no
+processo dedicado, não na API.
+
+### Falha rápida se o runtime assíncrono não for RabbitMQ + Dramatiq
+
+Ganho: evita worker aparentemente vivo com backend incompatível.
+
+Custo: ambiente mal configurado quebra cedo.
+
+Impacto prático: o erro aparece onde deve aparecer, em vez de gerar
+comportamento ambíguo horas depois.
+
+## 11. Configurações que mudam o comportamento
+
+As variáveis e políticas mais relevantes confirmadas no código lido são:
+
+- PROCESS_ROLE: define se o processo opera como worker ou scheduler;
+- ASYNC_JOB_QUEUE_BACKEND: o worker oficial exige rabbitmq;
+- ASYNC_JOB_CONSUMER_RUNTIME: o worker oficial exige dramatiq;
+- políticas de StartupPolicy: controlam fail-fast, lock de bootstrap e
+  decisão de startup;
+- configurações de liderança e scheduler lidas pelo RuntimeBootstrap.
+
+Valores padrão completos dessas configurações não estão consolidados em
+um único manual operacional no código lido.
+
+## 12. Contratos, entradas e saídas
+
+Os contratos principais desta feature não são payloads HTTP, e sim
+contratos operacionais de processo e log.
+
+Entradas:
+
+- inicialização do processo com papel worker ou scheduler;
+- sinal de shutdown;
+- configuração de infraestrutura e filas.
+
+Saídas:
+
+- markers estruturados de bootstrap e shutdown;
+- snapshots de prontidão do worker;
+- prontidão explícita do scheduler;
+- falha rápida quando o runtime assíncrono não atende o contrato oficial.
+
+## 13. O que acontece em caso de sucesso
+
+No caminho feliz do worker:
+
+1. a infraestrutura obrigatória é validada;
+2. o bootstrap compartilhado conclui sem erro;
+3. o plano de controle multicanal sobe;
+4. o runtime assíncrono sobe;
+5. o worker emite MULTICHANNEL_SUPERVISOR_READY e WORKER_READY.
+
+No caminho feliz do scheduler:
+
+1. o processo sobe em modo scheduler-only;
+2. o bootstrap compartilhado conclui;
+3. o processo emite SCHEDULER_READY.
+
+## 14. O que acontece em caso de erro
+
+Os cenários mais relevantes confirmados no código são estes:
+
+- se o backend assíncrono não for rabbitmq, o worker oficial lança erro
+  explícito;
+- se o consumer runtime não for dramatiq, o worker oficial lança erro
+  explícito;
+- se o runtime assíncrono falhar ao subir, o plano de controle multicanal
+  é parado antes de propagar a falha;
+- durante shutdown, erros em schedulers ou leader task são registrados e
+  propagados.
+
+## 15. Observabilidade e diagnóstico
+
+Os markers mais importantes para operação são:
+
+- MULTICHANNEL_SUPERVISOR_READY;
+- WORKER_RUNTIME_READY;
+- WORKER_READY;
+- SCHEDULER_READY;
+- WORKER_SHUTDOWN_START;
+- ASYNC_RUNTIME_SHUTDOWN_COMPLETE;
+- RUNTIME_BOOTSTRAP_SHUTDOWN_START;
+- RUNTIME_BOOTSTRAP_SHUTDOWN_COMPLETE;
+- WORKER_SHUTDOWN_COMPLETE.
+
+Interpretação prática:
+
+- API viva sem WORKER_READY não prova saúde do domínio assíncrono;
+- worker iniciado sem MULTICHANNEL_SUPERVISOR_READY não prova saúde do
+  plano de controle;
+- ausência de ASYNC_RUNTIME_SHUTDOWN_COMPLETE indica encerramento
+  incompleto do runtime assíncrono.
+
+## 16. Impacto técnico
+
+Tecnicamente, esta feature reduz acoplamento entre boundary HTTP,
+agendamento temporal e consumo assíncrono. Também melhora a testabilidade
+porque worker e scheduler podem ser validados como runners dedicados.
+
+## 17. Impacto executivo
+
+Executivamente, a separação de papéis reduz diagnóstico enganoso e ajuda
+operação a responder duas perguntas críticas com mais rapidez:
+
+- o processo web está vivo?
+- o domínio assíncrono está realmente pronto?
+
+## 18. Impacto comercial
+
+Comercialmente, a plataforma ganha credibilidade operacional. É mais
+fácil defender processamento assíncrono corporativo quando existe um
+worker oficial com contrato explícito de prontidão e um scheduler
+dedicado para tarefas por tempo.
+
+## 19. Impacto estratégico
+
+Estrategicamente, esta topologia combate o retorno de fluxos paralelos e
+legados. Ela reforça a ideia de que fila, supervisão multicanal e jobs
+temporais devem seguir contratos explícitos, e não coexistir em caminhos
+alternativos espalhados pela API.
+
+## 20. Exemplos práticos guiados
+
+### Exemplo 1. API responde, mas ingestão não anda
+
+Leitura correta: primeiro verificar se o worker oficial emitiu
+WORKER_READY e se o runtime assíncrono realmente subiu.
+
+### Exemplo 2. Scheduler parece morto
+
+Leitura correta: investigar o processo scheduler-only e o marker
+SCHEDULER_READY, não o servidor web.
+
+### Exemplo 3. Worker abriu, mas operação continua instável
+
+Leitura correta: checar se houve MULTICHANNEL_SUPERVISOR_READY,
+WORKER_RUNTIME_READY e WORKER_READY, e não apenas se o processo existe.
+
+## 21. Explicação 101
+
+Pense na plataforma como uma operação com três equipes diferentes.
+
+- a recepção atende o público: essa é a API;
+- a equipe do relógio cuida do que precisa acontecer por agenda: esse é
+  o scheduler;
+- a equipe de execução pesada cuida das filas e da supervisão viva: esse
+  é o worker oficial.
+
+Se a recepção está aberta, isso não significa que a equipe de execução
+pesada já começou a trabalhar. Os markers existem justamente para provar
+quando isso aconteceu de verdade.
+
+## 22. Limites e pegadinhas
+
+- API viva não significa worker pronto.
+- Worker pronto não deve ser inferido por suposição; precisa de markers.
+- Scheduler e worker não são intercambiáveis.
+- RabbitMQ não substitui Redis, e Redis não substitui o contrato oficial
+  do runtime assíncrono do worker.
+- Um segundo worker improvisado não faz parte do desenho oficial lido no
+  código.
+
+## 23. Troubleshooting
+
+### Sintoma: 202 foi devolvido, mas nada avança
+
+Causa provável: o worker oficial não completou prontidão.
+
+Como confirmar: procurar MULTICHANNEL_SUPERVISOR_READY,
+WORKER_RUNTIME_READY e WORKER_READY.
+
+### Sintoma: scheduler parece não executar jobs temporais
+
+Causa provável: problema no processo scheduler-only ou na liderança.
+
+Como confirmar: procurar SCHEDULER_READY e sinais do RuntimeBootstrap.
+
+### Sintoma: worker sobe e cai logo em seguida
+
+Causa provável: contrato inválido de backend ou consumer runtime.
+
+Como confirmar: revisar se ASYNC_JOB_QUEUE_BACKEND=rabbitmq e
+ASYNC_JOB_CONSUMER_RUNTIME=dramatiq.
+
+## 24. Diagramas
+
+### Topologia operacional macro
+
+Este diagrama mostra a separação de papéis confirmada no código.
+
+```mermaid
+flowchart LR
+    A[Cliente] --> B[API HTTP]
+    B --> C[Resposta síncrona]
+    B --> D[Aceitação assíncrona]
+    D --> E[Worker oficial]
+    F[Scheduler dedicado] --> G[Jobs por tempo]
+    E --> H[Plano de controle multicanal]
+    E --> I[Runtime RabbitMQ + Dramatiq]
+    I --> J[Ingestão e ETL]
+```
+
+### Sequência simplificada de bootstrap do worker
+
+Este diagrama mostra por que o worker só fica pronto depois de duas
+etapas distintas: controle multicanal e runtime assíncrono.
+
+```mermaid
+sequenceDiagram
+    participant WR as Worker Runner
+    participant RB as RuntimeBootstrap
+    participant WPR as WorkerProcessRuntime
+    participant CP as Control Plane
+    participant AR as Async Runtime
+
+    WR->>RB: start()
+    RB-->>WR: bootstrap compartilhado pronto
+    WR->>WPR: start()
+    WPR->>CP: start_control_plane()
+    CP-->>WPR: supervisor pronto
+    WPR->>AR: start()
+    AR-->>WPR: ingestão e ETL prontos
+    WPR-->>WR: snapshot ready
+    WR-->>WR: MULTICHANNEL_SUPERVISOR_READY
+    WR-->>WR: WORKER_READY
+```
+
+## 25. Mapa de navegação conceitual
+
+O mapa conceitual desta topologia é:
+
+- runner define o papel do processo;
+- bootstrap compartilhado coordena startup e shutdown comuns;
+- runtime do worker combina canais e consumo assíncrono;
+- scheduler executa agenda temporal em processo próprio;
+- markers estruturados contam a história do processo.
+
+## 26. Como colocar para funcionar
+
+O código lido confirma o contrato de processo, mas não consolida neste
+arquivo um comando operacional único de subida de todos os papéis.
+
+O que fica comprovado:
+
+- worker e scheduler têm runners dedicados em app/runners;
+- o worker exige rabbitmq e dramatiq para o runtime oficial;
+- prontidão real depende de markers estruturados.
+
+## 27. Checklist de entendimento
+
+- Entendi que API, scheduler e worker são processos com papéis
+  diferentes.
+- Entendi que o worker oficial combina plano de controle e runtime
+  assíncrono.
+- Entendi que o scheduler roda separado.
+- Entendi que prontidão depende de markers, não só de PID.
+- Entendi que RabbitMQ + Dramatiq são contrato explícito do worker.
+- Entendi que shutdown também tem trilha estruturada.
+
+## 28. Evidências no código
+
+- app/runners/worker_runner.py
+  - Motivo da leitura: entrypoint do processo worker-only.
+  - Comportamento confirmado: define PROCESS_ROLE=worker, executa
+    RuntimeBootstrap, sobe WorkerProcessRuntime e emite
+    MULTICHANNEL_SUPERVISOR_READY e WORKER_READY.
+- app/runners/scheduler_runner.py
+  - Motivo da leitura: entrypoint do processo scheduler-only.
+  - Comportamento confirmado: define PROCESS_ROLE=scheduler, usa
+    RuntimeBootstrap e emite SCHEDULER_READY.
+- src/api/startup/runtime_bootstrap.py
+  - Motivo da leitura: bootstrap e shutdown compartilhados.
+  - Comportamento confirmado: registra
+    RUNTIME_BOOTSTRAP_SHUTDOWN_START e
+    RUNTIME_BOOTSTRAP_SHUTDOWN_COMPLETE.
+- src/api/services/worker_process_runtime.py
+  - Motivo da leitura: snapshot de prontidão e contrato do runtime do
+    worker.
+  - Comportamento confirmado: prontidão depende de plano de controle
+    multicanal e runtime assíncrono; worker falha cedo se backend não for
+    rabbitmq ou runtime não for dramatiq.
+- src/api/services/async_job_dramatiq.py
+  - Motivo da leitura: shutdown do runtime assíncrono.
+  - Comportamento confirmado: emite
+    ASYNC_RUNTIME_SHUTDOWN_COMPLETE ao finalizar.
+- tests/unit/test_worker_runner.py
+  - Motivo da leitura: evidência executável da prontidão do worker.
+  - Comportamento confirmado: os testes validam emissão de
+    MULTICHANNEL_SUPERVISOR_READY, WORKER_READY e markers de shutdown.

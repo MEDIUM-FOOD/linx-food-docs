@@ -75,7 +75,10 @@ Valores suportados em `execution.type`:
 
 1. `agent` => modo clássico.
 2. `deepagent` => modo deepagent.
-3. `workflow` => execução por workflow.
+3. `workflow` => valor aceito na normalização do assembly, mas a execução
+  por workflow pertence ao runtime específico de workflows e deve ser
+  tratada pelo manual de workflow, não como comportamento próprio do
+  `AgentSupervisor` clássico documentado aqui.
 
 ## 4. Contrato de `multi_agents[]`
 
@@ -83,7 +86,7 @@ Valores suportados em `execution.type`:
 | --- | --- | --- | --- | --- |
 | `id` | `str` | sim | - | Identificador único do supervisor. |
 | `enabled` | `bool` | nao | `false` | Marca supervisor como ativo candidato. |
-| `execution.type` | `str` | nao | `agent` | Define tipo de runtime (`agent`, `deepagent`, `workflow`). |
+| `execution.type` | `str` | nao | `agent` | Define o modo declarado no assembly. Neste README, o escopo operacional confirmado é `agent`; `deepagent` e `workflow` pertencem a runtimes/documentos específicos. |
 | `prompt` | `str` | nao | prompt padrão | Prompt principal do supervisor. |
 | `directives` | `list[str]` | nao | `[]` | Fallback de prompt quando `prompt` ausente. |
 | `agents` | `list[dict]` | sim | - | Lista de agentes especialistas. |

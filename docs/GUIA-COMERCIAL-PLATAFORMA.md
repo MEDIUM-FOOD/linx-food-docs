@@ -242,6 +242,12 @@ builder visual.
 Sobre essa base, o posicionamento estratégico natural é uma loja visual
 de agentes para criação, publicação e reaproveitamento.
 
+Leitura correta deste ponto: a fundação governada está implementada, mas
+o código lido não foi suficiente para tratar a loja visual como produto
+completo, isolado e fechado de ponta a ponta. O valor real hoje está na
+base que viabiliza essa camada, não na promessa de que toda a
+experiência visual já esteja consolidada.
+
 ### Onde o produto se destaca
 
 - No mercado médio, “loja de agentes” costuma significar catálogo de
@@ -284,7 +290,7 @@ Observação objetiva:
 - a leitura correta deste capítulo é posicionamento de camada visual
   sustentada por base real, não promessa solta.
 
-## 4) Isolamento por tenant, SaaS cloud e BYOK
+## 4) Isolamento por tenant, SaaS cloud e governança de credenciais
 
 ### O que este módulo destrava
 
@@ -300,8 +306,11 @@ controle de custo por tenant.
   depender de rateio manual.
 - O uso de user_session, ClientDirectory, catálogos tenant-aware e
   políticas por tenant cria separação operacional real.
-- BYOK faz diferença enterprise porque reduz disputa sobre custo e
-  propriedade da chave do modelo.
+- O isolamento por tenant já aparece no uso de user_session,
+  ClientDirectory, catálogos tenant-aware e políticas por tenant.
+- O código lido sustenta a conversa sobre segregação de credenciais,
+  contexto e custo por tenant, mas não confirmou uma implementação BYOK
+  fechada como feature independente.
 
 ### Valor técnico para TI
 
@@ -315,15 +324,18 @@ segredo e rastreabilidade por tenant. Isso permite operar a plataforma
 como SaaS de verdade, com clientes usando modelos, chaves, limites e
 políticas próprias sem contaminar a experiência de outros clientes.
 
-BYOK aumenta esse valor em contas enterprise. Na prática, ele reduz
-objeções sobre custo de modelo, propriedade de chave e controle de uso.
-Para TI, isso facilita venda para clientes maiores sem redesenhar a
-arquitetura a cada negociação.
+Para contas enterprise, a arquitetura já ajuda porque separa identidade,
+segredo, catálogo e contexto operacional por tenant. Isso reduz parte da
+objeção sobre compartilhamento de custo e credencial. A hipótese de
+BYOK continua sendo estrategicamente coerente com essa fundação, mas não
+deve ser vendida como feature pronta sem validação adicional de código e
+operação.
 
 ### Valor para uma software house de varejo
 
 - habilita oferta SaaS única para várias redes e clientes;
-- permite BYOK e segregação de gasto por cliente, operação e canal;
+- permite segregação de gasto, credencial e contexto por cliente,
+  operação e canal;
 - viabiliza levar a mesma plataforma para ecossistemas distintos sem
   cruzar segredos, custos ou contexto operacional.
 - fortalece a venda enterprise porque reduz objeções ligadas a segurança,
@@ -1278,9 +1290,11 @@ responsabilidades e capacidade de reuso.
 recursos que atendem a problemas diferentes, mas complementares:
 
 - YAML-first e NL2YAML ajudam a publicar configuração governada;
-- loja visual de agentes ajuda a escalar criação e reaproveitamento;
-- isolamento por tenant e BYOK sustentam operação SaaS e venda
-  enterprise;
+- a base governada do designer visual prepara a escalabilidade de
+  criação e reaproveitamento, sem exigir tratar a loja visual como
+  feature 100% consolidada hoje;
+- isolamento por tenant e governança de credenciais sustentam operação
+  SaaS e fortalecem a venda enterprise;
 - ingestão e RAG transformam conhecimento documental em resposta
   auditável;
 - ETL e schema metadata conectam dados estruturados e bases legadas;
