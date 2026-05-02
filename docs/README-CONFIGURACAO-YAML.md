@@ -1,499 +1,608 @@
-# Manual técnico, executivo, comercial e estratégico: Configuração YAML
+# Manual técnico, executivo, comercial e estratégico: configuração YAML
 
 ## 1. O que é esta feature
 
-A configuração YAML é o contrato operacional da plataforma. Ela descreve o que a aplicação deve fazer, com quais recursos, com quais segredos, em qual contexto de cliente, em qual topologia agentic e sob quais limites de governança. O ponto central não é “ter um arquivo de configuração”. O ponto central é fazer a plataforma funcionar a partir de um documento declarativo, sem empurrar a inteligência de montagem para código manual em cada fluxo.
+A configuração YAML é o contrato operacional da plataforma. Ela descreve como o produto deve se comportar, em qual contexto de cliente, com quais segredos, quais pipelines, quais recursos de RAG, qual topologia agentic e sob quais regras de governança.
 
-Na prática, o YAML é o idioma operacional do produto. Ele permite declarar ingestão, RAG, supervisors, workflows, tools, memória, segredos, canais e comportamento de execução sem exigir que cada combinação vire uma implementação nova em Python.
+O ponto mais importante não é “ter um arquivo YAML”. O ponto importante é que a plataforma foi desenhada para nascer de configuração declarativa, e não de ramificações manuais de código para cada cliente, agente, canal ou fluxo.
 
-Em linguagem simples, o YAML aqui não é apenas um arquivo. Ele é a forma padrão de montar o produto.
+No código lido, isso aparece de forma bem clara: o sistema não executa o YAML bruto que chegou. Ele primeiro carrega, normaliza, injeta contexto de sessão, resolve tenant, trata segredos, expande placeholders, injeta catálogo builtin de tools quando aplicável e, no escopo agentic, governa o trecho crítico por AST e validação semântica.
 
 ## 2. Que problema ela resolve
 
-Sem um contrato YAML forte, a plataforma cairia em três problemas clássicos.
+Sem esse contrato YAML, a plataforma cairia em quatro problemas clássicos.
 
-O primeiro é fragmentação. Cada endpoint ou serviço passaria a interpretar configuração de um jeito próprio.
+1. Cada fluxo interpretaria configuração de um jeito diferente.
+2. Cada personalização de cliente viraria demanda de código.
+3. Credenciais, tenant e catálogos de tools se espalhariam por caminhos pouco auditáveis.
+4. O runtime agentic ficaria vulnerável a YAMLs “bonitos”, mas semanticamente inválidos.
 
-O segundo é dependência excessiva de desenvolvimento. Sempre que um consultor ou operação quisesse criar um novo agente, fluxo ou variante de atendimento, seria necessário abrir tarefa para engenharia mexer no código.
-
-O terceiro é governança fraca. Se segredos, tenant, catálogo de tools e topologia agentic pudessem entrar por caminhos arbitrários, o runtime ficaria imprevisível e difícil de auditar.
-
-O YAML resolve isso criando um trilho único de resolução, enriquecimento, validação e compilação.
+O YAML existe para deslocar customização da camada de código para uma camada declarativa governada.
 
 ## 3. Visão conceitual
 
-Conceitualmente, a plataforma é YAML-first. Isso significa que a intenção do produto nasce primeiro em configuração e só depois vira runtime. Mas YAML-first não significa texto livre. Significa documento declarativo com contrato, estrutura esperada, enriquecimento obrigatório de contexto e, no escopo agentic, governança AST-first.
+Conceitualmente, a plataforma é YAML-first, mas não texto-livre-first.
 
-O conceito mais importante é este: o sistema não executa “o YAML que chegou”. Ele executa o YAML depois de resolver origem, user_session, tenant, security_keys, placeholders, catálogo de tools, normalização estrutural e validação do trecho agentic quando aplicável.
+Isso significa que a intenção do produto nasce em configuração, mas a configuração só vira runtime depois de passar por uma trilha controlada. No escopo não-agentic, essa trilha é formada por fábrica de configuração, normalização estrutural, contratos especializados e consumidores de runtime. No escopo agentic, a trilha é reforçada por AST tipada, parsers, validadores semânticos, diff preview e confirmação.
+
+O conceito central é este: YAML é contrato de montagem, não atalho para bypass de governança.
 
 ## 4. Visão tática
 
-Taticamente, o YAML serve para acelerar montagem de solução sem perder controle. Ele permite que a empresa opere numa camada mais alta de abstração.
+Taticamente, o YAML permite que a empresa opere numa camada mais alta de abstração.
 
-Em vez de dizer “vamos programar um agente novo”, a tática da plataforma é dizer “vamos montar ou ajustar o contrato YAML correto, validar o escopo governado e publicar a configuração certa para o tenant certo”.
+Em vez de dizer “vamos codificar mais uma variante do sistema”, a tática real do produto é dizer “vamos montar o contrato YAML correto para o tenant correto, com os recursos corretos, e deixar o runtime reutilizar o mesmo core”.
 
-Essa tática é especialmente forte em três situações:
+Essa tática é especialmente útil em três cenários.
 
-- criação de agentes e automações a partir de objetivo de negócio;
-- personalização por tenant sem bifurcar código-fonte;
-- troca de provider, credencial, workflow, supervisor ou tool sem reimplementar o produto.
+1. Personalização por tenant sem bifurcar o core.
+2. Montagem de workflows, supervisores e deepagents sem editar Python para toda variação.
+3. Troca de provider, segredo, target vetorial, política de ingestão ou tool ativa sem reescrever o produto.
 
 ## 5. Visão técnica
 
-Tecnicamente, o YAML entra por um resolvedor central. Ele pode vir de arquivo, payload ou conteúdo inline. Depois, recebe user_session com correlation_id, é enriquecido com client_context, injeta security_keys a partir do diretório multi-tenant quando necessário, expande placeholders, injeta o catálogo builtin em tools_library e passa por normalização estrutural.
+Tecnicamente, o contrato YAML ativo não mora em um único arquivo. O código lido mostra quatro camadas de verdade.
 
-Quando o documento toca o escopo agentic, o sistema deixa de tratar esse trecho como texto livre. O fluxo passa por parse para AST canônica, validação semântica, compilação de fragmento governado, detecção de deriva e confirmação. Se a feature FEATURE_AGENTIC_AST_ENABLED estiver desligada, os endpoints de assembly ficam indisponíveis.
+1. A carga e finalização do YAML em ConfigurationFactory.
+2. A validação estrutural e rejeição de layouts legados em YamlSchemaNormalizer.
+3. Os contratos especializados, como VectorStoreContract.
+4. O contrato agentic governado por AST, validadores semânticos e GovernedYamlDriftDetector.
 
-O ponto técnico crítico é este: o YAML é uma entrada declarativa, mas a plataforma só o aceita como executável depois de transformá-lo em artefato confiável.
+Isso é importante porque evita um erro comum de documentação: tratar um arquivo-modelo ou um validador legado como se fossem a única fonte de verdade. O próprio código marca o validador antigo como deprecado.
 
 ## 6. Visão executiva
 
-Para liderança, o valor do YAML é padronização com velocidade. Ele reduz dependência de mudanças de código para cada nova necessidade de cliente e transforma configuração em ativo governado.
+Para liderança, o YAML importa porque ele transforma customização em parametrização governada.
 
-Isso melhora time-to-value porque novas variantes podem nascer mais rápido. Também melhora governança porque o sistema impõe trilho de validação, seleção de tenant, resolução de segredos e contrato agentic antes de publicar a configuração final.
+- Reduz dependência de desenvolvimento para toda mudança operacional.
+- Aumenta velocidade de implantação e ajuste por cliente.
+- Melhora previsibilidade de governança porque tenant, segredos, ferramentas e topologia não entram por caminhos soltos.
+- Diminui custo de evolução ao reaproveitar o mesmo core em múltiplos cenários.
 
-O ganho executivo mais forte é reduzir custo de personalização. Em software empresarial, personalização desgovernada costuma virar backlog de engenharia. Aqui, a arquitetura tenta deslocar essa personalização para uma camada declarativa controlada.
+Em linguagem executiva, o YAML reduz custo marginal de personalização e melhora a escalabilidade operacional da plataforma.
 
 ## 7. Visão comercial
 
-Comercialmente, o YAML vira uma alavanca clara de oferta. A conversa correta não é “nosso sistema tem YAML”. A conversa correta é “nossa plataforma permite montar agentes, workflows e automações por configuração governada, com isolamento por tenant e segredos próprios do cliente”.
+Comercialmente, o valor não é dizer que o produto “usa YAML”. O valor é dizer que a plataforma pode ser configurada com governança, isolamento por tenant, catálogo controlado de tools e trilha de validação real.
 
-Isso é valioso para pré-venda porque reduz o atrito entre demonstração e entrega. O time comercial ou consultivo consegue mostrar adaptação de comportamento sem prometer uma sprint de código para cada ajuste.
+Isso ajuda a sustentar uma conversa mais forte com o cliente.
 
-O benefício percebido pelo cliente é autonomia com controle. O benefício percebido pela empresa de software é capacidade de escalar customização sem multiplicar custo técnico na mesma proporção.
+1. A solução pode ser adaptada sem prometer sprint de código para todo ajuste.
+2. O cliente pode operar com segredos próprios e contexto próprio.
+3. A configuração agentic não depende de edição textual cega.
+4. A personalização pode escalar sem virar fábrica de projetos sob medida frágeis.
 
 ## 8. Visão estratégica
 
-Estratégicamente, o YAML fortalece a plataforma em quatro frentes.
+Estratégicamente, o YAML fortalece a plataforma em seis frentes.
 
-A primeira é reuso. Em vez de hardcode por caso de uso, o produto reutiliza engines, tools, validadores e runtime a partir de configuração.
-
-A segunda é separação entre produto e implantação. O core continua estável enquanto cada tenant recebe seu próprio contrato operacional.
-
-A terceira é governança de evolução. Como o escopo agentic passa por AST, parser, compilador e confirm, a plataforma consegue crescer sem transformar configuração em caos textual.
-
-A quarta é habilitação de operação consultiva. A empresa pode colocar consultores mais perto da montagem da solução, porque a camada de definição foi elevada acima do código-fonte.
+1. Reuso do core técnico.
+2. Separação entre produto e implantação.
+3. Isolamento por tenant.
+4. Governança de segredos e contexto operacional.
+5. Evolução agentic apoiada por AST em vez de texto livre.
+6. Capacidade de empurrar parte da montagem para consultoria, operação e tooling sem quebrar o runtime.
 
 ## 9. Conceitos necessários para entender
 
-### 9.1. Resolução de YAML
+### YAML-first
 
-Resolução é o processo de transformar uma entrada bruta em configuração pronta para uso. Ela inclui origem, contexto, segredos, placeholders, tools e normalização.
+YAML-first significa que a plataforma nasce de configuração declarativa. Não significa que qualquer texto YAML é aceito como contrato válido.
 
-### 9.2. client_context
+### Normalização estrutural
 
-client_context é o bloco que materializa identidade de cliente e tenant no YAML. No código lido, tenant_id deve morar em client_context.client.tenant_id. Colocar tenant_id em metadata ou em caminhos legados é tratado como configuração inválida em vários pontos do runtime.
+É a etapa que rejeita aliases legados, caminhos antigos e layouts não suportados, mantendo apenas o contrato canônico conhecido pelo runtime.
 
-### 9.3. security_keys
+### Enriquecimento multi-tenant
 
-security_keys é o store lógico de segredos do YAML. O sistema o padroniza com fallback de leitura e usa esse store para expandir placeholders em qualquer parte do documento.
+É a etapa em que o sistema tenta completar client_context e security_keys a partir do diretório multi-tenant antes da execução real.
 
-### 9.4. Placeholder
+### Placeholder
 
-Placeholder é um valor simbólico no formato ${VAR}. O runtime tenta resolvê-lo via security_keys e, quando necessário, via .env.
+É um valor simbólico no formato ${VAR}. O runtime tenta resolvê-lo usando security_keys e, quando necessário, fallback do store de segredos.
 
-### 9.5. tools_library
+### Catálogo builtin
 
-tools_library é o catálogo visível ao runtime agentic. No contrato observado, ele deve chegar vazio no YAML recebido e ser preenchido automaticamente com o catálogo builtin persistido. Preencher manualmente esse bloco é erro.
+É o catálogo persistido de tools nativas. No fluxo agentic carregado pela fábrica, tools_library precisa existir na raiz e chegar vazia para ser preenchida automaticamente com esse catálogo.
 
-### 9.6. AST governada
+### Escopo agentic governado
 
-No escopo agentic, AST é a representação tipada do YAML. Ela existe para garantir que draft, validate, confirm, schema e runtime falem a mesma língua.
+É o recorte do YAML que deixa de ser tratado como texto livre e passa a ser controlado por AST tipada, validação semântica, merge seletivo e selo de drift.
 
-### 9.7. Drift governado
+### Drift governado
 
-Drift é a divergência entre o YAML governado validado e o conteúdo que permanece depois. O sistema registra hashes em metadata.agentic_assembly.governed_hashes para detectar isso.
+É a divergência entre o fragmento agentic aprovado e o estado atual do YAML carregado. O runtime pode bloquear ou alertar quando isso acontece.
 
-### 9.8. YAML pessoal e YAML por tenant
+## 10. Como o contrato YAML funciona por dentro
 
-O código confirma dois níveis de associação de YAML persistido: YAML por conta de usuário e YAML por vínculo usuário-tenant. Isso é importante porque a mesma pessoa pode operar em múltiplos contextos organizacionais.
+O fluxo real observado no código é este.
 
-## 10. BYOK no contexto real desta plataforma
+1. O YAML chega por arquivo, payload inline ou payload criptografado.
+2. ConfigurationFactory carrega o documento e injeta user_session.correlation_id e, quando aplicável, user_email.
+3. A fábrica valida security_keys.
+4. A fábrica exige tools_library na raiz e a injeta a partir do catálogo builtin quando a chave chega vazia.
+5. O runtime garante security_keys como store lógico e expande placeholders.
+6. YamlSchemaNormalizer rejeita aliases e caminhos legados.
+7. Contratos especializados, como vector_store, validam regras adicionais.
+8. O resolvedor multi-tenant tenta enriquecer client_context e security_keys quando o YAML não chegou completo.
+9. Quando existe escopo agentic, a plataforma ainda pode validar o trecho governado por AST e checar drift.
 
-BYOK, no sentido prático deste projeto, significa permitir que o cliente use suas próprias credenciais, chaves e segredos dentro da execução da plataforma, sem exigir que tudo seja fixado no código-fonte do produto.
+Ou seja: YAML carregado não é YAML pronto.
 
-O que o código confirma é o seguinte:
+## 11. Sintaxe realmente aceita pelo runtime
 
-- o YAML pode carregar security_keys localmente;
-- o resolvedor pode enriquecer o YAML com credenciais vindas do diretório multi-tenant;
-- placeholders como ${VAR} são resolvidos pelo SecurityKeysStore;
-- em canais, se um segredo referenciado não existir em tenant_secrets, o sistema falha com erro explícito;
-- quando a chave não existe no payload local, o store ainda mantém fallback para .env.
+Quando o tema é sintaxe, o código confirma algumas regras bem objetivas.
 
-Isso leva a uma conclusão importante: a plataforma suporta um modelo operacional próximo de BYOK, mas não é um BYOK rígido e exclusivo em todos os fluxos, porque o código ainda aceita fallback para .env em parte da resolução. Em outras palavras, o tenant pode trazer suas próprias chaves, mas o sistema ainda preserva compatibilidade com segredos de ambiente quando necessário.
+1. A raiz do YAML precisa ser um objeto, não uma lista nem um escalar.
+2. user_session deve existir na raiz.
+3. authentication.user_session é proibido.
+4. common na raiz é proibido.
+5. modern_rag_system na raiz é proibido.
+6. tools_library precisa existir na raiz do fluxo agentic carregado pela fábrica.
+7. tools_library deve chegar vazia no YAML recebido; o catálogo builtin é injetado automaticamente.
+8. client_context.client é o caminho canônico para identidade de cliente.
+9. client_context.client.tenant_id é o caminho canônico para tenant.
+10. metadata não pode carregar tenant_id, client_code nem yaml_path como atalhos.
 
-### 10.1. Por que BYOK importa
+Essa é a diferença entre sintaxe YAML válida e contrato YAML válido. O parser YAML pode aceitar um texto que o runtime rejeita logo depois.
 
-BYOK importa por quatro razões.
+## 12. Somente as chaves top-level válidas confirmadas no código
 
-A primeira é isolamento comercial. Cada cliente pode operar com sua própria conta de provider, seu próprio token de canal ou sua própria chave de API.
+Esta seção lista apenas chaves top-level que consegui confirmar no código como lidas, validadas, exigidas ou apontadas explicitamente como destino canônico. Ela não tenta inventariar todas as subchaves do produto inteiro.
 
-A segunda é governança de custo. O consumo do cliente pode ficar ligado à credencial do próprio cliente em vez de ser totalmente absorvido pela empresa de software.
-
-A terceira é segurança contratual. O segredo do cliente não precisa virar constante de aplicação.
-
-A quarta é portabilidade. Trocar credencial ou provider fica mais próximo de configuração do que de reescrita de código.
-
-### 10.2. Implicações práticas de BYOK
-
-BYOK mal governado vira caos de segredo. Por isso o sistema não trata secrets como texto solto. Ele exige client_context resolvido, usa diretório multi-tenant, registra erros quando tenant_secrets não atende a referência e padroniza acesso por SecurityKeysStore.
-
-Em termos simples: a plataforma tenta dar liberdade ao cliente sem perder rastreabilidade nem abrir atalhos inseguros.
-
-## 11. Separação por tenants e suas implicações
-
-A separação por tenant no código não é apenas organizacional. Ela afeta resolução de YAML, resolução de segredos, persistência de datasets, telemetria e autorização.
-
-Os sinais concretos lidos mostram isso:
-
-- o diretório central de clientes resolve YAML por usuário, por tenant e por canal;
-- a injeção de security_keys depende do client_code e pode consultar tenant_secrets;
-- o bootstrap de dataset exige client_context.client.tenant_id;
-- alvos físicos de índice são nomeados com tenant e vectorstore, como qdrant:tenant:vectorstore:gN e bm25:tenant:vectorstore:gN;
-- vários fluxos rejeitam tenant_id em local errado e exigem o caminho canônico client_context.client.tenant_id.
-
-### 11.1. Implicações técnicas
-
-Tecnicamente, a separação por tenant evita colisão de índices, misturas acidentais de credenciais e ambiguidade sobre qual configuração está ativa.
-
-### 11.2. Implicações operacionais
-
-Operacionalmente, a empresa consegue isolar clientes, segmentar troubleshooting, localizar segredos por contexto e reduzir risco de usar canal ou provider do tenant errado.
-
-### 11.3. Implicações comerciais
-
-Comercialmente, isso suporta oferta multi-tenant real. A empresa pode vender a mesma plataforma para múltiplos clientes sem prometer um ambiente manualmente customizado para cada um.
-
-### 11.4. Implicações de governança
-
-Do ponto de vista de governança, essa separação facilita autorização, faturamento por contexto, auditoria de pertença e gestão de projetos por tenant.
-
-## 12. Como o YAML funciona por dentro
-
-O fluxo começa na borda, onde a plataforma resolve de onde veio o YAML. Depois injeta user_session com correlation_id e user_email, quando aplicável. Em seguida, tenta enriquecer client_context e security_keys por meio do diretório multi-tenant.
-
-Com security_keys padronizado, o sistema expande placeholders recursivamente. Depois injeta tools_library a partir do catálogo builtin persistido, desde que o YAML o tenha declarado vazio. Só então segue para normalização estrutural e, quando há escopo agentic, para parse, validação e confirmação governada.
-
-O ponto importante é que a plataforma empilha preparação antes de execução. Ela não trata o YAML como algo pronto só porque foi carregado sem erro de sintaxe.
-
-## 13. Pipeline principal
-
-```mermaid
-flowchart TD
-    A[Origem do YAML] --> B[Carregamento do documento]
-    B --> C[Injeção de user_session e correlation_id]
-    C --> D[Enriquecimento de client_context]
-    D --> E[Injeção ou padronização de security_keys]
-    E --> F[Expansão de placeholders]
-    F --> G[Injeção obrigatória de tools_library]
-    G --> H[Normalização estrutural]
-    H --> I{Escopo agentic presente?}
-    I -- Não --> J[YAML pronto para runtime]
-    I -- Sim --> K[Parse AST + validate + confirm]
-    K --> L[YAML governado com hash canônico]
-```
-
-O diagrama mostra a lógica principal: YAML carregado não é YAML pronto. Antes de virar runtime, ele é enriquecido, normalizado e, quando necessário, governado.
-
-## 14. Criação de agentes sem programação manual
-
-Uma das capacidades mais estratégicas do sistema é permitir geração assistida de configuração agentic a partir de objetivo em linguagem natural. O código confirma um fluxo formal para isso por meio dos endpoints de assembly, especialmente draft, objective-to-yaml, validate e confirm.
-
-Na prática, o caminho é este:
-
-- o usuário informa objetivo, target e contexto base;
-- o serviço de assembly resolve o alvo correto;
-- o draft pode ser gerado por LLM com envelope JSON estrito e schema explícito;
-- se faltar informação, o sistema devolve questions obrigatórias em vez de inventar configuração;
-- o validate verifica coerência semântica;
-- o confirm produz YAML final, faz merge com a base e registra hash governado.
-
-Isso é o que torna plausível a criação de agentes sem programação manual direta. O consultor não precisa escrever Python nem dominar detalhes internos do runtime para começar um novo draft de configuração. Ele trabalha na camada de intenção e restrição, enquanto a plataforma tenta transformar isso em YAML canônico.
-
-### 14.1. O que “sem programação” significa aqui
-
-Significa reduzir a necessidade de editar código-fonte para montar a solução. Não significa ausência total de governança, de revisão ou de entendimento funcional.
-
-O sistema não publica configuração textual crua direto para produção. Ele passa por schema, validação e confirmação. Essa distinção é fundamental.
-
-### 14.2. Por que isso é importante para consultores
-
-Isso aproxima consultoria e montagem de solução. Em vez de depender de um desenvolvedor para toda variação de agente, o consultor pode ajudar a descrever o objetivo, selecionar o tipo de fluxo e iterar na configuração declarativa.
-
-Na prática, a plataforma desloca parte do trabalho da camada de código para a camada de contrato operacional.
-
-### 14.3. Por que isso é importante para uma empresa de software
-
-Para a empresa, isso traz vantagens reais:
-
-- reduz backlog de engenharia para customizações repetitivas;
-- encurta prototipação e prova de conceito;
-- aumenta reaproveitamento do core técnico;
-- melhora margem operacional em cenários de personalização;
-- permite que especialistas de negócio contribuam antes de uma implementação de baixo nível.
-
-O risco evitado aqui é virar fábrica de projetos totalmente manuais. A estratégia do YAML é transformar personalização em parametrização governada.
-
-## 15. Decisões técnicas e trade-offs
-
-### 15.1. Falha fechada para tools_library
-
-O sistema exige tools_library na raiz e vazia. Isso reduz liberdade textual, mas impede catálogos divergentes ou manipulados manualmente.
-
-### 15.2. Fallback de segredos para .env
-
-O fallback aumenta resiliência e compatibilidade. O custo é que BYOK não fica 100% rígido em todos os fluxos. Isso precisa ser entendido como escolha de transição e compatibilidade, não como isolamento absoluto de segredo em toda a base.
-
-### 15.3. Tenant_id em caminho canônico
-
-Exigir client_context.client.tenant_id aumenta rigor e reduz ambiguidade. O custo é rejeitar layouts legados ou atalhos improvisados.
-
-### 15.4. AST governada no escopo agentic
-
-Esse desenho aumenta disciplina e segurança. O custo é tornar a edição agentic menos livre do que um YAML artesanal. Em troca, a plataforma ganha validação forte e proteção contra drift.
-
-### 15.5. Geração assistida com perguntas obrigatórias
-
-O sistema prefere devolver perguntas quando falta informação em vez de inventar um YAML “bonito”. Isso sacrifica conveniência imediata, mas evita publicar configuração perigosa ou ilusória.
-
-## 16. Configurações que mudam comportamento
-
-### 16.1. FEATURE_AGENTIC_AST_ENABLED
-
-Liga ou desliga a disponibilidade da montagem AST governada por endpoints de assembly.
-
-### 16.2. tools_library
-
-Precisa existir na raiz e chegar vazia. Se vier preenchida, o sistema rejeita o YAML recebido.
-
-### 16.3. client_context.client.tenant_id
-
-Define o tenant do fluxo e influencia resolução de índices, datasets e múltiplos validadores de runtime.
-
-### 16.4. security_keys
-
-Controla a disponibilidade de segredos locais e participa da expansão de placeholders.
-
-### 16.5. vector_store.if_exists
-
-Controla a política do dataset vivo durante ingestão.
-
-### 16.6. user_session.correlation_id
-
-Controla a identidade lógica da execução para logs, rastreabilidade e continuidade entre camadas.
-
-## 17. Contratos, entradas e saídas
-
-Os contratos mais relevantes confirmados no código são estes:
-
-- entrada do YAML por origem resolvida pela borda;
-- user_session contendo correlation_id e, quando aplicável, user_email;
-- client_context.client com tenant_id e dados do cliente;
-- security_keys como store padrão de segredos;
-- tools_library como catálogo builtin injetado;
-- payloads agentic que passam por draft, objective-to-yaml, validate e confirm;
-- YAML pessoal e YAML organizacional resolvidos por repositórios distintos no diretório multi-tenant.
-
-Esses contratos são importantes porque ligam definição declarativa a persistência, runtime e governança.
+| Chave top-level | Status confirmado | Observação prática |
+| --- | --- | --- |
+| user_session | canônica e exigida | Deve existir na raiz como objeto. |
+| security_keys | válida e usada | Pode vir do YAML, de payload auxiliar ou do diretório multi-tenant. |
+| tools_library | válida e obrigatória no fluxo agentic pela fábrica | Deve existir na raiz e chegar vazia para auto-injeção. |
+| rag_system | chave oficial do pipeline RAG | modern_rag_system é rejeitada. |
+| qa_system | ainda lida explicitamente | Continua sendo seção válida do runtime QA. |
+| vector_store | válida e contratada | Possui contrato especializado, especialmente para if_exists. |
+| ingestion | válida e canônica | Centraliza estrutura de ingestão no layout atual. |
+| content_sources | lida como fallback | Confirmada como compatibilidade, não como caminho preferido universal. |
+| embeddings | válida e lida explicitamente | Usada por consumidores do runtime. |
+| authentication | válida | Usada para access_key; user_session sob ela é proibido. |
+| client_context | válida e estrutural | Identidade de cliente e tenant devem ficar aqui. |
+| metadata | válida com restrições | Parte dela é usada; tenant_id, client_code e yaml_path nela são rejeitados. |
+| memory | válida | Participa de contratos de memória e checkpointer. |
+| llm | válida na raiz | memory.llm é rejeitado. |
+| intelligent_pipeline | válida na raiz | memory.intelligent_pipeline é rejeitado. |
+| schema_metadata | válida quando o fluxo exige | Importante para schema_rag_sql. |
+
+## 13. Chaves top-level agentic válidas confirmadas
+
+No escopo agentic governado, o próprio tooling e o detector de drift deixam explícito quais chaves top-level formam o artefato runtime final por alvo.
+
+### Workflow governado
+
+| Chave | Papel |
+| --- | --- |
+| selected_workflow | escolhe o workflow ativo |
+| workflows_defaults | guarda defaults do conjunto de workflows |
+| workflows | define os workflows do documento |
+| tools_library | catálogo agentic visível ao runtime |
+
+### Supervisor clássico governado
+
+| Chave | Papel |
+| --- | --- |
+| selected_supervisor | escolhe o supervisor ativo |
+| multi_agents | guarda supervisores e seus agentes |
+| tools_library | catálogo agentic visível ao runtime |
+
+### Deepagent governado no YAML final
+
+| Chave | Papel |
+| --- | --- |
+| selected_supervisor | escolhe o supervisor deepagent ativo |
+| multi_agents | guarda o supervisor deepagent serializado para runtime |
+| tools_library | catálogo agentic visível ao runtime |
+
+Observação importante: deepagent_multi_agents existe no envelope AST interno, mas não é a raiz canônica do YAML final de runtime.
+
+## 14. Chaves obrigatórias versus opcionais, somente quando o código diz isso explicitamente
+
+### Obrigatórias explícitas
+
+| Chave ou caminho | Condição |
+| --- | --- |
+| user_session | obrigatória sempre na normalização estrutural |
+| tools_library | obrigatória na raiz no fluxo agentic carregado pela fábrica |
+| vector_store.if_exists | obrigatória quando o contrato de vector_store é avaliado |
+| workflows | obrigatória na prática para target workflow válido |
+| multi_agents | obrigatória na prática para target supervisor ou deepagent válido |
+
+### Obrigatórias condicionais explícitas
+
+| Chave ou caminho | Quando se torna obrigatória |
+| --- | --- |
+| selected_workflow | quando existe mais de um workflow habilitado |
+| selected_supervisor | quando existe mais de um supervisor habilitado compatível com o alvo |
+| schema_metadata.enabled | quando alguma tool schema_rag_sql é habilitada |
+| schema_metadata.vectorstore_id | quando alguma tool schema_rag_sql é habilitada |
+| schema_metadata.sql_dialect | quando alguma tool schema_rag_sql é habilitada |
+| memory.checkpointer.enabled | quando human_in_the_loop está ativado em deepagent |
+| multi_agents[].permissions | quando filesystem middleware está ativado em deepagent |
+| multi_agents[].deepagent_memory.enabled | quando memory middleware está ativado em deepagent |
+| multi_agents[].deepagent_memory.backend | quando deepagent_memory está ativo; o valor aceito é redis |
+| multi_agents[].deepagent_memory.redis.url | quando deepagent_memory está ativo |
+| multi_agents[].interrupt_on | quando human_in_the_loop está ativado em deepagent |
+| multi_agents[].skills | quando skills middleware está ativado em deepagent |
+| user_session.tenant_id | quando deepagent_memory.scope é org |
+
+### Opcionais explícitas
+
+| Chave ou caminho | Observação |
+| --- | --- |
+| selected_workflow | opcional quando só existe um workflow habilitado sem ambiguidade |
+| selected_supervisor | opcional quando só existe um supervisor habilitado sem ambiguidade |
+| security_keys | pode ficar vazia apenas em fluxos que chamam a fábrica com allow_empty_security_keys verdadeiro |
+| content_sources | aceita como fallback de compatibilidade |
+
+## 15. Chaves e localizações explicitamente rejeitadas ou legadas
+
+Esta é a parte mais importante para o pedido de “somente as chaves válidas”. As entradas abaixo não devem ser tratadas como válidas no contrato atual.
+
+| Caminho rejeitado | Destino canônico ou orientação |
+| --- | --- |
+| modern_rag_system | usar rag_system |
+| authentication.user_session | usar user_session na raiz |
+| common | mover as chaves para a raiz |
+| qa | usar qa_system |
+| hybrid_search | usar rag_system.retriever.hybrid |
+| memory.llm | usar llm na raiz |
+| memory.intelligent_pipeline | usar intelligent_pipeline na raiz |
+| qa_system.user_memory | usar memory.qa_long_memory |
+| qa_system.memory_history | usar memory.qa_short_history |
+| multi_agents[].memory | usar memory.checkpointer na raiz ou multi_agents[].deepagent_memory |
+| confluence na raiz | usar ingestion.confluence |
+| content_profiles na raiz | usar ingestion.content_profiles |
+| pdf na raiz | usar ingestion.content_profiles.type_specific.pdf |
+| json na raiz | usar ingestion.content_profiles.type_specific.json |
+| ingestion.web.enabled | usar ingestion.remote_sources.web_scraping.enabled |
+| ingestion.pdf | usar ingestion.content_profiles.type_specific.pdf |
+| ingestion.json | usar ingestion.content_profiles.type_specific.json |
+| ingestion.remote_sources.web_scraping.security.authentication.attachments | usar ingestion.remote_sources.web_scraping.attachments |
+| rag_system.retriever.fts.pq_schema | usar rag_system.retriever.fts.pg_schema |
+| qa_system.retrieval.vector_store_id | usar vector_store.id |
+| vector_store.incremental_indexing.respect_last_modified | usar vector_store.incremental_indexing.enabled |
+| metadata.tenant_id | usar client_context.client.tenant_id |
+| metadata.client_code | usar client_context.client.client_code |
+| metadata.client_code_alias | usar client_context.client |
+| metadata.yaml_path | usar client_context.client.yaml_path |
+| client_context.client.metadata.tenant_id | usar client_context.client.tenant_id |
+| client_context.client.metadata.yaml_path | usar client_context.client.yaml_path |
+| multimodal_scenarios | remover; o runtime rejeita esse cenário órfão |
+| multi_agents[].planner | removida do contrato agentic atual |
+| multi_agents[].capabilities no deepagent | rejeitada no topo do supervisor deepagent |
+| multi_agents[].context_schema no deepagent | rejeitada no topo do supervisor deepagent |
+
+## 16. Como a plataforma decide o que é válido
+
+O código lido mostra uma regra prática: validade não vem de um schema global único e fechado para todo o produto. Ela vem da combinação de quatro filtros.
+
+1. A fábrica de configuração garante carga, session context, security_keys e tools_library.
+2. O normalizador rejeita layouts antigos e caminhos proibidos.
+3. Contratos especializados validam slices críticos, como vector_store.
+4. O runtime e o assembly agentic exigem semântica válida, não apenas forma válida.
+
+Isso explica por que duas chaves podem parecer “parecidas” e, ainda assim, uma ser aceita e a outra falhar fechado.
+
+## 17. Enriquecimentos e normalizações automáticas confirmados
+
+O YAML final usado pelo runtime não é sempre igual ao YAML que entrou. O sistema aplica enrichments automáticos confirmados no código.
+
+| Enriquecimento | O que faz |
+| --- | --- |
+| user_session.correlation_id | injeta o correlation_id operacional no YAML |
+| user_session.user_email | injeta e-mail do operador quando disponível |
+| merge de keys_payload | mescla chaves auxiliares em security_keys |
+| ensure_security_keys_store | garante store lógico de segredos |
+| expansão de placeholders | resolve ${VAR} em todo o documento |
+| injeção de security_keys via diretório | tenta completar segredos do cliente pelo diretório multi-tenant |
+| enrich_yaml_with_client_context | tenta completar client_context do cliente |
+| auto-injeção de tools_library | injeta catálogo builtin persistido quando a chave chega vazia |
+| _config_metadata | grava metadados de origem, hash e carregamento |
+| metadata.agentic_assembly.governed_hashes | grava fingerprint do fragmento agentic governado |
 
 ## 18. O que acontece em caso de sucesso
 
-No caminho feliz, o YAML entra por uma origem suportada, recebe user_session, é enriquecido com client_context, resolve security_keys e placeholders, ganha tools_library canônica, passa pela normalização estrutural e, se tiver escopo agentic, passa também por parse, validate e confirm.
+No caminho feliz, o YAML passa por esta sequência.
 
-Quando tudo fecha corretamente, o resultado não é apenas um YAML sintaticamente bonito. É uma configuração pronta para runtime, associada ao tenant correto e, no trecho governado, com selo de hash canônico.
+1. É carregado como objeto válido na raiz.
+2. Recebe user_session adequado ao contexto da execução.
+3. Recebe ou consolida security_keys.
+4. Recebe tools_library quando o fluxo agentic usa a fábrica.
+5. É normalizado contra caminhos canônicos.
+6. Recebe client_context e security_keys multi-tenant quando necessário.
+7. Tem placeholders resolvidos.
+8. Se houver escopo agentic governado, recebe também validação semântica e selo de hash.
+
+O resultado não é apenas um YAML sintaticamente correto. É um YAML pronto para ser entendido pelo runtime real.
 
 ## 19. O que acontece em caso de erro
 
-Os erros mais relevantes confirmados no código são estes.
+Os erros mais importantes confirmados no código lido se agrupam em algumas famílias.
 
-### 19.1. Origem de YAML inválida
+### Erro de forma estrutural
 
-O sistema pode falhar logo na leitura quando a origem do documento não é suportada ou está ausente.
+O YAML não é um objeto na raiz ou não contém user_session canônico.
 
-### 19.2. tools_library ausente ou preenchida
+### Erro de layout legado
 
-O resolvedor falha fechado se tools_library não existir na raiz ou vier preenchida manualmente.
+O documento usa caminhos explicitamente rejeitados, como common, qa, metadata.tenant_id ou authentication.user_session.
 
-### 19.3. client_code não resolvido
+### Erro de catálogo agentic
 
-Sem access_key ou client_context suficiente para determinar client_code, a injeção de security_keys é negada.
+tools_library falta na raiz ou chegou preenchida manualmente, o que quebra o contrato de auto-injeção.
 
-### 19.4. Security_keys não encontradas
+### Erro de vector_store
 
-Se o diretório multi-tenant não localizar security_keys do cliente, a API retorna erro explícito orientando cadastro prévio.
+vector_store.if_exists está ausente, com tipo errado ou com valor fora de overwrite, skip ou update.
 
-### 19.5. Segredo referenciado ausente em tenant_secrets
+### Erro de identidade multi-tenant
 
-Se o YAML referenciar um segredo inexistente na tabela tenant_secrets, a requisição falha com mensagem específica.
+client_code não pode ser determinado, client_context.client não foi enriquecido ou tenant_id ficou em caminho inválido.
 
-### 19.6. tenant_id ausente ou em local errado
+### Erro de segredo
 
-Vários fluxos exigem client_context.client.tenant_id. Usar metadata.tenant_id ou caminhos legados pode quebrar bootstrap e validações posteriores.
+security_keys do cliente não existem no diretório, ou um segredo referenciado não existe em tenant_secrets.
 
-### 19.7. Draft agentic sem contexto suficiente
+### Erro agentic
 
-Na geração assistida, o sistema não precisa “falhar silenciosamente”. Ele pode devolver questions obrigatórias e bloquear a publicação do YAML final até que a lacuna seja resolvida.
+O trecho governado passa no parse YAML, mas falha em semântica, target, drift ou governança do assembly.
 
 ## 20. Observabilidade e diagnóstico
 
 O diagnóstico correto do YAML segue esta ordem.
 
-1. Confirmar a origem do documento.
-2. Confirmar se user_session foi injetado com correlation_id.
-3. Confirmar se client_context.client foi enriquecido com tenant e client_code.
-4. Confirmar se security_keys foi resolvido localmente, por diretório ou por fallback .env.
-5. Confirmar se placeholders críticos foram realmente substituídos.
-6. Confirmar se tools_library chegou vazia e foi preenchida pelo catálogo builtin.
-7. Quando houver escopo agentic, verificar diagnostics, validation_report e metadata.agentic_assembly.governed_hashes.
+1. Confirmar se a origem do YAML foi resolvida corretamente.
+2. Confirmar se user_session foi injetado na raiz.
+3. Confirmar se client_context.client foi enriquecido com os identificadores esperados.
+4. Confirmar se security_keys existe, está serializável e contém o que o fluxo precisa.
+5. Confirmar se placeholders realmente foram expandidos.
+6. Confirmar se tools_library existe e veio vazia antes da auto-injeção.
+7. Confirmar se o YAML bate no contrato canônico do slice consumido.
+8. No escopo agentic, confirmar diagnostics, compiled_fragment e metadata.agentic_assembly.governed_hashes.
 
-Em linguagem simples: primeiro prove que o YAML foi preparado corretamente. Só depois investigue o domínio que o consumiu.
+Em linguagem simples: primeiro prove que o YAML foi preparado corretamente. Só depois investigue o domínio que o usa.
 
 ## 21. Impacto técnico
 
-Tecnicamente, o YAML reduz acoplamento entre produto e customização. Ele concentra configuração, tenant, segredos e topologia agentic num contrato único, em vez de espalhar essa responsabilidade por múltiplos serviços.
+Tecnicamente, o YAML reduz acoplamento entre personalização e core do produto. Também melhora previsibilidade porque há pontos únicos de carga, normalização, enriquecimento e governança agentic.
 
-Também melhora testabilidade e previsibilidade porque o código tem pontos únicos de resolução, validação e compilação.
+O benefício real não é “mais configuração”. O benefício real é concentrar comportamento configurável em um contrato rastreável.
 
 ## 22. Impacto executivo
 
-Executivamente, o YAML é um mecanismo de escala. Ele reduz a pressão para atender cada customização com desenvolvimento dedicado e melhora o controle sobre o que está efetivamente em produção para cada tenant.
+Executivamente, o YAML é um mecanismo de escala. Ele permite operar múltiplos clientes, múltiplos canais e múltiplas variantes do produto com menos dependência de desenvolvimento sob medida.
+
+Isso melhora margem operacional, velocidade de resposta ao cliente e previsibilidade de implantação.
 
 ## 23. Impacto comercial
 
-Comercialmente, o YAML transforma flexibilidade em argumento de venda: a empresa consegue adaptar agentes, canais e fluxos com mais velocidade e menor atrito, sem prometer reengenharia para cada novo cenário.
+Comercialmente, o YAML ajuda a vender adaptabilidade com governança.
+
+- O produto pode ser adaptado sem prometer reengenharia completa.
+- O cliente pode operar em contexto isolado.
+- O catálogo de tools e a configuração agentic não dependem de improviso.
+- A empresa consegue sustentar discurso de plataforma multi-tenant real.
 
 ## 24. Impacto estratégico
 
-Estratégicamente, o YAML prepara a plataforma para um modelo de software configurável e consultivo. Isso aumenta reutilização, reduz dependência de código manual e fortalece uma operação multi-tenant com governança explícita.
+Estratégicamente, o YAML prepara a plataforma para um modelo de software configurável, consultivo e governado. Isso fortalece a visão de produto em que configuração não é exceção, mas parte do desenho principal da solução.
 
 ## 25. Exemplos práticos guiados
 
 ### 25.1. Cliente com credenciais próprias
 
-Cenário: um tenant quer usar seu próprio token de WhatsApp e sua própria chave de provider.
+Cenário: o tenant quer usar suas próprias chaves.
 
-Processamento: o YAML referencia security_keys, o diretório multi-tenant injeta o contexto do cliente e a resolução de segredos usa tenant_secrets e placeholders.
+O que acontece: o YAML pode vir sem security_keys completas, o diretório multi-tenant tenta enriquecer o documento, e placeholders passam a ser resolvidos no contexto correto.
 
-Resultado: a plataforma usa credenciais do próprio cliente sem embutir segredo no código.
+Impacto prático: o produto usa o segredo do cliente sem precisar embutir constante em código.
 
-### 25.2. Consultor criando um agente novo
+### 25.2. Ajuste de ingestão sem mudar código-fonte
 
-Cenário: um consultor descreve o objetivo do agente em linguagem natural.
+Cenário: o cliente quer mudar política do vector store.
 
-Processamento: o fluxo objective-to-yaml gera draft AST, faz perguntas obrigatórias se faltar contexto, valida o payload e produz YAML final canônico em dry-run antes de aplicar.
+O que acontece: a plataforma lê vector_store.if_exists e aplica apenas valores canônicos aceitos pelo contrato.
 
-Resultado: o consultor participa da montagem da solução sem precisar escrever código-fonte.
+Impacto prático: a alteração fica concentrada na configuração, não em ramificação manual do runtime.
 
-### 25.3. Bootstrap de dataset por tenant
+### 25.3. Montagem agentic governada
 
-Cenário: uma ingestão nova precisa ativar alvo vetorial e BM25.
+Cenário: o operador quer configurar workflow ou supervisor.
 
-Processamento: o runtime lê client_context.client.tenant_id e compõe nomes físicos de alvo com tenant e vectorstore.
+O que acontece: o YAML mantém only selected_workflow ou selected_supervisor, seus respectivos blocos governados e tools_library. O assembly agentic valida esse recorte antes de publicar.
 
-Resultado: o índice nasce fisicamente segmentado pelo tenant correto.
+Impacto prático: a plataforma evita edição textual cega do núcleo agentic.
+
+### 25.4. Falha por tenant_id no lugar errado
+
+Cenário: alguém coloca tenant_id em metadata.
+
+O que acontece: o contrato canônico rejeita o caminho e orienta o uso de client_context.client.tenant_id.
+
+Impacto prático: o runtime não fica com ambiguidade sobre identidade do cliente.
 
 ## 26. Explicação 101
 
-Pense no YAML como a ficha técnica de uma operação inteira. Essa ficha diz quem é o cliente, quais segredos usar, qual fluxo rodar e quais recursos estão disponíveis. A plataforma lê essa ficha, completa o que faltar com contexto autorizado, verifica se a ficha está coerente e só então começa a executar.
+Pense no YAML como a ficha técnica completa de uma execução. Essa ficha diz quem é o cliente, quais segredos usar, quais recursos ligar e qual fluxo agentic ou RAG está ativo.
 
-O objetivo não é deixar qualquer pessoa digitar qualquer texto e torcer para dar certo. O objetivo é permitir configuração rápida sem abrir mão de segurança e rastreabilidade.
+Só que o sistema não confia nessa ficha de olhos fechados. Ele lê, verifica, corrige caminhos esperados, completa contexto autorizado e só então libera a execução.
+
+O YAML aqui não existe para abrir liberdade total. Ele existe para tornar a plataforma configurável sem perder disciplina operacional.
 
 ## 27. Limites e pegadinhas
 
-Algumas interpretações erradas precisam ser evitadas.
+Alguns erros de interpretação precisam ser evitados.
 
-A primeira é achar que YAML-first significa ausência de validação. O código mostra o oposto: a plataforma faz bastante validação antes do runtime.
-
-A segunda é tratar BYOK como modelo puro e exclusivo já garantido em 100% dos fluxos. O fallback para .env mostra que a plataforma ainda combina tenant-managed keys com compatibilidade operacional.
-
-A terceira é confundir “sem programação” com “sem governança”. A geração assistida de YAML continua cercada por schema, validate e confirm.
-
-A quarta é achar que tenant é só um campo informativo. No código, tenant_id participa de resolução física de alvo, diretório de segredos e autorização de contexto.
-
-A quinta é achar que tools_library pode ser escrito manualmente no YAML. O contrato observado não permite isso.
+1. YAML-first não significa ausência de validação.
+2. O contrato ativo não está centralizado em um único schema global do produto inteiro.
+3. Nem toda chave lida por fallback deve ser tratada como caminho canônico preferido.
+4. tools_library não é espaço para cadastro manual de catálogo builtin.
+5. BYOK não é um isolamento puro em todos os fluxos, porque ainda existe compatibilidade com fallback do store de segredos.
+6. Sintaxe YAML válida não significa contrato runtime válido.
 
 ## 28. Troubleshooting
 
-### 28.1. O YAML carregou mas o fluxo não encontra tools
+### 28.1. O YAML carregou, mas o sistema não encontra tools
 
-Sintoma: falha cedo relacionada a tools_library.
+Sintoma: erro cedo relacionado a tools_library.
 
-Causa provável: tools_library ausente ou preenchida manualmente.
+Causa provável: tools_library ausente na raiz ou preenchida manualmente.
 
-Como confirmar: revisar o documento recebido e a etapa de injeção do catálogo builtin.
+Como confirmar: revisar o documento antes da fábrica e verificar se a chave existe e chega vazia.
 
 ### 28.2. O tenant correto não foi reconhecido
 
-Sintoma: falhas de dataset, alvo vetorial ou autorização.
+Sintoma: falhas em dataset, alvo vetorial ou autorização.
 
-Causa provável: tenant_id ausente ou fora do caminho client_context.client.tenant_id.
+Causa provável: tenant_id ausente ou fora de client_context.client.tenant_id.
 
-Como confirmar: revisar client_context no YAML já resolvido.
+Como confirmar: revisar client_context já resolvido após enrichment.
 
 ### 28.3. Um placeholder não foi resolvido
 
-Sintoma: provider ou canal falha com valor literal ${VAR} ou credencial vazia.
+Sintoma: o runtime ainda vê ${VAR} ou valor vazio.
 
-Causa provável: segredo ausente em security_keys, tenant_secrets ou .env.
+Causa provável: segredo ausente em security_keys, tenant_secrets ou store de fallback.
 
-Como confirmar: revisar a origem do segredo e verificar se houve fallback ou erro explícito.
+Como confirmar: revisar security_keys, warnings de serialização e placeholders não resolvidos no resolvedor.
 
-### 28.4. O objective-to-yaml não publica o YAML final
+### 28.4. O contrato agentic falha mesmo com YAML legível
 
-Sintoma: o fluxo retorna questions ou bloqueia em preflight, validate ou confirm.
+Sintoma: o documento parece correto, mas o runtime agentic acusa erro.
 
-Causa provável: falta de contexto, schema inválido, target mal resolvido ou ambiente não pronto.
+Causa provável: problema semântico, target ambíguo, ausência de selected_workflow ou selected_supervisor quando existe múltipla escolha, ou drift do fragmento governado.
 
-Como confirmar: revisar validation_report, questions e blocking_stage retornados pelo assembly.
+Como confirmar: revisar validation_report, diagnostics e metadata.agentic_assembly.governed_hashes.
 
 ## 29. Diagramas
 
 ```mermaid
-sequenceDiagram
-    participant User as Usuário ou Consultor
-    participant API as Borda HTTP
-    participant Resolver as Resolvedor YAML
-    participant Directory as Diretório Multi-tenant
-    participant Assembly as AST Assembly
-    participant Runtime as Runtime do domínio
-
-    User->>API: envia YAML ou objetivo em linguagem natural
-    API->>Resolver: resolve origem e prepara user_session
-    Resolver->>Directory: enriquece client_context e security_keys
-    Directory-->>Resolver: tenant, client_code e segredos resolvidos
-    Resolver->>Resolver: expande placeholders e injeta tools_library
-    Resolver->>Assembly: validate ou objective-to-yaml quando há escopo agentic
-    Assembly-->>Resolver: YAML governado e hash canônico
-    Resolver-->>Runtime: configuração pronta para execução
+flowchart TD
+    A[Origem do YAML] --> B[ConfigurationFactory]
+    B --> C[Validação de security_keys]
+    C --> D[Injeção de tools_library]
+    D --> E[Expansão de placeholders]
+    E --> F[YamlSchemaNormalizer]
+    F --> G[Contratos especializados]
+    G --> H[Enriquecimento multi-tenant]
+    H --> I{Escopo agentic governado?}
+    I -- Não --> J[YAML pronto para runtime]
+    I -- Sim --> K[AST + validate + drift + confirm]
+    K --> L[YAML governado com hash]
 ```
 
-O diagrama mostra que o YAML não vai direto do usuário para o runtime. Ele atravessa camadas de preparação, governança e contexto.
+Esse diagrama mostra a lógica macro: o YAML não vai direto para o domínio. Ele atravessa carga, validação, enriquecimento e, quando necessário, governança AST.
 
-## 30. Checklist de entendimento
+```mermaid
+sequenceDiagram
+    participant Operador as Operador ou API
+    participant Factory as ConfigurationFactory
+    participant Normalizer as YamlSchemaNormalizer
+    participant Directory as ClientDirectory
+    participant Assembly as Assembly Agentic
+    participant Runtime as Runtime
 
-- Entendi que o YAML é o contrato operacional da plataforma.
-- Entendi que YAML-first não significa texto livre sem validação.
-- Entendi onde BYOK aparece no código e onde ainda existe fallback para .env.
-- Entendi por que client_context.client.tenant_id é estrutural.
-- Entendi como o diretório multi-tenant participa da resolução.
-- Entendi por que tools_library precisa chegar vazia.
-- Entendi como a AST governa o trecho agentic.
-- Entendi como objective-to-yaml ajuda a criar agentes sem programação manual.
-- Entendi por que isso é valioso para consultores.
-- Entendi por que isso é valioso para uma empresa de software.
-- Entendi os limites e riscos do modelo.
+    Operador->>Factory: envia YAML
+    Factory->>Factory: injeta user_session
+    Factory->>Factory: valida security_keys
+    Factory->>Factory: injeta tools_library
+    Factory->>Factory: expande placeholders
+    Factory->>Normalizer: normaliza contrato
+    Normalizer-->>Factory: YAML estruturalmente válido
+    Factory->>Directory: enriquece client_context e security_keys
+    Directory-->>Factory: tenant e segredos resolvidos
+    Factory->>Assembly: valida trecho agentic quando existe
+    Assembly-->>Factory: fragmento governado válido
+    Factory-->>Runtime: configuração pronta
+```
 
-## 31. Evidências no código
+Esse diagrama mostra a ordem real do preparo da configuração antes da execução.
 
-- src/config/config_cli/configuration_factory.py: confirma injeção obrigatória de tools_library, expansão de placeholders e finalização central da configuração.
-- src/security/security_keys_resolver.py: confirma SecurityKeysStore, fallback para .env e resolução recursiva de placeholders ${VAR}.
-- src/api/routers/config_resolution.py: confirma enriquecimento via diretório multi-tenant, injeção de security_keys, erros explícitos de tenant_secrets e exigência de client_code.
-- src/channel_layer/config_resolver.py: confirma carga de YAML de canal com enrich_yaml_with_client_context e erro explícito quando segredo do tenant não existe.
-- src/security/client_directory.py: confirma diretório central multi-tenant com resolução de YAML por usuário, tenant e canal.
-- src/security/user_yaml_repository.py: confirma persistência e resolução de YAML pessoal e YAML organizacional por vínculo usuário-tenant.
-- src/ingestion_layer/document_persistence_manager.py: confirma bootstrap de dataset dependente de tenant_id e composição de alvo físico com tenant e vectorstore.
-- src/core/progress_callback.py: confirma resolução canônica de tenant_id em client_context.client.tenant_id.
-- src/api/routers/config_assembly_router.py: confirma endpoints de draft, objective-to-yaml, validate e confirm no fluxo governado.
-- src/config/agentic_assembly/assembly_service.py: confirma o ciclo preflight, draft, validate, confirm, merge final e selo de hash governado.
-- src/config/agentic_assembly/nl/llm_draft_generator.py: confirma geração estruturada de draft AST por LLM com envelope JSON, schema explícito e questions obrigatórias.
-- src/config/agentic_assembly/nl/repair_loop.py: confirma reparos básicos automáticos e reforça a estratégia de reduzir atrito sem abrir mão de validação.
+## 30. Mapa de navegação conceitual
+
+O mapa conceitual da feature pode ser lido assim.
+
+1. Entrada: arquivo, inline ou payload criptografado.
+2. Preparação: sessão, segredos, placeholders e catálogo builtin.
+3. Normalização: rejeição de layouts legados e caminhos inválidos.
+4. Especialização: contratos como vector_store e slices de domínio.
+5. Contexto: client_context e tenant resolvidos.
+6. Governança agentic: AST, validação semântica e drift.
+7. Runtime: ingestão, RAG, agentic, canais e demais consumidores.
+
+## 31. Como colocar para funcionar
+
+O caminho confirmado no código lido é este.
+
+1. Fornecer YAML como arquivo, conteúdo inline ou payload criptografado.
+2. Garantir user_session na raiz.
+3. Garantir tools_library na raiz quando o fluxo usa a fábrica agentic.
+4. Deixar tools_library vazia para auto-injeção do catálogo builtin.
+5. Garantir client_context.client quando o fluxo depende de identidade do cliente ou tenant.
+6. Usar client_context.client.tenant_id como caminho canônico para tenant.
+7. Garantir vector_store.if_exists quando o contrato de vector_store for usado.
+8. Se houver escopo agentic, respeitar selected_workflow ou selected_supervisor quando existir ambiguidade.
+
+## 32. Exercícios guiados
+
+### Exercício 1
+
+Objetivo: distinguir YAML sintaticamente válido de YAML contratualmente válido.
+
+Passos: verifique se a raiz é objeto, se user_session está na raiz e se não existe common ou authentication.user_session.
+
+O que observar: um YAML pode passar no parser e ainda assim ser rejeitado pelo normalizador.
+
+### Exercício 2
+
+Objetivo: entender o papel de tools_library.
+
+Passos: confirme se a chave existe na raiz e se chega vazia no fluxo agentic.
+
+O que observar: o runtime não aceita catálogo builtin declarado manualmente no YAML recebido.
+
+### Exercício 3
+
+Objetivo: localizar a identidade canônica do tenant.
+
+Passos: procure tenant_id no documento e confirme se ele está em client_context.client.tenant_id.
+
+O que observar: metadata.tenant_id e caminhos derivados não são aceitos como contrato canônico.
+
+## 33. Checklist de entendimento
+
+- Entendi que o contrato ativo do YAML não está em um único arquivo.
+- Entendi que o validador legado não é a fonte de verdade atual.
+- Entendi que user_session é obrigatório na raiz.
+- Entendi que tools_library precisa existir na raiz e chegar vazia no fluxo agentic pela fábrica.
+- Entendi que client_context.client é o lugar canônico da identidade do cliente.
+- Entendi que client_context.client.tenant_id é o lugar canônico do tenant.
+- Entendi que modern_rag_system, common e authentication.user_session são inválidos.
+- Entendi que vector_store.if_exists tem valores canônicos explícitos.
+- Entendi que o escopo agentic tem chaves top-level próprias e governadas.
+- Entendi que sintaxe YAML válida não basta para garantir validade de runtime.
+
+## 34. Evidências no código
+
+- src/utils/yaml_schema_normalizer.py: lido para confirmar user_session na raiz, rejeição de common, modern_rag_system, authentication.user_session, aliases legados de QA, ingestão, memória e identidade de cliente.
+
+- src/config/config_cli/configuration_factory.py: lido para confirmar a trilha de finalização do YAML, a validação de security_keys, a auto-injeção obrigatória de tools_library e a expansão de placeholders.
+
+- src/api/routers/config_resolution.py: lido para confirmar enriquecimento via diretório multi-tenant, determinação de client_code, injeção de security_keys, expansão de placeholders após injeção e exigência prática de client_context.client.
+
+- src/config/vector_store_contract.py: lido para confirmar que vector_store.if_exists é obrigatório quando o contrato é avaliado e que os valores aceitos são overwrite, skip e update.
+
+- src/config/yaml_config_manager.py: lido para confirmar quais seções top-level continuam sendo lidas explicitamente pelo runtime e para confirmar o bloqueio de drift agentic no carregamento.
+
+- src/config/agentic_assembly/ast/document.py: lido para confirmar o envelope AST do escopo agentic e distinguir campos internos da AST de chaves finais do YAML de runtime.
+
+- src/config/agentic_assembly/drift_detector.py: usado indiretamente como fonte confirmada pelo relatório forense para as chaves governadas do YAML agentic e o selo metadata.agentic_assembly.governed_hashes.
+
+- tools/vscode-agentic-language-server/server/src/agentic_yaml_lsp/analysis_service.py: lido para confirmar a lista explícita de chaves top-level governadas por alvo no tooling do YAML agentic.
+
+- .sandbox/relatorio-contrato-yaml-codigo-2026-05-02.md: relatório forense derivado exclusivamente do código para consolidar chaves top-level confirmadas, obrigatórias condicionais, rejeições explícitas e lacunas de afirmação segura.

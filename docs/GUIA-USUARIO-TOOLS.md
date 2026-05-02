@@ -1,396 +1,549 @@
-# Guia de Uso das Tools
+# Manual técnico, executivo, comercial e estratégico: Tools nativas
 
-Este guia explica tools como capacidade operacional governada. O foco não é decorar nomes do catálogo. O foco é entender como uma capability sai do código, passa pelo YAML e chega ao runtime sem virar atalho inseguro.
+## 1. O que é esta feature
 
-## O que é tool neste projeto
+Tools nativas, neste projeto, são as capacidades builtin da própria plataforma. Elas representam o conjunto global de ferramentas que o runtime sabe materializar porque o código do produto já conhece essas implementações ou factories.
 
-Tool aqui é uma capacidade que um supervisor, um DeepAgent ou um workflow pode invocar sob governança. O YAML declara a intenção de uso. O runtime decide se a capacidade realmente existe, se está permitida e qual implementação concreta será materializada.
+Em termos práticos, elas não são cadastradas por tenant. Elas formam um catálogo global da plataforma, persistido em banco, sincronizado pelo builder oficial e injetado automaticamente nos YAMLs agentic quando `tools_library` chega vazia.
 
-Em linguagem simples: a tool não é apenas um nome. É um contrato entre autoria, catálogo e execução.
+Em linguagem simples: tools nativas são a prateleira oficial de capacidades técnicas que a plataforma inteira sabe oferecer, antes mesmo de decidir o que cada tenant ou cada YAML concreto vai usar.
 
-## O problema que este guia resolve
+## 2. Que problema ela resolve
 
-Sem separar as camadas certas, é fácil cometer dois erros.
+Sem uma camada formal de tools nativas, o sistema cairia em alguns problemas graves.
 
-1. Confundir catálogo builtin com item concreto publicado para um tenant.
-2. Achar que basta citar uma tool no YAML para que ela rode.
+- cada YAML precisaria reescrever manualmente o catálogo de tools;
+- seria fácil divergir o que está no código do que aparece no runtime;
+- mudanças de implementação quebrariam catálogos copiados em vários lugares;
+- ativação e desativação operacional dependeriam de deploy ou edição manual perigosa;
+- não existiria uma fonte de verdade única para auditoria administrativa.
 
-O sistema foi desenhado para bloquear exatamente esse tipo de atalho. A capability só entra em jogo quando catálogo, tenant, contexto e política de execução estão coerentes.
+O catálogo builtin resolve isso separando três coisas que precisam ser separadas.
 
-## Leitura relacionada
+- o que a plataforma sabe fazer em termos de capacidade técnica;
+- o que está operacionalmente ativo ou desativado;
+- o que cada YAML ou tenant usa na composição final.
 
-- Catálogo alfabético completo: [tools/alfabetica.md](./tools/alfabetica.md)
-- Catálogo por problema de negócio: [tools/por_finalidade.md](./tools/por_finalidade.md)
-- SQL dinâmico e procedures: [README-DYNAMIC-SQL-TOOLS.md](./README-DYNAMIC-SQL-TOOLS.md)
-- APIs dinâmicas governadas: [README-DYNAMIC-API-TOOLS.md](./README-DYNAMIC-API-TOOLS.md)
-- Catálogo governado por tenant: [README-INTEGRACOES-GOVERNADAS.md](./README-INTEGRACOES-GOVERNADAS.md)
+## 3. Visão conceitual
 
-## Fonte de verdade do catálogo
+Conceitualmente, o sistema trata tools nativas como catálogo global de famílias técnicas. Isso inclui tools diretas e também factories parametrizadas.
 
-O catálogo builtin nasce no código e é sincronizado pelo builder oficial. Depois disso, o YAML não deveria tentar reescrever manualmente essa verdade. Pelo contrato observado, tools_library precisa existir e chegar vazia para receber o catálogo central. tools_library ausente ou já preenchida é erro porque o produto quer impedir desvios paralelos de governança.
+Uma tool direta aponta para uma implementação concreta já conhecida.
 
-## Como uma tool chega ao runtime
+Uma factory parametrizada registra a família, não cada item concreto. É o caso de `dyn_sql`, `dyn_api` e `proc_sql`. O catálogo builtin diz que a plataforma sabe materializar essa família. O item concreto só aparece depois, quando o runtime recebe algo como `dyn_sql<query_id>`.
 
-![Como uma tool chega ao runtime](assets/diagrams/docs-guia-usuario-tools-diagrama-01.svg)
+Essa distinção é central.
 
-## Duas camadas diferentes de cadastro
+O catálogo builtin não responde “qual query do tenant X está publicada”. Ele responde “que famílias e implementações a plataforma consegue oferecer como base de runtime”.
 
-### Catálogo builtin
+## 4. Visão tática
 
-O catálogo builtin responde a pergunta: que famílias técnicas o produto sabe materializar? É aqui que entram famílias como dyn_sql, dyn_api, proc_sql e schema_rag_sql.
+Taticamente, tools nativas existem para permitir evolução controlada do runtime agentic sem depender de edição manual de catálogo em YAML.
 
-### Registro governado por tenant
+Elas são especialmente importantes quando o time precisa:
 
-O registro governado responde outra pergunta: qual item concreto daquela família está autorizado para este tenant? É aqui que entram tabelas como integrations.sql_query_registry e integrations.api_operation_registry.
+- disponibilizar novas capacidades do produto para vários fluxos de uma vez;
+- desativar temporariamente uma capability problemática sem remover código;
+- sincronizar automaticamente o catálogo a partir do código real;
+- manter um ponto administrativo único para listar, filtrar, habilitar, desabilitar e auditar tools builtin.
 
-Em termos práticos, o catálogo builtin diz que a família existe. O registro por tenant diz o que exatamente dessa família pode rodar em produção.
+## 5. Visão técnica
 
-## Sintaxe parametrizada real
+Tecnicamente, as tools nativas seguem um ciclo de vida claro.
 
-As famílias dinâmicas expõem uma sintaxe pública curta porque o autor do YAML precisa declarar intenção sem carregar todos os detalhes técnicos no documento. Os exemplos centrais são dyn_sql<query_id>, proc_sql<procedure_id> e dyn_api<endpoint_id>. O runtime extrai a base e o identificador e só então procura a factory correta.
+### 5.1. Descoberta no código
 
-## Famílias mais importantes
+O `ToolsLibraryBuilder` percorre o diretório de tools, analisa arquivos Python, identifica implementações conhecidas e monta um snapshot descoberto.
 
-### dyn_sql
+### 5.2. Inclusão manual das factories parametrizadas
 
-Use dyn_sql<query_id> quando a consulta já existe e o risco principal é governar parâmetros e autorização. É o caminho mais seguro quando o negócio conhece a query que quer executar.
+Nem toda family parametrizada é descoberta automaticamente pelo scanner. Por isso o builder adiciona explicitamente as bases `dyn_sql`, `dyn_api` e `proc_sql`, porque elas dependem de sintaxe especial e não podem ficar ausentes do catálogo builtin.
 
-### proc_sql
+### 5.3. Sincronização para banco
 
-Use proc_sql<procedure_id> quando a empresa já homologou a procedure e quer manter a operação dentro desse contrato.
+O snapshot descoberto é sincronizado para a tabela global `integrations.builtin_tool_registry` por meio do `BuiltinToolCatalogSynchronizer`.
 
-### dyn_api
+### 5.4. Cache global em memória
 
-Use dyn_api<endpoint_id> quando o alvo é uma operação HTTP previamente aprovada, com autenticação e comportamento controlados.
+O `ToolsLibraryCache` lê a tabela persistida, mantém snapshots thread-safe e devolve cópias profundas para evitar compartilhamento acidental de objetos mutáveis.
 
-### schema_rag_sql
+### 5.5. Injeção automática no YAML
 
-Use schema_rag_sql quando o problema exige gerar SQL a partir de metadados de schema. Esse caminho não substitui dyn_sql. Ele resolve outro caso: composição nova de consulta quando a pergunta não cabe numa query já homologada.
+Quando o YAML agentic chega com `tools_library: []`, a `ConfigurationFactory` injeta as tools builtin ativas carregadas do banco. Se `tools_library` vier preenchida ou ausente, o sistema falha fechado.
 
-## Superfícies assistidas de produto
+## 6. Visão executiva
 
-As rotas de assembly ajudam o usuário a entender, escolher e montar tools, mas não substituem o runtime. Os pontos mais importantes são /config/assembly/catalog, /config/assembly/schema, /config/assembly/recommend-tools e /config/assembly/objective-to-yaml.
+Para liderança, o valor das tools nativas está em governança de plataforma. Em vez de cada fluxo carregar sua própria visão do catálogo, existe uma fonte global de verdade, com status operacional e interface administrativa.
 
-Em linguagem simples: essas superfícies ajudam a autoria governada. A execução real continua dependendo do catálogo, do tenant e do contexto.
+Isso reduz risco de drift entre código, configuração e operação. Também reduz o custo de governança quando uma ferramenta precisa ser desativada rapidamente ou quando um novo capability set precisa ser liberado para toda a base de runtime.
 
-## Guardrails comprovados no código
+## 7. Visão comercial
 
-- referência local para tool inexistente gera diagnóstico semântico;
-- dyn_sql e dyn_api exigem identificador técnico;
-- consulta em registro persistido exige user_session.tenant_id;
-- item em tabela precisa estar ativo e com publish_to_agents igual a true;
-- dyn_api usa autenticação gerenciada e cache de token quando houver perfil de auth;
-- dyn_sql usa retry para erro transitório de banco;
-- schema_rag_sql depende de schema metadata habilitado.
+Comercialmente, tools nativas fortalecem a narrativa de produto como plataforma governada, não como coleção artesanal de agentes.
 
-## Como escolher a família certa
+O diferencial não é apenas “tem muitas tools”. O diferencial é: existe um catálogo builtin persistido, sincronizado do código real, administrável por API e consumido automaticamente pelo runtime. Isso aumenta previsibilidade para projetos maiores, ambientes regulados e clientes que exigem controle operacional explícito.
 
-- Use dyn_sql para query já homologada.
-- Use proc_sql para procedure homologada.
-- Use dyn_api para endpoint HTTP homologado.
-- Use schema_rag_sql para NL2SQL baseado em metadados.
-- Use recommend-tools quando a dúvida for composição.
-- Use objective-to-yaml quando a dúvida for autoria governada do YAML.
+## 8. Visão estratégica
 
-<!-- TOP20_REFERENCE_START -->
+Estratégicamente, tools nativas são a camada que estabiliza o ecossistema agentic da plataforma.
 
-## Referência Definitiva Top 20 (Canônico + Alias)
+Sem essa camada, cada novo módulo, cada novo YAML e cada novo tenant tenderia a redescobrir ou duplicar o catálogo. Com essa camada, a plataforma passa a ter um núcleo técnico central, reaproveitável e auditável, sobre o qual features como Dyn SQL, Dyn API, schema RAG, AG-UI e assembly assistido podem evoluir com menos acoplamento.
 
-Esta seção usa o ID canônico que o runtime deve resolver. Alias
-documental é apenas uma forma antiga ou abreviada de falar da mesma
-capacidade; na configuração nova, prefira sempre o ID canônico.
-
-### Tool `dyn_api<endpoint_id>`
-
-- ID canônico: `dyn_api<endpoint_id>`.
-- Alias documental: `dyn_api<endpoint>`.
-- Assinatura: chama endpoint HTTP governado por identificador publicado.
-- Configuração YAML (autoria): declare a tool no agente usando o ID do endpoint aprovado.
-- Payload técnico de factory (integração/testes): precisa de `endpoint_id` resolvido pela factory dinâmica.
-- Credenciais obrigatórias: dependem do perfil de autenticação do endpoint registrado.
-- Formato de retorno: resposta HTTP normalizada com status, corpo e metadados.
-- Erros comuns: endpoint inexistente, não publicado para agentes ou sem tenant válido.
-- Exemplo mínimo: usar uma operação HTTP já cadastrada para consultar um pedido.
-- Exemplo completo: combinar endpoint aprovado, tenant, autenticação gerenciada e validação pelo assembly.
-
-### Tool `dyn_sql<query_id>`
-
-- ID canônico: `dyn_sql<query_id>`.
-- Alias documental: `dyn_sql<query>`.
-- Assinatura: executa query SQL governada por identificador publicado.
-- Configuração YAML (autoria): declare a tool no agente usando o ID da query aprovada.
-- Payload técnico de factory (integração/testes): precisa de `query_id` e parâmetros permitidos pela query.
-- Credenciais obrigatórias: conexão SQL configurada para o tenant.
-- Formato de retorno: linhas tabulares ou payload estruturado conforme a query.
-- Erros comuns: query ausente, parâmetro obrigatório faltando ou query não publicada para agentes.
-- Exemplo mínimo: consultar status de pedido por código.
-- Exemplo completo: usar query governada com parâmetros validados e retorno limitado para o agente.
-
-### Tool `proc_sql<procedure_id>`
-
-- ID canônico: `proc_sql<procedure_id>`.
-- Alias documental: `proc_sql<procedure>`.
-- Assinatura: executa stored procedure homologada por identificador.
-- Configuração YAML (autoria): declare a procedure aprovada como tool do agente.
-- Payload técnico de factory (integração/testes): precisa de `procedure_id` e parâmetros aceitos pela procedure.
-- Credenciais obrigatórias: conexão SQL com permissão para executar a procedure.
-- Formato de retorno: payload definido pela procedure.
-- Erros comuns: procedure não publicada, assinatura divergente ou permissão insuficiente.
-- Exemplo mínimo: acionar procedure de consulta operacional.
-- Exemplo completo: chamar procedure governada com validação de tenant e auditoria de execução.
-
-### Tool `api_http_get`
-
-- ID canônico: `api_http_get`.
-- Alias documental: nenhum.
-- Assinatura: faz chamada HTTP GET direta quando a configuração permitir.
-- Configuração YAML (autoria): use apenas quando a URL e os limites estiverem governados.
-- Payload técnico de factory (integração/testes): precisa de URL, headers permitidos e timeout.
-- Credenciais obrigatórias: variam conforme o endpoint externo.
-- Formato de retorno: status HTTP, headers relevantes e corpo.
-- Erros comuns: URL não permitida, timeout ou resposta externa inválida.
-- Exemplo mínimo: consultar um endpoint público controlado.
-- Exemplo completo: chamada GET com timeout, autenticação configurada e tratamento de erro transitório.
-
-### Tool `api_http_post_json`
-
-- ID canônico: `api_http_post_json`.
-- Alias documental: nenhum.
-- Assinatura: faz chamada HTTP POST com corpo JSON.
-- Configuração YAML (autoria): use apenas com contrato de payload e destino aprovado.
-- Payload técnico de factory (integração/testes): precisa de URL, corpo JSON, headers e timeout.
-- Credenciais obrigatórias: variam conforme o endpoint externo.
-- Formato de retorno: status HTTP e corpo da resposta.
-- Erros comuns: payload fora do schema, credencial ausente ou erro 4xx não recuperável.
-- Exemplo mínimo: enviar uma solicitação JSON para API governada.
-- Exemplo completo: POST autenticado com payload validado, retry para falha transitória e auditoria.
-
-### Tool `http_get`
-
-- ID canônico: `http_get`.
-- Alias documental: nenhum.
-- Assinatura: chamada HTTP GET genérica.
-- Configuração YAML (autoria): restrinja uso a fluxos com destino controlado.
-- Payload técnico de factory (integração/testes): precisa de URL e opções de requisição.
-- Credenciais obrigatórias: dependem do serviço chamado.
-- Formato de retorno: resposta HTTP normalizada.
-- Erros comuns: chamada externa sem timeout, domínio não autorizado ou resposta não JSON quando o fluxo espera JSON.
-- Exemplo mínimo: ler um recurso HTTP simples.
-- Exemplo completo: consulta externa com headers, timeout e log de tentativa.
-
-### Tool `http_post`
-
-- ID canônico: `http_post`.
-- Alias documental: nenhum.
-- Assinatura: chamada HTTP POST genérica.
-- Configuração YAML (autoria): use somente com destino e payload controlados.
-- Payload técnico de factory (integração/testes): precisa de URL, corpo e opções de requisição.
-- Credenciais obrigatórias: dependem do serviço chamado.
-- Formato de retorno: resposta HTTP normalizada.
-- Erros comuns: payload inválido, domínio não autorizado ou ausência de timeout.
-- Exemplo mínimo: enviar payload simples para serviço aprovado.
-- Exemplo completo: POST com autenticação, timeout, retry e validação do corpo de resposta.
-
-### Tool `duckduckgo_search_wrapper`
-
-- ID canônico: `duckduckgo_search_wrapper`.
-- Alias documental: `duckduckgo_search`.
-- Assinatura: executa busca web via DuckDuckGo.
-- Configuração YAML (autoria): habilite quando o agente puder consultar web.
-- Payload técnico de factory (integração/testes): precisa de consulta textual e limites de resultado.
-- Credenciais obrigatórias: normalmente não exige chave dedicada.
-- Formato de retorno: lista de resultados com título, URL e resumo.
-- Erros comuns: consulta ampla demais ou uso sem política de fontes.
-- Exemplo mínimo: pesquisar um termo público.
-- Exemplo completo: busca com limite de resultados e posterior validação de fontes.
-
-### Tool `google_serper_wrapper`
-
-- ID canônico: `google_serper_wrapper`.
-- Alias documental: `google_serper`.
-- Assinatura: executa busca Google via Serper.
-- Configuração YAML (autoria): habilite quando houver chave Serper configurada.
-- Payload técnico de factory (integração/testes): precisa de consulta e parâmetros de busca.
-- Credenciais obrigatórias: chave Serper no ambiente ou segredo do tenant.
-- Formato de retorno: resultados de busca estruturados.
-- Erros comuns: chave ausente, cota excedida ou consulta sem escopo.
-- Exemplo mínimo: pesquisar notícia ou página pública.
-- Exemplo completo: busca com credencial, limite e registro de fonte usada.
-
-### Tool `tavily_search_wrapper`
-
-- ID canônico: `tavily_search_wrapper`.
-- Alias documental: `tavily_search`.
-- Assinatura: executa busca web via Tavily.
-- Configuração YAML (autoria): habilite quando a chave Tavily estiver configurada.
-- Payload técnico de factory (integração/testes): precisa de consulta e limites.
-- Credenciais obrigatórias: chave Tavily.
-- Formato de retorno: resultados web com conteúdo resumido.
-- Erros comuns: chave ausente, limite alto demais ou fonte sem validação.
-- Exemplo mínimo: buscar contexto público recente.
-- Exemplo completo: busca com recorte de domínio, limite e uso de fontes no raciocínio.
-
-### Tool `brave_search_wrapper`
-
-- ID canônico: `brave_search_wrapper`.
-- Alias documental: `brave_search`.
-- Assinatura: executa busca web via Brave Search.
-- Configuração YAML (autoria): habilite quando houver chave Brave configurada.
-- Payload técnico de factory (integração/testes): precisa de consulta e opções de busca.
-- Credenciais obrigatórias: chave Brave Search.
-- Formato de retorno: lista estruturada de resultados.
-- Erros comuns: chave inválida, cota excedida ou consulta vaga.
-- Exemplo mínimo: pesquisar página institucional.
-- Exemplo completo: busca com filtros, limite e checagem de fonte antes de responder.
-
-### Tool `json_parse`
-
-- ID canônico: `json_parse`.
-- Alias documental: nenhum.
-- Assinatura: transforma texto JSON em estrutura manipulável.
-- Configuração YAML (autoria): habilite para agentes que recebem JSON textual.
-- Payload técnico de factory (integração/testes): precisa de string JSON.
-- Credenciais obrigatórias: nenhuma.
-- Formato de retorno: objeto ou lista parseada.
-- Erros comuns: JSON inválido ou encoding inesperado.
-- Exemplo mínimo: converter texto JSON em objeto.
-- Exemplo completo: parsear JSON recebido de API antes de extrair campos relevantes.
-
-### Tool `json_validate`
-
-- ID canônico: `json_validate`.
-- Alias documental: nenhum.
-- Assinatura: valida se um texto ou objeto respeita formato JSON.
-- Configuração YAML (autoria): habilite para fluxos que precisam checar payload.
-- Payload técnico de factory (integração/testes): precisa de JSON e, quando aplicável, schema.
-- Credenciais obrigatórias: nenhuma.
-- Formato de retorno: resultado de validação com erro quando houver.
-- Erros comuns: aceitar JSON inválido como texto comum.
-- Exemplo mínimo: validar payload antes de enviar para API.
-- Exemplo completo: validar JSON gerado pelo agente antes de persistir ou chamar integração.
-
-### Tool `json_format`
-
-- ID canônico: `json_format`.
-- Alias documental: nenhum.
-- Assinatura: formata JSON para leitura humana.
-- Configuração YAML (autoria): habilite para fluxos de revisão ou diagnóstico.
-- Payload técnico de factory (integração/testes): precisa de JSON válido.
-- Credenciais obrigatórias: nenhuma.
-- Formato de retorno: JSON indentado.
-- Erros comuns: tentar formatar texto que não é JSON válido.
-- Exemplo mínimo: deixar uma resposta JSON legível.
-- Exemplo completo: formatar payload antes de apresentar para revisão humana.
-
-### Tool `json_minify`
-
-- ID canônico: `json_minify`.
-- Alias documental: nenhum.
-- Assinatura: remove espaços desnecessários de JSON válido.
-- Configuração YAML (autoria): habilite quando tamanho do payload importar.
-- Payload técnico de factory (integração/testes): precisa de JSON válido.
-- Credenciais obrigatórias: nenhuma.
-- Formato de retorno: JSON compacto.
-- Erros comuns: minificar payload inválido ou perder legibilidade em etapa de auditoria.
-- Exemplo mínimo: compactar JSON antes de envio.
-- Exemplo completo: validar, compactar e enviar payload JSON para integração controlada.
-
-### Tool `pandas_dataframe_wrapper`
-
-- ID canônico: `pandas_dataframe_wrapper`.
-- Alias documental: `pandas_dataframe_agent`.
-- Assinatura: executa operações assistidas sobre dataframe.
-- Configuração YAML (autoria): habilite em fluxos analíticos com dados tabulares.
-- Payload técnico de factory (integração/testes): precisa de dataframe ou fonte tabular preparada.
-- Credenciais obrigatórias: nenhuma por padrão; dependem da origem dos dados.
-- Formato de retorno: resposta analítica ou dados derivados.
-- Erros comuns: enviar arquivo sem leitura prévia ou permitir operação ampla demais.
-- Exemplo mínimo: resumir colunas de uma planilha carregada.
-- Exemplo completo: ler dados tabulares, filtrar, agregar e explicar o resultado ao usuário.
-
-### Tool `pd_ler_planilha`
-
-- ID canônico: `pd_ler_planilha`.
-- Alias documental: nenhum.
-- Assinatura: lê planilha para estrutura tabular.
-- Configuração YAML (autoria): habilite quando o agente precisa abrir planilhas.
-- Payload técnico de factory (integração/testes): precisa de caminho ou referência da planilha.
-- Credenciais obrigatórias: dependem do storage de origem.
-- Formato de retorno: dataframe ou representação tabular.
-- Erros comuns: arquivo ausente, formato não suportado ou planilha grande sem limite.
-- Exemplo mínimo: carregar uma planilha simples.
-- Exemplo completo: ler planilha, validar colunas esperadas e preparar análise.
-
-### Tool `pd_filtrar_planilha`
-
-- ID canônico: `pd_filtrar_planilha`.
-- Alias documental: nenhum.
-- Assinatura: filtra linhas de uma planilha carregada.
-- Configuração YAML (autoria): habilite em fluxos que precisam recortar dados tabulares.
-- Payload técnico de factory (integração/testes): precisa de dataframe e condição de filtro.
-- Credenciais obrigatórias: nenhuma depois da planilha carregada.
-- Formato de retorno: subconjunto tabular.
-- Erros comuns: coluna inexistente ou filtro ambíguo.
-- Exemplo mínimo: filtrar pedidos por status.
-- Exemplo completo: ler planilha, filtrar período e devolver subconjunto auditável.
-
-### Tool `pd_agrupar_somar`
-
-- ID canônico: `pd_agrupar_somar`.
-- Alias documental: nenhum.
-- Assinatura: agrupa dados e soma métricas.
-- Configuração YAML (autoria): habilite em análises tabulares simples.
-- Payload técnico de factory (integração/testes): precisa de dataframe, coluna de grupo e coluna numérica.
-- Credenciais obrigatórias: nenhuma depois da planilha carregada.
-- Formato de retorno: tabela agregada.
-- Erros comuns: coluna numérica com texto ou grupo inexistente.
-- Exemplo mínimo: somar vendas por loja.
-- Exemplo completo: ler planilha, filtrar período e agrupar receita por categoria.
-
-### Tool `pd_estatisticas_basicas`
-
-- ID canônico: `pd_estatisticas_basicas`.
-- Alias documental: nenhum.
-- Assinatura: calcula estatísticas simples de dados tabulares.
-- Configuração YAML (autoria): habilite para diagnóstico rápido de planilhas.
-- Payload técnico de factory (integração/testes): precisa de dataframe e colunas alvo.
-- Credenciais obrigatórias: nenhuma depois da planilha carregada.
-- Formato de retorno: contagens, médias, mínimos, máximos e medidas básicas.
-- Erros comuns: coluna ausente ou tipo incompatível.
-- Exemplo mínimo: calcular média de uma coluna.
-- Exemplo completo: ler planilha, validar tipos e gerar resumo estatístico por coluna.
-
-<!-- TOP20_REFERENCE_END -->
-
-## Como validar
-
-1. Confirme que tools_library existe e chega vazia no YAML recebido.
-2. Confirme que a família tem configuração pronta.
-3. Se usar registro por tenant, confirme tenant_id e publish_to_agents.
-4. Valide o YAML pelo fluxo agentic quando houver supervisor ou
-     workflow.
-5. Em execução, siga o correlation_id para separar erro de catálogo,
-     erro de config e erro do recurso externo.
-
-## Evidência no código
-
-- src/agentic_layer/tools/tools_library_builder.py
-- src/config/config_cli/configuration_factory.py
-- src/agentic_layer/supervisor/tool_loader.py
-- src/agentic_layer/supervisor/tools_factory.py
-- src/agentic_layer/tools/domain_tools/dynamic_sql_tools/dynamic_sql_factory.py
-- src/agentic_layer/tools/domain_tools/dynamic_api_tools/dynamic_api_factory.py
-- src/agentic_layer/tools/domain_tools/dynamic_tool_registry_resolver.py
-- src/agentic_layer/tools/domain_tools/schema_rag_tools/sql_schema_rag_factory.py
-- src/api/routers/config_assembly_router.py
-
-## Lacunas no código
-
-Não encontrado no código.
-
-Onde deveria estar:
-
-- um inventário automático ligando cada item do catálogo builtin ao seu
-    documento dono em docs;
-- uma exportação administrativa pronta que una catálogo builtin e
-    registros governados por tenant no mesmo relatório.
+## 9. O que são tools nativas na prática
+
+O código confirma que tools nativas incluem dois grupos principais.
+
+### 9.1. Tools diretas
+
+São capacidades que apontam diretamente para uma implementação concreta, por `impl`.
+
+### 9.2. Tools geradas por factory
+
+São capacidades que apontam para `factory_impl`, `tool_name` e `factory_returns`, permitindo materialização dinâmica no runtime.
+
+Esse segundo grupo é especialmente importante porque várias capabilities do produto moderno não são uma tool única fixa. Elas são famílias de tools materializadas a partir de um parâmetro ou de um contexto.
+
+## 10. O que esta feature não é
+
+Entender o limite evita erro de arquitetura.
+
+- Não é cadastro multi-tenant de integrações concretas.
+- Não é substituto do registro governado de queries, endpoints ou procedures.
+- Não é um bloco para o YAML preencher manualmente.
+- Não é só documentação estática do catálogo.
+- Não é apenas um cache em memória.
+
+## 11. Conceitos necessários para entender
+
+### 11.1. Catálogo builtin
+
+É o catálogo global de capacidades técnicas nativas da plataforma.
+
+### 11.2. `integrations.builtin_tool_registry`
+
+É a tabela persistida que armazena esse catálogo global como fonte de verdade operacional.
+
+### 11.3. `status`
+
+É o estado operacional persistido da tool builtin. O schema aceita `active`, `disabled` e `deprecated`.
+
+### 11.4. `tool_type`
+
+Distingue tool direta de tool gerada por factory.
+
+### 11.5. `factory_returns`
+
+Define como uma factory se comporta em termos de retorno, como `list`, `single`, `tool` ou `callable`.
+
+### 11.6. `tools_library`
+
+É a coleção visível ao runtime agentic dentro do YAML, mas ela não deve ser preenchida manualmente pelo autor. Ela é injetada automaticamente a partir do catálogo builtin ativo.
+
+### 11.7. Snapshot descoberto
+
+É o inventário montado pelo builder ao ler o código das tools e preparar o sync com o banco.
+
+## 12. Como a feature funciona por dentro
+
+O ciclo começa no código-fonte, não no banco.
+
+O `ToolsLibraryBuilder` percorre o diretório de tools da plataforma, identifica implementações e factories, valida paths e organiza o snapshot descoberto. Depois, ele garante que as factories parametrizadas base existam no catálogo, mesmo quando não são descobertas automaticamente por introspecção.
+
+Esse snapshot é entregue ao `BuiltinToolCatalogSynchronizer`, que normaliza cada item para `BuiltinToolRecord`, persiste tudo em `integrations.builtin_tool_registry` e apaga rows obsoletas que deixaram de existir no conjunto descoberto.
+
+Mas há uma nuance importante: o sync preserva rows já marcadas como `disabled` quando uma nova descoberta tentaria reativá-las como `active`. Isso existe para respeitar decisão operacional humana.
+
+Depois disso, o runtime não consulta o código toda hora. Ele usa o `ToolsLibraryCache`, que lê o catálogo persistido, monta snapshots em memória e devolve payloads prontos para injeção.
+
+Quando o YAML é carregado, a `ConfigurationFactory` verifica `tools_library`.
+
+- se a chave não existir, falha;
+- se a chave vier preenchida, falha;
+- se a chave vier vazia, injeta as tools ativas do banco.
+
+Em seguida, fluxos de assembly e resolução de tools podem consultar esse catálogo persistido para validação, recomendação e materialização.
+
+## 13. A tabela que armazena as tools nativas
+
+Este é o núcleo de armazenamento da feature.
+
+### 13.1. `integrations.builtin_tool_registry`
+
+O schema do banco confirma que o catálogo builtin é armazenado em uma tabela global, sem `tenant_id`, porque representa capacidades da plataforma inteira.
+
+Os campos observados no DDL incluem:
+
+- `id`
+- `impl`
+- `factory_impl`
+- `tool_name`
+- `factory_returns`
+- `description`
+- `tool_description`
+- `config`
+- `category`
+- `tags`
+- `status`
+- `discovered_from`
+- `factory_function`
+- `tool_type`
+- `decorator`
+- `function_name`
+- `path_verified`
+- `created_by`
+- `updated_by`
+- `created_at`
+- `updated_at`
+- `metadata_json`
+
+Em termos práticos, essa tabela responde a quatro perguntas ao mesmo tempo.
+
+- que tool builtin existe;
+- se ela é direta ou gerada por factory;
+- qual o estado operacional atual;
+- qual a trilha administrativa dessa row.
+
+### 13.2. Restrições importantes do schema
+
+O DDL aplica guardrails relevantes.
+
+- `id`, `description`, `tool_description` e `category` não podem ser vazios;
+- `status` aceita apenas `active`, `disabled` e `deprecated`;
+- `factory_returns` tem domínio controlado;
+- `tool_type` aceita apenas `direct` ou `factory_generated`;
+- `config` precisa ser objeto JSON;
+- `tags` precisa ser array JSON;
+- o binding de execução obriga consistência entre `impl` e `factory_impl`.
+
+### 13.3. Índices relevantes
+
+O schema também cria índices por `status`, `category`, `updated_at`, `lower(id)`, `lower(tool_name)`, `lower(category)` e GIN para `tags`. Isso reforça que a tabela foi desenhada para listagem administrativa e busca operacional, não apenas como armazenamento passivo.
+
+## 14. Repositório e persistência
+
+O `BuiltinToolRegistryRepository` é a abstração canônica dessa tabela.
+
+Ele confirma comportamentos importantes.
+
+### 14.1. `upsert_tool`
+
+Persistência idempotente do item descoberto, com atualização das colunas operacionais.
+
+### 14.2. Preservação de `disabled`
+
+Quando `preserve_disabled=true`, uma row que já estava `disabled` não volta para `active` só porque o builder a redescobriu.
+
+### 14.3. Filtros administrativos
+
+Listagem com filtros por `status`, `category`, `name_pattern` e `tag`.
+
+### 14.4. Operações administrativas pontuais
+
+Busca por id, mudança de status e remoção de rows obsoletas.
+
+## 15. Cache global e consumo no runtime
+
+O `ToolsLibraryCache` é a peça que conecta persistência com consumo em runtime.
+
+Ele carrega o catálogo do banco, mantém snapshots separados para `all` e `active`, usa lock global e devolve cópias profundas dos payloads.
+
+Isso é importante porque evita que diferentes consumidores compartilhem acidentalmente estruturas mutáveis do mesmo snapshot.
+
+Em linguagem simples: o runtime não deveria alterar “sem querer” a visão global do catálogo por estar reaproveitando o mesmo objeto em memória.
+
+## 16. Injeção automática no YAML
+
+O contrato real do YAML é bastante rígido.
+
+O YAML agentic precisa trazer `tools_library` na raiz, mas vazia.
+
+Se a chave não existir, a `ConfigurationFactory` trata isso como erro crítico.
+
+Se vier preenchida manualmente, também falha fechado com mensagem explícita de que o catálogo builtin deve ser injetado exclusivamente a partir do banco.
+
+Só quando `tools_library` chega vazia o sistema chama `load_active_tools_library_entries()` e injeta o catálogo builtin ativo.
+
+Esse ponto é central porque elimina caminhos paralelos de governança.
+
+## 17. Administração por API
+
+As tools nativas têm uma superfície administrativa própria, global e sem `tenant_id`.
+
+O router administrativo expõe o prefixo:
+
+- `/admin/integrations/builtin-tools`
+
+As operações confirmadas no código são estas.
+
+### 17.1. Listagem
+
+- `GET /admin/integrations/builtin-tools`
+
+Permite filtrar por categoria, wildcard de nome, tag e status.
+
+### 17.2. Ativação em lote
+
+- `POST /admin/integrations/builtin-tools/batch/enable`
+
+### 17.3. Desativação em lote
+
+- `POST /admin/integrations/builtin-tools/batch/disable`
+
+### 17.4. Delete físico seguro de obsoletas
+
+- `POST /admin/integrations/builtin-tools/batch/delete`
+
+Esse endpoint só aceita apagar rows que não pertencem mais ao conjunto descoberto pelo builder.
+
+### 17.5. Sincronização manual
+
+- `POST /admin/integrations/builtin-tools/sync`
+
+Dispara a leitura oficial das tools builtin e sincroniza o catálogo global persistido, preservando rows desabilitadas manualmente.
+
+## 18. Como a sincronização funciona
+
+O `BuiltinToolCatalogSynchronizer` compara o conjunto descoberto pelo builder com o conjunto atual do banco.
+
+Para cada tool descoberta, ele faz `upsert` normalizado.
+
+Depois, calcula `obsolete_ids`, ou seja, ids que existiam no banco mas já não aparecem mais no snapshot atual do builder.
+
+Esse comportamento tem implicação prática importante.
+
+- o banco não é um catálogo solto independente do código;
+- o banco é a fonte persistida de verdade do que o código descobriu oficialmente;
+- rows órfãs podem ser limpas de forma segura.
+
+## 19. Famílias parametrizadas e seu papel nas tools nativas
+
+O builder inclui manualmente três families parametrizadas base.
+
+- `dyn_sql`
+- `dyn_api`
+- `proc_sql`
+
+Isso importa porque essas families não representam um item concreto como “buscar cliente do tenant A”. Elas representam a capacidade estrutural de materializar esse tipo de tool quando o runtime receber um identificador técnico.
+
+Em outras palavras, o catálogo builtin registra a family. O registro governado por tenant ou a configuração local resolve o item concreto.
+
+## 20. Relação com registros por tenant
+
+Ferramentas nativas e registros por tenant trabalham juntas, mas têm papéis diferentes.
+
+As tools nativas dizem quais families e implementações o produto suporta.
+
+Os registros por tenant dizem quais recursos concretos daquele cliente podem ser usados, como queries SQL, endpoints HTTP, procedures ou perfis de autenticação.
+
+Essa separação reduz acoplamento e melhora governança. Sem ela, cada tenant precisaria carregar também o catálogo técnico inteiro da plataforma.
+
+## 21. Fluxo principal ponta a ponta
+
+```mermaid
+flowchart TD
+    A[Código-fonte das tools] --> B[ToolsLibraryBuilder descobre implementações]
+    B --> C[Builder adiciona factories parametrizadas base]
+    C --> D[BuiltinToolCatalogSynchronizer normaliza e sincroniza]
+    D --> E[integrations.builtin_tool_registry]
+    E --> F[ToolsLibraryCache carrega snapshot global]
+    F --> G[ConfigurationFactory recebe YAML]
+    G --> H{tools_library existe e está vazia?}
+    H -->|não| I[Falha fechada]
+    H -->|sim| J[Injeta tools builtin ativas]
+    J --> K[Assembly e runtime resolvem tools]
+```
+
+Esse fluxo mostra por que a feature não é só um inventário estático. Ela é uma cadeia operacional completa entre código, persistência, administração e runtime.
+
+## 22. O que acontece em caso de sucesso
+
+No caminho feliz, o builder descobre o catálogo, o sync persiste no banco, o cache carrega corretamente, o YAML chega com `tools_library: []` e o runtime recebe apenas as tools builtin ativas.
+
+O resultado prático é um catálogo consistente entre código, banco e execução agentic.
+
+## 23. O que acontece em caso de erro
+
+Os principais cenários confirmados são estes.
+
+### 23.1. `tools_library` ausente
+
+O carregamento do YAML falha com erro explícito porque a chave é obrigatória.
+
+### 23.2. `tools_library` preenchida manualmente
+
+O carregamento do YAML falha porque o produto não aceita caminhos paralelos de injeção de catálogo.
+
+### 23.3. Repositório retorna payload inválido
+
+O cache falha em modo estrito quando o catálogo persistido não é uma lista válida.
+
+### 23.4. Sincronização administrativa falha
+
+O serviço administrativo responde com erro HTTP 500 quando o builder ou o sync quebram.
+
+### 23.5. Delete físico tenta apagar row ainda descoberta
+
+O endpoint administrativo retorna conflito e bloqueia o delete de items que ainda pertencem ao conjunto oficial descoberto pelo builder.
+
+## 24. Observabilidade e diagnóstico
+
+As evidências de observabilidade mais úteis são estas.
+
+- logs do builder durante descoberta e sincronização;
+- resposta do sync com `total_discovered`, `upserted_count`, `deleted_ids` e `preserved_disabled_ids`;
+- filtros administrativos por `status`, `category`, `tag` e `name_pattern`;
+- invalidação explícita do `ToolsLibraryCache` após mudanças de status ou delete;
+- mensagens de erro claras quando `tools_library` chega ausente ou preenchida.
+
+## 25. Vantagens práticas
+
+As vantagens reais observadas no desenho do código são estas.
+
+- cria fonte persistida única de verdade para tools builtin;
+- separa catálogo global da plataforma do cadastro concreto por tenant;
+- permite ativação e desativação sem editar YAML nem alterar código de negócio;
+- protege o runtime contra catálogos manuais divergentes;
+- preserva decisões operacionais de `disabled` durante sync;
+- melhora busca e auditoria administrativa com filtros e índices adequados;
+- simplifica a montagem do runtime agentic.
+
+## 26. Exemplos práticos guiados
+
+### 26.1. Nova family builtin descoberta no código
+
+Cenário: uma nova tool direta é adicionada ao código com o padrão aceito pelo builder.
+
+O que acontece: o builder a descobre, o sync faz upsert em `integrations.builtin_tool_registry` e, se o status resultante estiver ativo, ela pode aparecer automaticamente na injeção do catálogo.
+
+### 26.2. Tool builtin desativada manualmente
+
+Cenário: uma tool problemática é marcada como `disabled` via API administrativa.
+
+O que acontece: o cache é invalidado e o runtime deixa de injetá-la como ativa. Em sync futuro, a decisão de `disabled` é preservada.
+
+### 26.3. Row órfã obsoleta
+
+Cenário: uma tool foi removida do código e sobrou no banco.
+
+O que acontece: o conjunto descoberto deixa de conter esse id, e a row pode ser apagada com segurança por delete obsoleto ou durante sync.
+
+### 26.4. YAML tentando definir o catálogo manualmente
+
+Cenário: alguém envia YAML com `tools_library` já preenchida.
+
+O que acontece: o carregamento falha fechado, porque o catálogo builtin deve vir do banco e não do documento recebido.
+
+## 27. Explicação 101
+
+Pense nas tools nativas como o catálogo oficial de “coisas que a plataforma sabe fazer”.
+
+Esse catálogo é montado olhando o código real da própria plataforma, guardado em banco e usado depois para preencher automaticamente os YAMLs. Assim, o sistema evita que cada arquivo YAML carregue sua própria versão do catálogo ou que cada time invente um jeito diferente de declarar as mesmas ferramentas.
+
+## 28. Limites e pegadinhas
+
+Também existem limites importantes.
+
+- ter uma tool no catálogo builtin não significa que ela está ativa;
+- ter uma family builtin não significa que todo tenant já tem item concreto publicado para usar essa family;
+- desabilitar uma tool builtin não remove necessariamente o código; remove sua disponibilidade operacional no catálogo;
+- tools nativas não substituem o registro multi-tenant de integrações concretas;
+- `tools_library` no YAML não é lugar para autoria manual de catálogo.
+
+## 29. Troubleshooting
+
+### 29.1. O YAML falha dizendo que `tools_library` está inválida
+
+Sintoma: erro no carregamento da configuração.
+
+Causa provável: a chave está ausente ou veio preenchida manualmente.
+
+### 29.2. A tool existe no código, mas não aparece no runtime
+
+Sintoma: capability conhecida pelo time, mas ausente do catálogo injetado.
+
+Causa provável: falta de sync do builder, tool marcada como `disabled` ou erro na descoberta.
+
+### 29.3. A row existe no banco, mas a operação quer apagá-la e não consegue
+
+Sintoma: delete administrativo retorna conflito.
+
+Causa provável: o id ainda faz parte do conjunto oficial descoberto pelo builder, portanto não é obsoleto.
+
+### 29.4. O runtime só vê parte do catálogo
+
+Sintoma: algumas tools aparecem e outras não.
+
+Causa provável: a injeção usa apenas tools ativas, então rows com `disabled` ou `deprecated` podem não entrar como catálogo efetivamente injetado para execução.
+
+## 30. Impacto técnico
+
+Tools nativas reforçam o isolamento entre descoberta, persistência, administração e consumo do catálogo. Isso reduz drift, duplicação e acoplamento entre código-fonte e YAMLs de execução.
+
+## 31. Impacto executivo
+
+Executivamente, a feature reduz risco operacional e melhora governança central do runtime agentic, porque o catálogo deixa de depender de configurações soltas e passa a ter controle administrativo explícito.
+
+## 32. Impacto comercial
+
+Comercialmente, ela fortalece o posicionamento da plataforma como produto governado e administrável, especialmente em ambientes corporativos que exigem catálogo auditável de capacidades.
+
+## 33. Impacto estratégico
+
+Estratégicamente, tools nativas são o núcleo estável que sustenta as demais families do produto. Elas permitem evoluir integrações, agents e automações sobre uma base técnica persistida, central e reaproveitável.
+
+## 34. Checklist de entendimento
+
+- Entendi que tools nativas são catálogo global da plataforma.
+- Entendi que o armazenamento principal está em `integrations.builtin_tool_registry`.
+- Entendi a diferença entre builtin global e cadastro por tenant.
+- Entendi que `tools_library` deve chegar vazia no YAML.
+- Entendi que o builder descobre o catálogo no código.
+- Entendi que o sync preserva rows desabilitadas manualmente.
+- Entendi que a API administrativa é global e não exige `tenant_id`.
+- Entendi como as families parametrizadas entram no catálogo builtin.
+
+## 35. Evidências no código
+
+- `src/integrations/schema.py`
+  - Motivo da leitura: DDL da tabela global.
+  - Comportamento confirmado: criação de `integrations.builtin_tool_registry`, constraints de status, tipo e binding de execução, além de índices administrativos.
+
+- `src/integrations/builtin_tool_repository.py`
+  - Motivo da leitura: persistência canônica.
+  - Comportamento confirmado: upsert com preservação opcional de `disabled`, listagem filtrável, alteração de status e delete de obsoletas.
+
+- `src/agentic_layer/tools/builtin_tool_catalog_sync.py`
+  - Motivo da leitura: sincronização builder -> banco.
+  - Comportamento confirmado: normalização de records, cálculo de obsoletas, upserts e preservação de ids `disabled`.
+
+- `src/agentic_layer/tools/tools_library_cache.py`
+  - Motivo da leitura: consumo em runtime.
+  - Comportamento confirmado: cache thread-safe do catálogo persistido com snapshots `all` e `active`, devolvendo cópias profundas.
+
+- `src/agentic_layer/tools/tools_library_builder.py`
+  - Motivo da leitura: origem do catálogo.
+  - Comportamento confirmado: descoberta no diretório de tools, sync oficial e inclusão manual de `dyn_sql`, `dyn_api` e `proc_sql` como factories parametrizadas base.
+
+- `src/config/config_cli/configuration_factory.py`
+  - Motivo da leitura: contrato de injeção no YAML.
+  - Comportamento confirmado: `tools_library` deve existir e chegar vazia; o catálogo builtin ativo é injetado automaticamente do banco.
+
+- `src/config/agentic_assembly/tool_resolver.py`
+  - Motivo da leitura: uso em assembly.
+  - Comportamento confirmado: resolução fallback do catálogo builtin persistido para processos de assembly.
+
+- `src/api/routers/admin/builtin_tools_router.py`
+  - Motivo da leitura: boundary HTTP administrativo.
+  - Comportamento confirmado: listagem, enable, disable, delete obsoleto e sync manual do catálogo builtin global.
+
+- `src/api/services/admin/builtin_tools_service.py`
+  - Motivo da leitura: regras administrativas.
+  - Comportamento confirmado: filtros, invalidação do cache, bloqueio de delete para ids ainda descobertos e sync com `preserve_disabled=true`.
+
+- `src/api/schemas/admin_builtin_tools_models.py`
+  - Motivo da leitura: contratos HTTP do admin.
+  - Comportamento confirmado: payloads expõem ids, status, filtros, contadores e resumo do sync.
+
+- `tests/integration/test_admin_builtin_tool_registry_api.py`
+  - Motivo da leitura: garantias ponta a ponta.
+  - Comportamento confirmado: API global sem `tenant_id`, filtros funcionais, bloqueio de delete para ids descobertos e preservação de `disabled` no sync.

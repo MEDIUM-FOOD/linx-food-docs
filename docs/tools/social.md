@@ -1,217 +1,184 @@
-# 📣 Manual de Tools de Social e Mensageria
+# Manual técnico, executivo, comercial e estratégico: tools de social e mensageria
 
-## Visão geral
+## 1. O que são as tools de social e mensageria
 
-Agrupa as ferramentas de redes sociais e mensageria já disponíveis no
-catálogo (Instagram Graph, Twitter/X v2, WhatsApp Cloud API e Chatwoot) em
-um único manual prático.
+As tools desta família transformam a plataforma em operador de canais digitais. No código lido, esse domínio está concentrado em quatro frentes confirmadas.
 
-## Por que existe
+- WhatsApp Cloud API para envio de texto e template.
+- Instagram Graph para publicação, DM e insights.
+- Chatwoot para operação de inbox e atendimento.
+- Twitter/X para busca recente, menções, timeline e lookup de perfil.
 
-- Evitar caça às ferramentas em listas alfabéticas.
-- Deixar claro quais credenciais e blocos YAML cada canal exige.
-- Trazer exemplos combinando publicação, captura de buzz e atendimento.
+Em termos simples, esta não é uma camada para falar de social. É uma camada para agir em canais e recuperar sinais operacionais desses canais.
 
-## Explicação conceitual
+## 2. Que problema elas resolvem
 
-- Todas as tools usam `user_session.correlation_id` para log e rastreio.
-- Autenticação vem de `security_keys`; parâmetros variáveis ficam em
-  `global_tools_configuration` no YAML (quando aplicável).
-- Saídas são JSON ou listas de dicionários já normalizados para o agente.
-- Tratamento de erros prioriza mensagens explícitas sem vazar tokens.
+Sem essa família, qualquer jornada social precisaria combinar várias integrações ad hoc.
 
-## Explicação for dummies
+- uma integração para publicar;
+- outra para mandar mensagens;
+- outra para medir resultado;
+- outra para atendimento;
+- outra para escuta social.
 
-Peça: "publique no Instagram e mande DM para os 3 primeiros comentários" ou
-"busque o buzz no Twitter e envie um resumo no WhatsApp". As tools chamam
-as APIs oficiais, cuidam de autenticação e já devolvem dados prontinhos
-para você só usar no prompt.
+O catálogo atual reduz esse atrito porque já oferece as peças mínimas para publicação, comunicação, monitoramento e operação de inbox.
 
-## Catálogo por provedor
+## 3. Visão conceitual
 
-### Instagram Graph
-- `instagram_publish_media`: posta imagem/vídeo/reel.
-- `instagram_send_direct_message`: envia DM com texto/link ou payload
-  customizado.
-- `instagram_fetch_insights`: lê métricas de conta ou mídia.
+O domínio social do projeto segue uma divisão funcional saudável.
 
-**YAML (obrigatório)**
+- Publicação e mensageria direta: Instagram e WhatsApp.
+- Atendimento operacional: Chatwoot.
+- Escuta e pesquisa de buzz: Twitter/X.
 
-```yaml
-security_keys:
-  INSTAGRAM_GRAPH_ACCESS_TOKEN: "${INSTAGRAM_GRAPH_ACCESS_TOKEN}"
+Isso é importante porque evita confundir comunicação outbound com operação de atendimento e com inteligência de canal. Cada problema recebe a tool certa.
 
-global_tools_configuration:
-  instagram_graph:
-    business_account_id: "1789..." # obrigatório
-    api_version: "v21.0"            # opcional (default v21.0)
-    timeout: 15                      # opcional (s)
+## 4. Visão técnica
+
+O código confirma 17 tools concretas nessa frente.
+
+| Frente | Tools confirmadas | Uso prático |
+| --- | ---: | --- |
+| WhatsApp Cloud | 2 | enviar texto e template |
+| Instagram Graph | 3 | publicar mídia, enviar DM, buscar insights |
+| Chatwoot | 8 | listar conversas, responder, atualizar, listar contatos, health check |
+| Twitter/X | 4 | buscar buzz, menções, timeline e dados básicos de perfil |
+
+O padrão técnico mais importante é a exigência de contexto operacional. Nas tools diretamente lidas de Instagram e WhatsApp, user_session.correlation_id é obrigatório. Isso garante rastreabilidade ponta a ponta. Os segredos ficam em security_keys e as opções variáveis de canal ficam em tool_config ou blocos equivalentes de configuração.
+
+## 5. Visão executiva
+
+Para liderança, essa família reduz fragmentação operacional. Ela aproxima marketing, atendimento e monitoramento em uma base única de capabilities, o que diminui dependência de consoles isolados e acelera jornadas assistidas por agente.
+
+O ganho executivo é previsibilidade: o mesmo catálogo pode apoiar demonstração comercial, operação assistida e automação futura.
+
+## 6. Visão comercial
+
+Comercialmente, esta família é muito demonstrável. Ela permite mostrar cenários de alto apelo sem inventar narrativa.
+
+- publicar uma campanha no Instagram;
+- responder um lead em WhatsApp;
+- acompanhar fila de atendimento no Chatwoot;
+- buscar menções ou buzz no Twitter/X para orientar a ação seguinte.
+
+Isso ajuda a vender a plataforma como operador omnicanal, e não só como chatbot.
+
+## 7. Visão estratégica
+
+Estrategicamente, a família social fortalece a plataforma em duas direções.
+
+- direção externa, porque conecta o agente a canais de aquisição, atendimento e relacionamento;
+- direção interna, porque prepara terreno para combinar esses canais com CRM, observabilidade, workflows e integrações governadas.
+
+O catálogo atual já permite composições interessantes com HubSpot, RD Station, Gmail, Teams e tools web, mesmo quando o domínio principal continua sendo social.
+
+## 8. Submódulos lógicos
+
+### 8.1. WhatsApp
+
+Problema resolvido: disparo de comunicação estruturada e transacional.
+
+Valor entregue: conversa direta com cliente em um canal de alta adesão.
+
+Ferramentas confirmadas:
+
+- whatsapp_send_text_message
+- whatsapp_send_template_message
+
+### 8.2. Instagram
+
+Problema resolvido: publicar, conversar e medir.
+
+Valor entregue: une social publishing e resposta direta com leitura de métricas.
+
+Ferramentas confirmadas:
+
+- instagram_publish_media
+- instagram_send_direct_message
+- instagram_fetch_insights
+
+### 8.3. Chatwoot
+
+Problema resolvido: operar a fila de atendimento e o contexto da conversa.
+
+Valor entregue: traz o inbox para dentro do catálogo agentic.
+
+Ferramentas confirmadas:
+
+- chatwoot_listar_conversas
+- chatwoot_obter_conversa
+- chatwoot_enviar_mensagem
+- chatwoot_atualizar_conversa
+- chatwoot_listar_contatos
+- chatwoot_criar_contato
+- chatwoot_listar_agentes
+- chatwoot_health_check
+
+### 8.4. Twitter/X
+
+Problema resolvido: monitorar buzz, menções e contexto público.
+
+Valor entregue: adiciona escuta social e pesquisa rápida ao agente.
+
+Ferramentas confirmadas:
+
+- twitter_search
+- twitter_mentions_search
+- twitter_user_timeline
+- twitter_user_lookup
+
+## 9. Pipeline principal
+
+```mermaid
+flowchart LR
+    A[Intenção do usuário ou do agente] --> B{Objetivo}
+    B -->|Enviar mensagem| C[WhatsApp ou Instagram DM]
+    B -->|Publicar conteúdo| D[Instagram Publish]
+    B -->|Operar atendimento| E[Chatwoot]
+    B -->|Escutar canal| F[Twitter/X]
+    C --> G[Resposta normalizada]
+    D --> G
+    E --> G
+    F --> G
 ```
 
-### Twitter / X (API v2)
-- `twitter_search`: busca recente por termo/hashtag/menção.
-- `twitter_user_timeline`: timeline pública de um usuário.
-- `twitter_mentions_search`: menções a um usuário.
-- `twitter_user_lookup`: dados básicos de perfil por username.
+O valor do fluxo está em separar ação de publicação, ação de atendimento e ação de pesquisa. Misturar esses objetivos geralmente gera automações frágeis.
 
-**YAML (obrigatório)**
+## 10. O que acontece em caso de sucesso
 
-```yaml
-security_keys:
-  TWITTER_BEARER_TOKEN: "${TWITTER_BEARER_TOKEN}"
-```
+Quando a configuração está correta e o provedor aceita a chamada, a tool devolve um resultado serializado e próprio para consumo do agente. Em Instagram e WhatsApp, o retorno vem como JSON textual. Em Chatwoot e Twitter/X, o formato é voltado para os objetos úteis da operação.
 
-**Parâmetros principais**
-- `max_results` (10-100, default 10) e `since_minutes` opcional em
-  `twitter_search`.
-- `limit` (10-100) nas demais tools.
+Na prática, isso permite que o agente use o retorno imediatamente para decidir o próximo passo, sem ter de interpretar formatos muito diferentes entre provedores.
 
-### WhatsApp Cloud API
-- `whatsapp_send_text_message`: envia texto livre (opcional preview de
-  link).
-- `whatsapp_send_template_message`: envia template aprovado.
+## 11. O que acontece em caso de erro
 
-**YAML (obrigatório)**
+Os erros confirmados no código seguem um padrão consistente.
 
-```yaml
-security_keys:
-  WHATSAPP_CLOUD_API_TOKEN: "${WHATSAPP_CLOUD_API_TOKEN}"
+- segredo ausente gera falha explícita de validação;
+- parâmetro obrigatório ausente gera ValueError;
+- falhas do provider são registradas com contexto operacional e convertidas em mensagens compreensíveis;
+- Chatwoot expõe um health check para distinguir canal não configurado de falha funcional.
 
-global_tools_configuration:
-  whatsapp_cloud:
-    phone_number_id: "5511999999999" # obrigatório
-    api_version: "v20.0"             # opcional (default v20.0)
-    timeout: 15                       # opcional (s)
-```
+O ganho prático é reduzir tempo perdido com erro silencioso ou token faltando sem contexto.
 
-### Chatwoot
-- `chatwoot_listar_conversas`
-- `chatwoot_obter_conversa`
-- `chatwoot_enviar_mensagem`
-- `chatwoot_atualizar_conversa`
-- `chatwoot_listar_contatos`
-- `chatwoot_criar_contato`
-- `chatwoot_listar_agentes`
-- `chatwoot_health_check`
+## 12. Limites e pegadinhas
 
-**YAML (obrigatório)**
+- Esta família opera canais, mas não substitui toda a jornada comercial do cliente. CRM, automação e analytics podem exigir composição com outras tools.
+- WhatsApp e Instagram são tools de runtime. Provisionamento de canal é outra preocupação e vive em slices separados da API.
+- Chatwoot é inbox e operação de atendimento. Não é substituto direto de publicação social.
+- Twitter/X ajuda em escuta e contexto público, não em entrega de mensagens privadas ao cliente.
 
-```yaml
-security_keys:
-  chatwoot_base_url: "https://chatwoot.suaempresa.com"
-  chatwoot_api_token: "${CHATWOOT_API_TOKEN}"
-  chatwoot_account_id: "${CHATWOOT_ACCOUNT_ID}"
+## 13. Evidências no código
 
-global_tools_configuration:
-  chatwoot:
-    timeout: 30 # opcional (s)
-```
-
-## Como o usuário recebe essa feature
-
-1. Preencha `security_keys` com os tokens acima.
-2. Configure `global_tools_configuration` apenas onde o provedor exige
-  (Instagram,
-   WhatsApp e Chatwoot). Twitter depende só do bearer.
-3. Inclua as tools em `multi_agents` ou `workflows` e gere o catálogo via
-   builder padrão.
-
-## Exemplos práticos
-
-### 1) Buzz pré-jogo (Twitter + WhatsApp)
-
-```yaml
-security_keys:
-  TWITTER_BEARER_TOKEN: "${TWITTER_BEARER_TOKEN}"
-  WHATSAPP_CLOUD_API_TOKEN: "${WHATSAPP_CLOUD_API_TOKEN}"
-
-global_tools_configuration:
-  whatsapp_cloud:
-    phone_number_id: "5511999999999"
-
-multi_agents:
-  - id: "buzz_pre_jogo"
-    tools:
-      - "twitter_search"
-      - "whatsapp_send_text_message"
-```
-
-Prompt: "Busque tweets sobre Palmeiras hoje e envie resumo + horário para
-+55119999...".
-
-### 2) Lançamento com card (Instagram)
-
-```yaml
-security_keys:
-  INSTAGRAM_GRAPH_ACCESS_TOKEN: "${INSTAGRAM_GRAPH_ACCESS_TOKEN}"
-
-global_tools_configuration:
-  instagram_graph:
-    business_account_id: "1789..."
-
-multi_agents:
-  - id: "post_lancamento"
-    tools:
-      - "instagram_publish_media"
-      - "instagram_send_direct_message"
-```
-
-Prompt: "Publique este vídeo com legenda X e mande DM com cupom para o
-perfil 123".
-
-### 3) Atendimento unificado (Chatwoot)
-
-```yaml
-security_keys:
-  chatwoot_base_url: "https://chatwoot.suaempresa.com"
-  chatwoot_api_token: "${CHATWOOT_API_TOKEN}"
-  chatwoot_account_id: "${CHATWOOT_ACCOUNT_ID}"
-
-global_tools_configuration:
-  chatwoot:
-    timeout: 20
-
-multi_agents:
-  - id: "cs_chatwoot"
-    tools:
-      - "chatwoot_listar_conversas"
-      - "chatwoot_obter_conversa"
-      - "chatwoot_enviar_mensagem"
-```
-
-Prompt: "Liste conversas abertas, abra a 123 e responda com status do
-pedido".
-
-## Impacto para o usuário
-
-- Menos fricção para publicar, monitorar buzz e responder clientes num só
-  pacote.
-- Logs com correlação facilitam auditoria e troubleshooting.
-- Exemplos prontos aceleram onboarding e reduzem erros de parâmetro.
-
-## Limites e pegadinhas
-
-- Tokens expiram: valide `INSTAGRAM_GRAPH_ACCESS_TOKEN` e bearer do
-  Twitter antes de campanhas.
-- WhatsApp Cloud cobra por janela de conversa; use template apenas quando
-  necessário.
-- Chatwoot exige `requests` no ambiente; sem isso as tools não sobem.
-- Rate limit: Twitter e Instagram podem retornar 429; aguarde e repita.
-
-## Troubleshooting
-
-- 401/403 em qualquer provedor: confira token em `security_keys` e ID
-  obrigatório (IG user, phone_number_id, account_id do Chatwoot).
-- WhatsApp: mensagem não chega? Verifique `phone_number_id`, formato do
-  número de destino e se o template está aprovado.
-- Instagram: erro ao publicar vídeo? Confira `media_type` (IMAGE/VIDEO/
-  REEL) e `media_url` público.
-- Twitter: `query` vazia devolve erro imediato; normalize o termo.
-- Chatwoot: `LOGGER_FACTORY_ERROR` indica client não inicializado; revise
-  `base_url`, `api_token`, `account_id` e dependência `requests`.
-
-## Observação sobre canais não suportados
-
-Slack/Teams/Telegram não estão no catálogo atual. Caso precise, avalie
-Chatwoot para inbox multicanal ou abra uma issue solicitando nova
-integração.
+- src/agentic_layer/tools/vendor_tools/whatsapp_tools/whatsapp_toolkit.py
+  - Motivo da leitura: confirmar a família WhatsApp e seus requisitos.
+  - Comportamento confirmado: a factory cria duas tools, exige correlation_id, token e phone_number_id.
+- src/agentic_layer/tools/vendor_tools/instagram_tools/instagram_toolkit.py
+  - Motivo da leitura: confirmar a família Instagram.
+  - Comportamento confirmado: a factory cria publicação, DM e insights com business_account_id obrigatório.
+- src/agentic_layer/tools/vendor_tools/chatwoot_tools/chatwoot_toolkit.py
+  - Motivo da leitura: confirmar a frente de inbox.
+  - Comportamento confirmado: o toolkit expõe oito tools cobrindo fila, conversa, contato e health check.
+- src/agentic_layer/tools/external_tools/twitter_search.py
+  - Motivo da leitura: confirmar a frente Twitter/X.
+  - Comportamento confirmado: a factory cria quatro tools voltadas a busca, menções, timeline e lookup.

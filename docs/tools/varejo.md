@@ -1,371 +1,206 @@
-# 🛍️ Manual de Tools de Varejo e Marketplaces
+# Manual técnico, executivo, comercial e estratégico: tools de varejo
 
-## Visão geral
+## 1. O que são as tools de varejo
 
-Concentra as ferramentas de catálogo, marketplace e estoque já disponíveis
-(Magalu Hub, Amazon SP-API, Plugg.to, Linx) para consultas de produtos,
-comparação de ofertas e alertas operacionais.
+As tools de varejo são a camada do catálogo que conecta a plataforma a operações comerciais reais. No código lido, esse domínio não aparece como um único pacote homogêneo. Ele aparece como um conjunto de trilhas complementares.
 
-## Por que existe
+- Trilhas de catálogo e marketplace para localizar produtos em hubs e plataformas externas.
+- Trilhas de ecommerce para trabalhar produtos, pedidos, clientes e estoque.
+- Trilhas de food delivery para capturar eventos, consultar pedidos, atualizar status e operar cardápio.
+- Trilhas de descoberta e composição governada para PDV, checkout e analytics com dyn_sql.
 
-- Destacar o pacote varejo em um único lugar, sem depender de buscas em
-  listas alfabéticas.
-- Facilitar combinações rápidas (busca, comparação, alerta) com exemplos
-  prontos.
-- Padronizar pré-requisitos de configuração, evitando erros de autenticação
-  ou de parâmetros obrigatórios.
+Em linguagem simples, o domínio de varejo aqui não é um chat que responde perguntas sobre venda. É um conjunto de conectores e capacidades operacionais reutilizáveis para vender, consultar, monitorar e explicar a operação.
 
-## Explicação conceitual
+## 2. Que problema elas resolvem
 
-- Todas as tools recebem `query` obrigatória e retornam lista de dicionários
-  normalizados (produto/atributos/preço/estoque quando expostos pela API).
-- Falhas críticas exibem mensagens claras para 401/403 e 429, sem vazar
-  bearer/API Key; retries com backoff já vêm configurados.
-- Logs sempre carregam `correlation_id` do YAML, preservando o rastro da
-  sessão multi-tenant.
-- As tools são descobertas automaticamente pelo builder e ficam disponíveis
-  no catálogo carregado pelo sistema.
+Sem esse pacote, cada caso de varejo exigiria refazer uma ou mais destas tarefas.
 
-## Explicação for dummies
+- implementar autenticação e tratamento de erro para cada provedor;
+- padronizar respostas de APIs muito diferentes entre si;
+- criar um caminho novo para cada painel ou consulta operacional;
+- expor SQL ou integrações de forma desgovernada no agente;
+- repetir o mesmo esforço de integração em todo novo projeto.
 
-Peça ao agente algo como "busque PS5 nos marketplaces" e ele consulta Magalu
-Hub, Amazon ou Plugg.to, devolvendo listas de produtos já normalizadas.
+O catálogo de varejo troca customização repetitiva por capacidade de plataforma.
 
-## Catálogo varejo (onde buscar o detalhe)
+## 3. Visão conceitual
 
-- `magalu_hub_buscar_produtos` — Magalu Hub; termo/SKU;
-  ver [catálogo por finalidade](por_finalidade.md)
-- `amazon_sp_api_buscar_produtos` — Amazon SP-API; termo/SKU;
-  ver [catálogo por finalidade](por_finalidade.md)
-- `pluggto_buscar_produtos` — Plugg.to; catálogo multicanal;
-  ver [catálogo por finalidade](por_finalidade.md)
-- `linx_product_search` — Linx; consulta produtos ERP;
-  ver [catálogo por finalidade](por_finalidade.md)
+O domínio de varejo no projeto segue uma ideia importante: separar canal operacional de mecanismo de governança.
 
-## Como o usuário recebe essa feature
+Canal operacional é a tool concreta que fala com um provider, como Magalu Hub, iFood, Shopify ou VTEX.
 
-1. Adicione as chaves em `security_keys` do YAML (veja a seção do provider).
-2. Configure `global_tools_configuration` para parâmetros comuns e credenciais
-  por provider (ex.: `base_url`, `search_path`, `phone_number_id`).
-3. Inclua a tool no bloco `multi_agents` ou workflow desejado.
-4. Gere/atualize o catálogo via tools_library_builder quando incluir novas
-   factories (já padrão no projeto).
+Mecanismo de governança é a forma como a plataforma decide o que pode ser executado em analytics, descoberta de catálogo interno ou jornadas de PDV. É aí que entram dyn_sql, UCP discovery e o slice AG-UI de varejo já documentado em outras partes do repositório.
 
-## Entendendo `global_tools_configuration` e `local_tools_configuration`
+Essa separação evita misturar duas coisas muito diferentes.
 
-### O que é `global_tools_configuration`
+- consumir API de negócio de terceiros;
+- expor dado interno do cliente de forma segura e auditável.
 
-Bloco na raiz do YAML que concentra configurações **padrão por tool**. É o
-local certo para credenciais e parâmetros compartilhados entre agentes e
-workflows. Exemplo típico: `base_url` e `search_path` que valem para todo o
-ambiente.
+## 4. Visão técnica
 
-### O que é `local_tools_configuration`
+As famílias confirmadas no código são estas.
 
-Bloco dentro de um agente (`multi_agents[]`) ou de um workflow. Serve para
-**override local**, quando um único agente/workflow precisa de ajustes
-específicos (por exemplo, timeout menor, query_param diferente ou endpoint
-regional).
+### 4.1. Marketplaces e hubs de catálogo
 
-### Ordem de precedência
+- magalu_hub_buscar_produtos
+- amazon_sp_api_buscar_produtos
+- pluggto_buscar_produtos
+- uber_buscar_produtos
 
-1. `local_tools_configuration` do agente (mais específico)
-2. `local_tools_configuration` do workflow
-3. `global_tools_configuration` na raiz do YAML (fallback)
+Essas tools validam sessão, exigem correlation_id, leem segredos de security_keys, montam cliente HTTP com tratamento de erro e devolvem listas normalizadas.
 
-Se um parâmetro existir no bloco local, ele sobrescreve o global. Use local
-apenas quando houver motivo real; caso contrário, mantenha no global.
+### 4.2. Suites de ecommerce
 
-## Exemplos práticos
+O toolkit ecommerce confirmado no código cobre Shopify, WooCommerce e VTEX, com operações como listar produtos, obter produto, listar pedidos, obter pedido, atualizar estoque, atualizar status e operar clientes.
 
-### Exemplo 1 — consulta multicanal com filtro local
+Além de consultas, essa frente já cobre mutações em alguns provedores, o que muda o risco operacional e exige mais cuidado em seleção de tool por caso de uso.
 
-```yaml
-security_keys:
-  MAGALU_HUB_API_KEY: "${MAGALU_HUB_API_KEY}"
-  AMAZON_SP_API_TOKEN: "${AMAZON_SP_API_TOKEN}"
+### 4.3. Food delivery e operação omnichannel
 
-global_tools_configuration:
-  magalu_hub: {}
-  amazon_sp_api:
-    base_url: "https://sellingpartnerapi-na.amazon.com"
-    search_path: "/products/search"
+O código confirma famílias específicas para:
 
-multi_agents:
-  - id: "catalogo_varejo"
-    tools:
-      - "magalu_hub_buscar_produtos"
-      - "amazon_sp_api_buscar_produtos"
+- iFood em duas trilhas: toolkit operacional amplo e toolkit SDK focado em eventos;
+- Goomer;
+- Food99;
+- Repediu;
+- Linx Delivery Hub;
+- Linx Neemo;
+- Delivery Much;
+- CRM Food;
+- Cardápio Web;
+- Keeta;
+- Alloy;
+- Zé Delivery;
+- Shopify delivery.
 
-# Prompt: "Busque 'smartwatch', filtre preço < 800 e resuma em 5 itens".
+Aqui o valor não é só consultar. Em vários provedores, o catálogo já permite atualizar disponibilidade, mudar status e operar etapas do pedido.
+
+### 4.4. Descoberta e governo do varejo interno
+
+- ucp_discovery_tool
+- dyn_sql<query_id>
+
+Essas duas entradas representam a fronteira entre integração pronta e leitura governada. UCP discovery ajuda na descoberta de capacidades do ecossistema UCP. dyn_sql viabiliza analytics e painéis com consultas aprovadas em vez de SQL improvisado.
+
+## 5. Visão executiva
+
+Para liderança, esse pacote reduz duas fontes clássicas de custo.
+
+- custo de integração, porque muitos canais de varejo já entram prontos;
+- custo de governança, porque analytics e consultas internas podem ser expostas via contratos aprovados, não via acesso solto a banco.
+
+O efeito prático é acelerar time-to-value em clientes de varejo sem sacrificar controle operacional.
+
+## 6. Visão comercial
+
+Comercialmente, este é um dos conjuntos mais fortes da plataforma porque permite demonstrar casos concretos.
+
+- localizar produto em hubs e marketplaces;
+- inspecionar pedidos e eventos de delivery;
+- verificar estoque e clientes em suites de ecommerce;
+- acoplar consulta governada a cockpit ou assistente comercial.
+
+Isso ajuda a vender a plataforma como operador digital de varejo, e não apenas como camada conversacional.
+
+## 7. Visão estratégica
+
+Estrategicamente, o catálogo de varejo fortalece o produto em quatro frentes.
+
+- Reuso: o mesmo catálogo serve agentes, AG-UI, demos e integrações por tenant.
+- Especialização: o projeto já tem musculatura em food delivery, ecommerce e varejo analítico.
+- Governança: consultas internas podem migrar para dyn_sql em vez de proliferar código customizado.
+- Evolução: novas plataformas de varejo entram pelo mesmo pipeline de @tool_factory, builder e catálogo builtin.
+
+## 8. Submódulos lógicos do varejo
+
+### 8.1. Busca de catálogo externo
+
+Problema resolvido: encontrar produtos rapidamente em marketplaces e hubs.
+
+Valor entregue: acelera atendimento, curadoria de catálogo e comparação comercial.
+
+Risco principal: credencial inválida ou limite de API. O código já trata cenários de autenticação e rate limit com mensagens mais amigáveis.
+
+### 8.2. Operação de ecommerce
+
+Problema resolvido: expor ações de produto, pedido, cliente e estoque sem criar uma integração nova por loja.
+
+Valor entregue: transforma o agente em operador de backoffice digital.
+
+Risco principal: mutações em pedidos, produtos ou estoque exigem escopo mais rigoroso do que simples consulta.
+
+### 8.3. Operação de food delivery
+
+Problema resolvido: lidar com a fragmentação entre canais, cardápios, eventos e pedidos.
+
+Valor entregue: centraliza operações antes espalhadas por vários painéis.
+
+Risco principal: mistura de consulta e ação operacional. Por isso a seleção de tool deve ser intencional e não genérica.
+
+### 8.4. Analytics governada
+
+Problema resolvido: mostrar dado interno do cliente com governança.
+
+Valor entregue: painéis, radar de checkout, catálogo e resumo executivo sem expor SQL livre.
+
+Risco principal: tentar usar uma tool de integração onde o caso exige dyn_sql ou outra capacidade governada.
+
+## 9. Fluxo principal de uso
+
+```mermaid
+flowchart TD
+    A[Problema de varejo] --> B{Tipo de necessidade}
+    B -->|Canal externo| C[Tool concreta de provider]
+    B -->|Operação de ecommerce| D[Toolkit Shopify, WooCommerce ou VTEX]
+    B -->|Food delivery| E[Toolkit de pedidos, eventos ou cardápio]
+    B -->|Analytics interna| F[dyn_sql ou UCP discovery]
+    C --> G[Resposta normalizada ao agente]
+    D --> G
+    E --> G
+    F --> G
 ```
 
-### Exemplo 2 — alerta de estoque baixo
+O ponto importante do fluxo é que o projeto não trata todo problema de varejo do mesmo jeito. A solução muda conforme o dado é externo, operacional ou governado.
 
-```yaml
-security_keys:
-  PLUGGTO_API_KEY: "${PLUGGTO_API_KEY}"
-  WHATSAPP_CLOUD_API_TOKEN: "${WHATSAPP_CLOUD_API_TOKEN}"
+## 10. Como escolher a tool de varejo certa
 
-global_tools_configuration:
-  pluggto:
-    base_url: "https://api.plugg.to"
-    search_path: "/products/search"
-  whatsapp_cloud:
-    phone_number_id: "${WHATSAPP_PHONE_ID}"
+- Se a necessidade é encontrar produto em hub ou marketplace, procure primeiro Magalu Hub, Amazon SP-API, Plugg.to ou Uber.
+- Se a necessidade é operar catálogo, pedido, cliente ou estoque de loja virtual, procure Shopify, WooCommerce ou VTEX.
+- Se a necessidade é lidar com pedidos e cardápios de delivery, procure a família do canal específico.
+- Se a necessidade é responder pergunta analítica ou abastecer cockpit interno, avalie dyn_sql em vez de uma tool de provider.
 
-multi_agents:
-  - id: "alerta_estoque_varejo"
-    tools:
-      - "pluggto_buscar_produtos"
-      - "whatsapp_send_text_message"
+## 11. O que pode dar errado
 
-# Prompt: "Ache SKUs com estoque < 5 e envie alerta para +551199999999".
-```
+- segredo ausente em security_keys;
+- endpoint ou base_url obrigatória ausente em tool_config do provider;
+- rate limit do provedor externo;
+- uso de tool mutável em um fluxo que precisava ser apenas de consulta;
+- tentativa de resolver analytics interna com canal externo, ou o contrário.
 
-### Exemplo 3 — SKU específico com tempo de resposta curto
+## 12. Limites e pegadinhas
 
-```yaml
-security_keys:
-  AMAZON_SP_API_TOKEN: "${AMAZON_SP_API_TOKEN}"
+- Nem todo problema de varejo deve virar integração nova. Muitas jornadas já cabem nas famílias existentes.
+- Nem toda tool de varejo é somente leitura. Ecommerce e food delivery incluem ações operacionais.
+- O catálogo de varejo não substitui governança de SQL. Para analytics interna, dyn_sql continua sendo a peça correta quando o dado é do cliente.
+- UCP discovery não é a mesma coisa que checkout ou fallback de UCP. É uma tool de descoberta, não o runtime completo do slice UCP.
 
-global_tools_configuration:
-  amazon_sp_api:
-    base_url: "https://sellingpartnerapi-eu.amazon.com"
-    search_path: "/products/search"
-    query_param: "sku"
+## 13. Evidências no código
 
-multi_agents:
-  - id: "sku_fast_lane"
-    tools:
-      - "amazon_sp_api_buscar_produtos"
-    local_tools_configuration:
-      amazon_sp_api:
-        timeout: 10
-        retry_attempts: 3
-
-# Prompt: "Busque SKU B00TEST123 e devolva atributos essenciais".
-```
-
-### Exemplo 4 — comparação rápida com resumo executivo
-
-```yaml
-security_keys:
-  MAGALU_HUB_API_KEY: "${MAGALU_HUB_API_KEY}"
-  PLUGGTO_API_KEY: "${PLUGGTO_API_KEY}"
-
-global_tools_configuration:
-  magalu_hub: {}
-  pluggto:
-    base_url: "https://api.plugg.to"
-    search_path: "/products/search"
-
-multi_agents:
-  - id: "comparador_preco"
-    tools:
-      - "magalu_hub_buscar_produtos"
-      - "pluggto_buscar_produtos"
-```
-
-# Prompt: "Compare 'geladeira frost free 370l' e traga top 5 por preço".
-
-## Boas práticas e limites
-
-- Sempre preencha `query`; entradas vazias retornam erro claro.
-- Respeite 401/403 (token/API Key inválidos) e 429 (rate limit). Ajuste
-  `retry_attempts` e `backoff_base` conforme a API.
-- Não logue tokens. Os tools já evitam expor bearer; mantenha prompts
-  limpos.
-- Saída é lista de dicionários; aplique filtros locais (preço, estoque,
-  categoria) no agente para não depender de ordenação da API.
-- Valide `base_url` e `search_path` dos providers que permitem customização
-  (Magalu Hub já é fixo no código; demais podem variar por região/ambiente).
-
-## Troubleshooting
-
-- 401/403: confira chave/token em `security_keys` e permissões do seller.
-- 429: reduza frequência, habilite backoff maior ou amplie timeout.
-- Resposta vazia: verifique `query_param` e termo de busca; teste direto no
-  endpoint da API.
-- Divergência de atributos: normalize campos críticos (nome, preço,
-  disponibilidade) antes de mesclar catálogos distintos.
-- Logs faltando correlação: garanta `user_session.correlation_id` no YAML
-  carregado pelo agente.
-
-## Workflows (exemplos práticos)
-
-### Workflow 1 — Alerta de estoque baixo no WhatsApp
-
-Fluxo completo no padrão de nodes LangGraph. Usa Plugg.to para localizar
-SKUs críticos e envia WhatsApp com lista resumida.
-
-```yaml
-security_keys:
-  PLUGGTO_API_KEY: "${PLUGGTO_API_KEY}"
-  WHATSAPP_CLOUD_API_TOKEN: "${WHATSAPP_CLOUD_API_TOKEN}"
-
-llm:
-  provider: "openai"
-  model: "gpt-4.1-mini"
-
-workflows:
-  - id: "workflow_alerta_estoque_whatsapp"
-    enabled: false
-    nodes:
-      - id: "preparar_contexto"
-        mode: "set"
-        reads: ["input_text"]
-        params:
-          assign:
-            vars.busca: "{input_text}"
-
-      - id: "buscar_skus"
-        mode: agent
-        reads: ["vars.busca"]
-        prompt:
-          system: |
-            Busque produtos com texto: {vars.busca}.
-            Traga nome, sku, estoque e preço quando houver.
-        tools: [pluggto_buscar_produtos]
-
-      - id: "resumir_skus"
-        mode: agent
-        reads: ["last_output"]
-        prompt:
-          system: |
-            Gere lista curta de SKUs com estoque baixo (< 5) em até
-            5 linhas. Formato: "SKU - nome - estoque".
-        tools: []
-
-      - id: "enviar_whatsapp"
-        mode: agent
-        reads: ["last_output"]
-        prompt:
-          system: |
-            Envie via whatsapp_send_text_message para {vars.destino}.
-        tools: [whatsapp_send_text_message]
-
-    local_tools_configuration:
-      pluggto:
-        base_url: "https://api.plugg.to"
-        search_path: "/products/search"
-      whatsapp_cloud:
-        phone_number_id: "5511999999999"
-        api_version: "v20.0"
-```
-
-### Workflow 2 — Pré-venda multicanal com catálogo
-
-Localiza itens em Magalu e Amazon e devolve resumo pronto para atender
-cliente (sem disparo de canal; saída fica em `last_output`).
-
-```yaml
-security_keys:
-  MAGALU_HUB_API_KEY: "${MAGALU_HUB_API_KEY}"
-  AMAZON_SP_API_TOKEN: "${AMAZON_SP_API_TOKEN}"
-
-llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
-
-workflows:
-  - id: "workflow_prevenda_multicanal"
-    enabled: false
-    nodes:
-      - id: "preparar_consulta"
-        mode: "set"
-        reads: ["input_text"]
-        params:
-          assign:
-            vars.busca: "{input_text}"
-
-      - id: "consultar_catalogos"
-        mode: agent
-        reads: ["vars.busca"]
-        prompt:
-          system: |
-            Busque produtos que combinem com: {vars.busca}.
-            Traga nome, preço e link quando disponível.
-        tools:
-          - magalu_hub_buscar_produtos
-          - amazon_sp_api_buscar_produtos
-
-      - id: "resumir_oferta"
-        mode: agent
-        reads: ["last_output"]
-        prompt:
-          system: |
-            Monte resposta curta com top 5 itens (nome e preço). Caso
-            vazio, informe que não encontrou produtos.
-        tools: []
-
-    local_tools_configuration:
-      magalu_hub: {}
-      amazon_sp_api:
-        base_url: "https://sellingpartnerapi-na.amazon.com"
-        search_path: "/products/search"
-```
-
-### Workflow 3 — Buzz social + vitrine
-
-Combina Twitter para captar interesse e monta texto pronto para postar
-no Instagram com produtos do Magalu. A publicação efetiva pode ser feita
-manualmente usando `vars.social.copy`.
-
-```yaml
-security_keys:
-  MAGALU_HUB_API_KEY: "${MAGALU_HUB_API_KEY}"
-  TWITTER_BEARER_TOKEN: "${TWITTER_BEARER_TOKEN}"
-
-llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
-
-workflows:
-  - id: "workflow_vitrine_social"
-    enabled: false
-    nodes:
-      - id: "preparar_busca"
-        mode: "set"
-        reads: ["input_text"]
-        params:
-          assign:
-            vars.termo: "{input_text}"
-
-      - id: "coletar_buzz"
-        mode: agent
-        reads: ["vars.termo"]
-        prompt:
-          system: |
-            Busque tweets recentes sobre {vars.termo}.
-            Resuma principais dores e desejos em 3 bullets.
-        tools: [twitter_search]
-
-      - id: "buscar_produtos"
-        mode: agent
-        reads: ["vars.termo"]
-        prompt:
-          system: |
-            Traga até 5 produtos relacionados a {vars.termo} com
-            nome e preço.
-        tools: [magalu_hub_buscar_produtos]
-
-      - id: "gerar_copy_instagram"
-        mode: agent
-        reads: ["last_output"]
-        prompt:
-          system: |
-            Monte texto curto para Instagram com CTA e hashtags.
-            Use os produtos listados e mantenha em 3 frases.
-        tools: []
-
-      - id: "salvar_saida"
-        mode: "set"
-        reads: ["last_output"]
-        params:
-          assign:
-            vars.social.copy: "{last_output}"
-
-    local_tools_configuration:
-      magalu_hub: {}
-```
+- src/agentic_layer/tools/vendor_tools/ecommerce_tools/magalu_hub_tools.py
+  - Motivo da leitura: confirmar tool concreta de catálogo de marketplace.
+  - Comportamento confirmado: magalu_hub_buscar_produtos é criada por @tool_factory e devolve lista normalizada.
+- src/agentic_layer/tools/vendor_tools/ecommerce_tools/pluggto_tools.py
+  - Motivo da leitura: confirmar a trilha Plugg.to.
+  - Comportamento confirmado: pluggto_buscar_produtos nasce via factory e depende de PLUGGTO_API_KEY.
+- src/agentic_layer/tools/vendor_tools/ecommerce_tools/amazon_sp_api_tools.py
+  - Motivo da leitura: confirmar a trilha Amazon SP-API.
+  - Comportamento confirmado: amazon_sp_api_buscar_produtos é exposta como tool de busca.
+- src/agentic_layer/tools/vendor_tools/ecommerce_tools/ecommerce_toolkit.py
+  - Motivo da leitura: confirmar a frente ampla de ecommerce.
+  - Comportamento confirmado: o toolkit cobre Shopify, WooCommerce e VTEX com catálogo, pedidos, clientes e estoque.
+- src/agentic_layer/tools/domain_tools/food_delivery_tools e src/agentic_layer/tools/vendor_tools/ifood_tools
+  - Motivo da leitura: confirmar a frente food delivery.
+  - Comportamento confirmado: há múltiplas famílias específicas por canal, incluindo duas trilhas de iFood.
+- src/agentic_layer/tools/vendor_tools/ucp_tools/ucp_discovery_tool.py
+  - Motivo da leitura: confirmar o elo com capacidades governadas de varejo.
+  - Comportamento confirmado: ucp_discovery_tool é uma builtin tool própria do domínio.

@@ -155,63 +155,561 @@ Visão comercial: esse tipo é essencial para vendas corporativas porque muitos 
 
 Conceito: HTML é conteúdo textual com ruído estrutural. O desafio não é baixar o arquivo, mas limpar scripts, estilos e markup sem perder o texto útil.
 
-Tática: o sistema trata HTML como tipo de conteúdo e não como sinônimo de scraping. Isso permite reutilizar o mesmo processor tanto para arquivos HTML quanto para conteúdo vindo de fontes remotas já materializadas.
+Tática: o sistema trata HTML como tipo de conteúdo e não como sinônimo de scraping. Isso permite reutilizar a mesma lógica base tanto para arquivos HTML puros quanto para páginas web já capturadas e entregues ao pipeline como documentos remotos prontos.
 
-Técnica: `HtmlContentProcessor` usa `BeautifulSoup` para remover `script` e `style`, extrair texto e normalizar espaços. Depois delega o chunking ao processor base, com telemetria específica dos parâmetros adaptativos. Para documentos já vindos de storage, `build_from_storage` devolve uma forma limpa e pronta para chunking.
+Técnica: `HtmlContentProcessor` remove `script` e `style` com `BeautifulSoup`, extrai texto, normaliza espaços e delega o chunking ao processor base. Quando o HTML vem da web, `WebContentProcessor` especializa essa base: preserva URL, status HTTP e `pages_info`, atualiza o texto limpo antes do chunking e ainda pode aplicar processamento por domínio depois que os chunks já existem.
 
-Fluxo prático: HTML entra bruto, é convertido em texto legível e segue para chunking como qualquer outro conteúdo textual limpo.
+Fluxo prático: HTML bruto entra em `StorageDocument`, é limpo para texto útil, recebe telemetria de chunking e segue para a mesma esteira padrão de persistência usada pelos demais tipos.
 
-O que pode dar errado: HTML vazio, erro de parse ou perda de conteúdo relevante se a página for altamente dependente de renderização dinâmica que não foi resolvida antes.
+O que pode dar errado: HTML vazio, erro de parse, página com markup pouco semântico ou dependência forte de renderização dinâmica que não foi resolvida na etapa anterior de aquisição.
 
-Como diagnosticar: verificar logs de limpeza HTML e tamanho final do conteúdo texto.
+Como diagnosticar: primeiro confirmar se a aquisição entregou HTML suficiente; depois verificar logs de limpeza HTML, `pages_info`, URL/status da página e tamanho final do texto usado para chunking.
 
-Visão técnica: HTML é o tipo responsável por normalizar o conteúdo marcado em uma forma compatível com chunking e busca.
+Visão técnica: HTML é a fronteira que transforma marcação em texto indexável. Sem essa camada, o pipeline de web scraping viraria apenas captura de bytes sem valor real de busca.
 
-Visão executiva: ele reduz o risco de páginas estáticas entrarem no acervo com ruído demais e valor de busca de menos.
+Visão executiva: ele reduz o risco de páginas entrarem no acervo com ruído demais e contexto de menos, o que degrada qualidade de resposta e aumenta custo de suporte.
 
-Visão comercial: é relevante para clientes que mantêm bases de conhecimento, páginas institucionais, manuais web e FAQs em HTML.
+Visão comercial: é relevante para clientes que mantêm bases de conhecimento, portais institucionais, FAQs e manuais web em HTML.
 
 #### 8.4.3. Web Scraping
 
 Conceito: web scraping é uma família de fonte remota, não apenas um tipo de arquivo. O problema aqui é adquirir o conteúdo web de forma resiliente, autenticada e diagnosticável, e depois entregá-lo à esteira padrão.
 
-Tática: o pipeline separa captura da web de processamento do HTML. Primeiro resolve as URLs do bloco `remote_sources.web_scraping`. Depois o cliente de scraping busca, limpa, deduplica, lida com anexos, autenticação, anti-bot, cache, proxy e políticas de captcha/cloudflare. Só então o conteúdo segue para o pipeline comum como documento web/HTML.
+Tática: o pipeline separa aquisição web de interpretação HTML. Primeiro a plataforma tenta capturar a página com a melhor estratégia disponível. Depois ela transforma esse resultado em um documento web rico, separa anexos, indexa páginas por URL normalizada e só então entrega a URL ao pipeline genérico com um documento prefetched obrigatório. Isso evita buscar a mesma página duas vezes e impede que o chunking trabalhe em cima de fetch improvisado.
 
-Técnica: `WebScrapingDatasourceMultimodalAdapterClient` coordena `WebFetcher`, `HtmlContentParser`, `LinkExtractor`, `AttachmentHandler`, cache, deduplicação, proxy e user agent. Na família remota, `process_web_scraping` obtém documentos para o pipeline, separa páginas, anexos e prefetched documents, materializa anexos quando necessário e chama `_process_files_with_pipeline` com `SourceType.REMOTE_FILE`. Antes do chunking, `WebContentProcessor` materializa o HTML remoto com `pages_info`, URL e status HTTP.
+Técnica: o caminho principal confirmado no código passa por seis blocos especializados. `ContentTypeDispatcher` detecta `web_scraping_urls`; `RemoteContentFamilyService` assume a trilha remota; `WebScrapingDatasourceMultimodalAdapterClient` faz fetch, limpeza, deduplicação e attachments; `ContentTypeDispatcher` particiona páginas e anexos e monta o índice de prefetched documents; `DataSourceDocumentExecutor` reutiliza o documento já capturado em vez de fazer novo fetch; `WebContentProcessor` materializa o HTML remoto e entrega chunks limpos para a esteira comum.
 
-Fluxo prático: URL entra como fonte remota, vira documento prefetched, é materializada como conteúdo HTML canônico e então é chunkada e persistida no pipeline padrão.
+Fluxo prático: URL entra como fonte remota, vira documento web rico e indexado por URL, é reaproveitada pelo pipeline como documento prefetched obrigatório, ganha materialização HTML canônica e então segue para chunking, persistência e indexação.
 
-O que pode dar errado: URL sem documento prefetched correspondente, bloqueio anti-bot, página inacessível, anexos não materializados ou falha de fetch autenticado.
+##### Pipeline detalhado da ingestão HTML Web Scraping
 
-Como diagnosticar: começar pela família remota, confirmar URLs resolvidas, documentos preparados para o pipeline, anexos indexados e materialização canônica antes do chunking.
+```mermaid
+flowchart TD
+  A[web_scraping_urls no IngestionRequest] --> B[ContentTypeDispatcher registra step content_type:web_scraping]
+  B --> C[RemoteContentFamily.process_web_scraping]
+  C --> D[WebScrapingDatasourceMultimodalAdapterClient.get_documents_for_pipeline]
+  D --> E[Fetch autenticado e escolha de estrategia]
+  E --> F[Limpeza HTML e montagem do documento web rico]
+  F --> G[Particao entre paginas, anexos e prefetched_documents]
+  G --> H[_process_files_with_pipeline com require_prefetched_documents]
+  H --> I[DataSourceDocumentExecutor reutiliza documento prefetched]
+  I --> J[WebContentProcessor materializa HTML canônico]
+  J --> K[Html chunking e domain processing web]
+  K --> L[Indexacao final e anexacao de attachments]
+```
 
-Visão técnica: scraping resolve a aquisição; HTML resolve a interpretação do conteúdo. Confundir essas duas camadas gera documentação ruim e implementação frágil.
+O diagrama mostra a ideia central do desenho: o web scraping prepara o documento antes da esteira genérica de arquivo. O pipeline comum continua cuidando de chunking, persistência e telemetria, mas não reexecuta a captura da página.
 
-Visão executiva: scraping amplia a capacidade de captura de conhecimento corporativo sem exigir upload manual de tudo.
+##### Etapa 1. Seleção da trilha remota de scraping
 
-Visão comercial: é um diferencial quando o cliente quer ingerir portais internos, páginas autenticadas, manuais web e bases de conhecimento que não nascem como arquivo estático.
+O fluxo só nasce quando o request chega com `web_scraping_urls`. `ContentTypeDispatcher` registra o step `content_type:web_scraping` e chama `_process_web_scraping_content`, que delega para `RemoteContentFamilyService.process_web_scraping`.
+
+Essa separação importa porque web scraping não é tratado como “mais um HTML”. A plataforma primeiro assume que o problema é remoto e operacional: autenticação, política anti-bot, anexos, retries e montagem do documento. Só depois disso ela pensa em texto e chunks.
+
+##### Etapa 2. Validação operacional e preparação da família remota
+
+Na família remota, o código valida três condições logo no início: existência de URLs, disponibilidade de vector store e reset do índice interno de anexos web. Depois resolve o contexto de telemetria do run.
+
+Essa etapa é importante porque o scraping não é útil se o resultado não puder seguir para indexação. O código evita continuar com um pipeline parcialmente configurado, o que reduziria observabilidade e deixaria a falha mais cara de diagnosticar.
+
+##### Etapa 3. Aquisição da página e escolha de estratégia
+
+`WebScrapingDatasourceMultimodalAdapterClient` nasce a partir do bloco `remote_sources.web_scraping` e extrai daí as políticas de processamento, anti-bot, rate limiting, proxy rotation, cache, deduplicação, segurança, filtros de qualidade, renderização JavaScript, anexos e multimodalidade.
+
+Para cada URL, `_fetch_document_data` segue um fluxo explícito:
+
+1. obtém sessão autenticada quando necessário;
+2. identifica domínio e contexto de autenticação;
+3. avalia se a URL exige proxy premium;
+4. registra o estado dos proxies disponíveis;
+5. pergunta ao `LinkExtractor` se deve usar estratégia avançada;
+6. tenta scraping avançado quando a página parece SPA ou dinâmica;
+7. em caso de falha, cai para o caminho básico.
+
+O caminho avançado usa `scrape_spa_website` e pode operar com Playwright, screenshots e extração de imagens. O caminho básico usa `_scrape_basic_fallback`. Em ambos, o client limpa o HTML com `HtmlContentParser`, tenta converter o DOM em conteúdo estruturado e escolhe entre esse conteúdo estruturado ou o texto simples como representação preferida do documento.
+
+Essa escolha técnica resolve um problema prático importante: nem toda página precisa de renderização pesada, mas algumas só ficam úteis depois dela. O pipeline tenta a estratégia mais rica quando a heurística indica necessidade, sem obrigar o custo máximo em todas as URLs.
+
+##### Etapa 4. Montagem do documento web rico
+
+Depois do fetch, `_transform_to_document_async` transforma os dados brutos em um documento web canônico. Ele sanitiza a URL para gerar um identificador estável, monta metadata a partir dos dados capturados e cria um `StorageDocument` web com texto, HTML e metadados de origem.
+
+Existe aqui um detalhe arquitetural decisivo: em `get_documents_for_pipeline`, o client pede o bundle com `pipeline_ready=True`. Isso faz o client devolver o documento base já capturado, mas sem reexecutar processamento multimodal nem processamento por domínio dentro dele. Em outras palavras, o client prepara o documento para a esteira padrão, em vez de tentar concluir toda a interpretação sozinho.
+
+Esse comportamento evita duplicação de trabalho e reduz risco de inconsistência entre o caminho do cliente e o caminho oficial de chunking do pipeline.
+
+##### Etapa 5. Separação entre páginas, anexos e índice de prefetch
+
+`RemoteContentFamilyService.process_web_scraping` recebe do client uma lista de documentos e chama `_partition_web_documents_for_pipeline`. Essa função separa:
+
+- páginas principais;
+- anexos web identificados por `metadata.source_type == web_attachment`;
+- `prefetched_documents`, um mapa de URL normalizada para documento de página.
+
+Na sequência, a família remota coleta o índice de metadados de anexos, constrói `_web_attachment_index`, cria fallback de metadados quando necessário, materializa anexos em `.sandbox/web_attachments` e propaga os caminhos materializados.
+
+Essa etapa tem valor operacional direto. Ela garante que páginas e anexos não sejam confundidos e que a página principal carregue o contexto dos anexos quando o pipeline padrão for indexar os chunks.
+
+##### Etapa 6. Reentrada no pipeline genérico com documento prefetched obrigatório
+
+Depois de preparar os documentos, a família remota chama `_process_files_with_pipeline` usando as próprias URLs como `file_paths`, mas injeta `prefetched_documents` em `data_source_params` e marca `require_prefetched_documents=True`.
+
+Isso significa que a etapa genérica de arquivo não vai tentar buscar a página por conta própria. Ela precisa encontrar um documento já preparado para aquela URL. Se o documento prefetched estiver ausente, o pipeline falha com erro explícito.
+
+Na prática, essa decisão impede divergência entre a aquisição web rica e a etapa de chunking. O conteúdo processado pelo chunker é exatamente o conteúdo que passou pela lógica oficial de scraping, e não uma segunda leitura incidental da URL.
+
+##### Etapa 7. Reuso do prefetch e materialização HTML canônica
+
+Quando `DataSourceDocumentExecutor.prepare` recebe a URL, ele tenta resolver o documento no mapa de prefetched documents. Se encontrar, registra que o prefetch foi reutilizado. Se não encontrar e o prefetch for obrigatório, aborta.
+
+Com o documento em mãos, o pipeline escolhe o processor correto para `ContentType.HTML` e chama `WebContentProcessor.build_from_storage`. Essa materialização faz três coisas importantes:
+
+- extrai o HTML bruto a partir de `raw_bytes` ou do conteúdo do documento;
+- converte o HTML em texto limpo com a lógica herdada de `HtmlContentProcessor`;
+- constrói `pages_info` com URL, status HTTP, HTML bruto e texto limpo.
+
+Esse é o momento em que a página web deixa de ser apenas “resultado de scraping” e vira entrada canônica para o chunking HTML do sistema.
+
+##### Etapa 8. Chunking, domain processing e anexação de attachments
+
+Na etapa de chunking, `WebContentProcessor` atualiza `pages_info` com o texto limpo definitivo, calcula parâmetros adaptativos e delega o corte do conteúdo ao fluxo herdado de `HtmlContentProcessor` e `BaseContentProcessor`. Depois disso, ele ainda pode aplicar `DomainProcessingResolver` aos chunks web, quando esse processamento estiver habilitado.
+
+No fechamento do arquivo, a esteira genérica verifica chunks vazios, aplica bloqueios de qualidade quando existirem e, no caso de `SourceType.REMOTE_FILE`, anexa aos chunks da página os metadados dos attachments materializados na fase remota. Só então a indexação final é executada.
+
+##### O que acontece em caso de sucesso no Web Scraping
+
+No caminho feliz, cada URL é capturada com a estratégia adequada, convertida em documento web rico, associada aos seus anexos, reaproveitada como prefetch obrigatório, materializada em HTML canônico, chunkada e persistida. O operador consegue confirmar esse sucesso pelos logs de início do step web scraping, pelos logs de estratégia `WEB_STRATEGY`, pela mensagem `Documentos web preparados para pipeline padrao`, pelo reuso do prefetch e pelos logs de chunking web/HTML.
+
+##### O que acontece em caso de erro no Web Scraping
+
+Os principais cenários de erro confirmados no código são estes:
+
+- request sem `web_scraping_urls`;
+- vector store ausente para a família remota;
+- falha de autenticação, rede, anti-bot, proxy ou captura da página;
+- ausência de documento prefetched para alguma URL solicitada;
+- falha ao materializar anexos ou ao construir o índice de attachments;
+- HTML vazio, parse problemático ou documento sem chunks no fechamento do processor.
+
+Existe também um risco operacional típico desse fluxo: a captura pode até funcionar, mas a página ainda chegar pobre em texto útil se a renderização dinâmica não tiver sido realmente resolvida pela estratégia escolhida.
+
+##### Como diagnosticar problemas reais no Web Scraping
+
+O diagnóstico mais eficiente é seguir a ordem do pipeline.
+
+1. Confirmar que o request chegou com `web_scraping_urls` e que o dispatcher registrou `content_type:web_scraping`.
+2. Verificar se a família remota registrou `INICIANDO PROCESSAMENTO WEB SCRAPING`.
+3. Procurar os logs `WEB_SCRAPING_FETCH_INICIO`, `WEB_STRATEGY`, `WEB_ADVANCED_OK`, `WEB_BASIC_OK` ou `WEB_FALLBACK` para descobrir como a página foi capturada.
+4. Confirmar que o client retornou documentos com `GET_DOCUMENTS_PIPELINE_OK`.
+5. Checar a mensagem `Documentos web preparados para pipeline padrao` e os contadores de páginas e anexos.
+6. Se houver falha antes do chunking, validar se o mapa de `prefetched_documents` continha todas as URLs e se o executor reutilizou o prefetch.
+7. No chunking, revisar logs de `pages_info`, `WEB CHUNKING` e `HTML CHUNKING` para verificar se houve texto limpo suficiente.
+8. Se a página foi indexada com pouco valor, comparar a estratégia de captura escolhida com o volume de texto final e os attachments associados.
+
+##### Limites e pegadinhas do pipeline Web Scraping
+
+- Web scraping não é processamento HTML. Captura e interpretação são fases diferentes e com falhas diferentes.
+- Página capturada não significa página semanticamente útil. Uma SPA parcialmente renderizada pode gerar pouco texto apesar de a URL ter sido acessada com sucesso.
+- Attachment materializado não significa attachment indexado com valor. O anexo ainda depende do processor correspondente na sequência do pipeline.
+- O caminho `pipeline_ready=True` evita duplicação de trabalho no client, mas exige que a esteira comum continue sendo a dona do chunking e da indexação.
+
+Visão técnica: esse pipeline existe para impedir que captura web, limpeza HTML, anexos e chunking se misturem num bloco opaco. A separação atual permite saber se um problema veio da rede, da estratégia de scraping, do prefetch, da materialização HTML ou do chunking.
+
+Visão executiva: web scraping amplia a capacidade de captura de conhecimento corporativo sem exigir upload manual, mas faz isso com governança operacional suficiente para rastrear onde uma página falhou.
+
+Visão comercial: é um diferencial forte para clientes que precisam ingerir portais internos, páginas autenticadas, documentações online, manuais web e bases de conhecimento que não nascem como arquivo local.
 
 #### 8.4.4. Excel
 
 Conceito: planilha não é só texto tabular. Ela carrega estrutura de abas, linhas, colunas, tipos numéricos, datas e, em certos casos, tabelas lógicas relevantes para consulta.
 
-Tática: o pipeline preserva informação estruturada e ao mesmo tempo gera uma forma textual pesquisável. A ingestão evita tratar a planilha como simples CSV achatado.
+Tática: o pipeline preserva informação estruturada e ao mesmo tempo gera uma forma textual pesquisável. A ingestão evita tratar a planilha como simples CSV achatado e tenta manter suficiente contexto de abas, colunas, tipos, tabelas e limites de contrato para que a consulta posterior não trabalhe às cegas.
 
-Técnica: `ExcelContentProcessor` valida e carrega workbook, usa `openpyxl` para `.xlsx` e mantém um caminho best-effort para `.xls`, preserva tipos como datas e decimais, extrai metadados estruturados e usa `ExcelSheetAnalyzer` para enriquecer a leitura das abas e tabelas. O chunking respeita limites adaptativos e tamanho por linhas.
+Técnica: o pipeline Excel confirmado no código gira em torno de `StorageDocument` + `ExcelContentProcessor`. O `FileSystemDataSource` identifica `.xlsx` e `.xls`, entrega bytes e metadata básicos; `ContentProcessorFactory` registra `ExcelContentProcessor` para `ContentType.EXCEL_XLSX` e `ContentType.EXCEL_XLS`; o processor valida o arquivo, escolhe `openpyxl` ou caminho legado `xlrd`, extrai texto e metadados estruturais com `ExcelSheetAnalyzer` e só então cria chunks textuais com limites adaptativos. Um ponto importante: o contrato principal `IngestionRequest` lido no código não expõe `excel_file_paths`, então o caminho acionável confirmado dentro da esteira compartilhada hoje é o de arquivos dinâmicos e de qualquer fluxo que já entregue `StorageDocument` Excel ao pipeline.
 
-Fluxo prático: `StorageDocument` vira `ExcelDocument`, carregando conteúdo textual, nomes de abas, contagem de linhas e colunas, além de `tables_data` e `raw_data` quando configurado.
+Fluxo prático: um arquivo `.xlsx` ou `.xls` entra no pipeline como `StorageDocument`, é validado, vira `ExcelDocument` com schema, estatísticas e dados estruturados e depois é chunkado linha a linha para indexação.
 
-O que pode dar errado: workbook inválido, formato legado limitado, arquivo binário ou com macro fora do contrato atual, planilha protegida ou conteúdo grande demais.
+##### Pipeline detalhado da ingestão Excel
 
-Como diagnosticar: verificar logs de carregamento da planilha, quantidade de abas processadas, parâmetros de chunking e metadados anexados ao documento final.
+```mermaid
+flowchart TD
+  A[Arquivo .xlsx ou .xls entregue ao pipeline] --> B[FileSystemDataSource lê bytes e infere ContentType]
+  B --> C[PreparedFilePipelineDocument recebe StorageDocument]
+  C --> D[ContentProcessorFactory resolve ExcelContentProcessor]
+  D --> E[Validação do contrato do arquivo]
+  E --> F[Carregamento do workbook com openpyxl ou xlrd]
+  F --> G[Análise estrutural de abas, cabeçalhos e tabelas]
+  G --> H[Construção do ExcelDocument com metadados ricos]
+  H --> I[Chunking adaptativo por linhas]
+  I --> J[Indexação final no pipeline comum]
+```
 
-Visão técnica: Excel é o tipo que protege melhor a semântica de dado estruturado dentro da ingestão generalista.
+O diagrama mostra o ponto central do desenho atual: o pipeline Excel está pronto da etapa de `StorageDocument` em diante, mas o contrato principal do request ainda não oferece um campo top-level dedicado para planilhas locais. Por isso a documentação precisa separar claramente “processor Excel pronto” de “entrada principal já exposta no contrato”.
 
-Visão executiva: isso reduz risco de relatórios, listas operacionais e planilhas de controle entrarem no acervo como texto empobrecido.
+##### Etapa 1. Entrada real do arquivo na esteira
 
-Visão comercial: é muito relevante para clientes cuja operação vive em planilhas, dashboards exportados e controles tabulares compartilhados por áreas de negócio.
+No código lido, o caminho confirmado para o Excel dentro da esteira compartilhada passa por `_load_dynamic_file_document` em `ContentTypeDispatcher`, chamado pela família `dynamic_data`. Nesse método, arquivos `.xlsx` e `.xls` são tratados fora do caminho de clients tradicionais: o dispatcher pede um `StorageDocument` cru ao `FileSystemDataSource` e deixa o parsing para a camada de processor.
 
-#### 8.4.5. DOCX
+Além disso, qualquer outro fluxo que entregue um `StorageDocument` com `ContentType.EXCEL_XLSX` ou `ContentType.EXCEL_XLS` ao executor comum também cai na mesma esteira. O que não foi confirmado no código lido é um campo dedicado como `excel_file_paths` no `IngestionRequest` principal. Esse é um detalhe crucial, porque ele limita o que pode ser prometido como entrada top-level do pipeline Excel hoje.
+
+##### Etapa 2. Leitura de bytes e inferência do tipo
+
+`FileSystemDataSource` é responsável apenas por leitura do arquivo, não por parsing da planilha. Ele verifica a extensão suportada, lê o arquivo em binário, coleta tamanho e timestamps e devolve um `StorageDocument` com `raw_bytes` obrigatórios. A inferência de tipo distingue `.xlsx` como `ContentType.EXCEL_XLSX` e `.xls` como `ContentType.EXCEL_XLS`.
+
+Essa separação existe para manter o filesystem como boundary simples. O DataSource descobre e materializa o arquivo; o processor decide como entender a planilha.
+
+##### Etapa 3. Seleção do processor Excel
+
+Quando o documento entra no executor comum, `ContentProcessorFactory` resolve `ExcelContentProcessor` para os dois content types de Excel. Isso padroniza o comportamento: `.xlsx` e `.xls` podem ter engines de abertura diferentes, mas o contrato de processamento continua concentrado em um único processor.
+
+Na prática, isso reduz drift entre formatos. Em vez de criar fluxos arbitrários por extensão, o desenho mantém um mesmo dono para validação, análise estrutural, enriquecimento e chunking.
+
+##### Etapa 4. Validação do contrato do arquivo
+
+Antes de abrir o workbook, `ExcelContentProcessor.validate_storage_document` aplica uma série de guardrails:
+
+- exige `file_path`;
+- rejeita formatos explicitamente fora do contrato atual, como `.xlsm` e `.xlsb`;
+- valida a extensão contra `excel.file_handling.supported_extensions` quando essa lista estiver configurada;
+- confirma existência física do arquivo em fontes locais;
+- impõe `max_file_size_mb` quando configurado;
+- falha fechado se `raw_bytes` estiver ausente.
+
+Essa etapa é importante porque muitas falhas de Excel não são “erro de parser”; são violação de contrato de arquivo. O processor tenta separar essas causas cedo, com erro explícito e rastreável.
+
+##### Etapa 5. Carregamento do workbook
+
+Depois da validação, `_load_workbook` tenta abrir o arquivo com `openpyxl`. Esse é o caminho padrão para `.xlsx`. Se a abertura falhar e o documento for `.xls`, o processor registra a troca de estratégia e tenta `_load_xls_workbook` com `xlrd` em modo best-effort.
+
+O caminho `.xls` carrega limitações confirmadas no código:
+
+- leitura legada best-effort;
+- ausência de tabelas nativas estruturadas;
+- fórmulas não interpretadas, apenas resultados já salvos;
+- macros, comentários, hyperlinks, filtros, validações, objetos embarcados e pivot tables ignorados;
+- arquivos protegidos por senha rejeitados.
+
+Isso precisa estar explícito porque `.xls` e `.xlsx` não têm o mesmo nível de fidelidade no pipeline atual. O suporte existe para os dois, mas o contrato não promete a mesma riqueza estrutural para o formato legado.
+
+##### Etapa 6. Análise estrutural de abas e tabelas
+
+Com o workbook aberto, `_extract_text_and_metadata` ou `_extract_xls_text_and_metadata` percorrem as abas válidas. O processor pode limitar quantas planilhas serão processadas, ignorar nomes de abas configurados, cortar o número máximo de linhas por aba e pular planilhas com densidade de dado abaixo do mínimo configurado.
+
+Durante esse passo, o pipeline:
+
+- detecta ou resolve cabeçalhos;
+- processa linhas em payload estruturado e linha formatada de texto;
+- acumula estatísticas por coluna;
+- usa `ExcelSheetAnalyzer` para classificar a estrutura da aba;
+- extrai tabelas nativas em `.xlsx` quando disponíveis;
+- gera `excel_schema_summary` e `excel_numeric_stats` quando habilitados.
+
+Na prática, esta é a etapa que transforma “arquivo de planilha” em “documento consultável com semântica estrutural”. É aqui que o pipeline decide se uma aba tem densidade suficiente, se uma linha parece cabeçalho e quais colunas parecem numéricas, textuais ou de data.
+
+##### Etapa 7. Construção do ExcelDocument
+
+Depois da análise, `build_from_storage` monta um `ExcelDocument`. Esse documento não carrega apenas o texto das planilhas. Ele também leva um conjunto rico de metadados contratuais e operacionais, incluindo:
+
+- `sheet_names`, `total_sheets`, `total_rows`, `total_columns`;
+- metadata por aba com densidade, tipo estrutural, cabeçalhos e tabelas detectadas;
+- `excel_schema_summary` e `excel_numeric_stats` quando habilitados;
+- `tables_data` e `raw_data` quando configurados;
+- `excel_extension`, `excel_engine`, `excel_processing_mode`, `excel_contract_profile` e `excel_processing_limitations`.
+
+Esse enriquecimento é o que impede a planilha de virar apenas texto achatado. O conteúdo textual existe para busca e chunking, mas a metadata é o que preserva governança e capacidade de diagnóstico.
+
+##### Etapa 8. Chunking adaptativo por linhas
+
+Quando o documento já está materializado, `create_chunks` divide o conteúdo em blocos textuais respeitando parâmetros adaptativos do `BaseContentProcessor`. O chunking é guiado por linhas e pelo limite configurado, com possibilidade de sobreposição textual e com `row_chunk_size` registrado em log.
+
+Cada chunk recebe metadata canônica com índice, quantidade de linhas, tamanho do bloco e processor responsável. Se o documento não gerar conteúdo útil, o processor devolve zero chunks. Se o limite máximo de chunks for atingido, o fluxo registra warning e interrompe a geração adicional.
+
+Essa estratégia é adequada para planilhas porque preserva a granularidade de linha, que costuma ser a unidade mais útil para leitura sem destruir a estrutura inteira da aba em um único bloco gigante.
+
+##### Etapa 9. Fechamento na esteira comum
+
+Depois do chunking, o arquivo volta para o executor comum da ingestão. `DocumentProcessorExecutor` registra sucesso, ausência de chunks ou erro. Se houver chunks, o pipeline segue para persistência e indexação como qualquer outro tipo suportado.
+
+Isso significa que o Excel não possui um fechamento paralelo próprio. O parsing e o enriquecimento são especializados, mas o encerramento operacional permanece centralizado na esteira comum.
+
+##### O que acontece em caso de sucesso no Excel
+
+No caminho feliz, o arquivo chega com bytes válidos, é aberto pela engine correta, tem abas e colunas analisadas, vira `ExcelDocument` com metadados estruturais e sai em chunks textuais indexáveis. O operador consegue confirmar isso pelos logs de carregamento do workbook, pelos contadores de abas processadas, pelos metadados `excel_engine` e `excel_processing_mode` e pelo fechamento do processor com quantidade de chunks criada.
+
+##### O que acontece em caso de erro no Excel
+
+Os principais erros confirmados no código são estes:
+
+- ausência de `file_path` ou de `raw_bytes`;
+- extensão fora do contrato ou formato explicitamente não suportado, como `.xlsm` e `.xlsb`;
+- arquivo local inexistente;
+- tamanho acima do limite configurado;
+- falha ao abrir workbook com `openpyxl`;
+- falha do fallback `.xls` por ausência de `xlrd`, proteção por senha ou erro de carga do workbook;
+- baixa densidade de uma aba, fazendo com que ela seja ignorada;
+- documento final sem conteúdo útil para chunking.
+
+Há ainda uma falha arquitetural importante que não é do parser, e sim do contrato de entrada: o request principal da ingestão não expõe `excel_file_paths`. Isso limita o acionamento top-level do pipeline Excel compartilhado no estado atual do código lido.
+
+##### Como diagnosticar problemas reais no Excel
+
+O diagnóstico mais eficiente é seguir a ordem do pipeline.
+
+1. Confirmar por qual caminho o arquivo Excel entrou na esteira, porque o contrato principal não expõe `excel_file_paths`.
+2. Verificar se o `FileSystemDataSource` devolveu `StorageDocument` com `raw_bytes` e content type de Excel.
+3. Conferir se `ExcelContentProcessor` foi realmente selecionado pela factory.
+4. Procurar logs de validação do workbook e do engine usado (`openpyxl` ou `xlrd`).
+5. Se for `.xls`, verificar `excel_processing_mode` e `excel_processing_limitations`.
+6. Inspecionar `sheet_names`, `total_sheets`, `excel_schema_summary`, `excel_numeric_stats` e `tables_data` para saber se a análise estrutural funcionou.
+7. Se o resultado estiver pobre, revisar densidade mínima, abas excluídas, máximo de linhas e detecção de cabeçalho.
+8. Se não houver indexação, confirmar se o problema foi zero chunks, falha de abertura do workbook ou limitação do caminho de entrada atual.
+
+##### Limites e pegadinhas do pipeline Excel
+
+- O pipeline Excel existe, mas o contrato principal de request ainda não expõe entrada top-level dedicada para planilhas.
+- `.xls` é suportado em modo best-effort, não no mesmo nível estrutural de `.xlsx`.
+- A presença do arquivo não garante ingestão útil: planilhas muito esparsas podem ser ignoradas por densidade.
+- `tables_data` e `raw_data` dependem de configuração; sem eles, parte da riqueza estrutural pode não ser persistida em metadata.
+- Chunking por linhas melhora granularidade, mas pode separar contexto demais quando a planilha depende fortemente da relação entre blocos distantes da mesma aba.
+
+Visão técnica: Excel é a esteira mais explicitamente orientada a estrutura tabular no pipeline. O valor dela está em preservar schema, colunas, tipos e tabelas, e não apenas extrair texto.
+
+Visão executiva: esse pipeline reduz o risco de relatórios, catálogos, inventários e controles operacionais entrarem no acervo como texto empobrecido e sem contexto numérico.
+
+Visão comercial: é especialmente relevante para clientes cuja operação gira em torno de planilhas exportadas, relatórios consolidados e bases tabulares compartilhadas entre áreas. O diferencial suportado pelo código é a leitura estruturada do workbook, não apenas a ingestão do arquivo como blob.
+
+#### 8.4.5. Multimodal
+
+Conceito: ingestão multimodal é a capacidade de tratar imagem como evidência de conteúdo, e não como ruído visual descartável. Na prática, isso significa extrair imagens, decidir quais realmente importam, ler texto presente nelas via OCR quando fizer sentido, gerar descrição visual quando houver ganho semântico, opcionalmente produzir embedding visual e devolver chunks que preservem a ligação entre texto e imagem.
+
+Tática: o desenho real evita criar um pipeline paralelo por tipo de arquivo. Em vez disso, o projeto mantém um runtime multimodal compartilhado e o injeta onde ele faz sentido: imagem isolada, PDF visual, DOCX, PPT, web e Confluence. Cada um desses entrypoints continua com seu processor especialista no conteúdo textual, mas delega a leitura visual para o mesmo `MultimodalContentProcessor`.
+
+Técnica: o contrato canônico do multimodal nasce em `resolve_multimodal_config_from_yaml`. Esse resolvedor valida caminhos proibidos e legados, mescla `ingestion.multimodal_ai` com overrides por origem e depois normaliza blocos como `image_extraction`, `ocr`, `image_description`, `vision_embedding` e políticas de persistência de imagem. O runtime então cria um extrator apropriado ao tipo (`pdf`, `docx`, `ppt`, `image`, `web`, `confluence`), acopla OCR, descritor de imagem e provider de embedding visual e executa um pipeline padronizado de extração, filtragem, deduplicação, seleção, enriquecimento textual e montagem de chunks multimodais.
+
+Fluxo prático: o multimodal não começa sempre no mesmo ponto. Para imagem isolada, o `ImageContentProcessor` chama `process_single_image`; para PDF, `PdfMultimodalApplicationService` decide se o runtime deve rodar; para DOCX/PPT/Web/Confluence, wrappers finos preservam a extração textual existente e chamam `processor.process_document(...)` só depois de limpar o conteúdo base. Em todos os casos, a saída útil é a mesma família de artefatos: texto enriquecido, lista de imagens processadas, status por etapa e chunks com metadata visual.
+
+##### Contrato canônico de configuração multimodal
+
+O código lido confirma uma regra arquitetural importante: multimodal não aceita configuração espalhada de forma arbitrária. Os caminhos canônicos são estes:
+
+- `ingestion.multimodal_ai` como base compartilhada para OCR, descrição visual e embedding visual fora do caso PDF;
+- `ingestion.content_profiles.type_specific.pdf.multimodal` para PDF;
+- `ingestion.content_profiles.type_specific.docx.multimodal` para DOCX;
+- `ingestion.content_profiles.type_specific.ppt.multimodal` para PPT;
+- `ingestion.web.multimodal` para web;
+- `ingestion.confluence.multimodal` para Confluence;
+- `ingestion.images` como complemento do caso imagem isolada.
+
+O resolvedor rejeita contratos antigos ou proibidos, como:
+
+- bloco `multimodal` na raiz do YAML;
+- `ingestion.content_processing.multimodal`;
+- `ingestion.content_profiles.type_specific.<tipo>.multimodal_config`;
+- `ingestion.remote_sources.web_scraping.multimodal`;
+- `web.multimodal`, `confluence.multimodal` e equivalentes fora do escopo `ingestion`.
+
+Isso é decisivo porque evita que diferentes consumidores configurem multimodal por caminhos divergentes e acabem descrevendo o mesmo comportamento com contratos incompatíveis.
+
+##### Onde o pipeline multimodal entra na ingestão
+
+O multimodal aparece em quatro padrões de entrada confirmados no código.
+
+1. Imagem isolada: `ImageContentProcessor` cria um processador multimodal com `content_type="image"` e chama `process_single_image`.
+2. PDF: `PDFContentProcessor` mantém a esteira rica de PDF e usa `PdfMultimodalApplicationService` para decidir se o runtime visual deve ser executado.
+3. DOCX e PPT: wrappers multimodais preservam a extração textual padrão e depois chamam o runtime compartilhado com o caminho do arquivo.
+4. Web e Confluence: wrappers multimodais preservam a materialização HTML e passam `html_content`, `clean_content` e `base_url` para o runtime, além de anexar metadata multimodal extra ao documento.
+
+Além disso, `ContentClientFactory` registra clients adaptadores multimodais para PDF, DOCX, PPT e HTML. Esses adaptadores não implementam pipelines paralelos locais; eles usam `FileSystemDataSource` e `ContentProcessorFactory` para cair no processor padrão já registrado.
+
+##### Pipeline detalhado da ingestão multimodal
+
+```mermaid
+flowchart TD
+  A[Entry point por tipo: imagem, PDF, DOCX, PPT, web ou Confluence] --> B[Resolvedor valida contrato YAML e mescla config compartilhada e por origem]
+  B --> C[MultimodalComponentFactory cria extractor, OCR, descritor e embedding provider]
+  C --> D[MultimodalContentProcessor inicia o run e prepara status]
+  D --> E[Extração de imagens]
+  E --> F[Filtro por tamanho, deduplicação e seleção por prioridade]
+  F --> G[Para cada imagem: contexto, descrição, OCR, tags e embedding visual]
+  G --> H[Texto base é enriquecido com evidências visuais]
+  H --> I[Chunks base recebem imagens, metadata visual e embedding agregado]
+  I --> J[Status, stage reports e artefatos seguem para a esteira comum]
+```
+
+Esse diagrama resume o que o código confirma: o multimodal não substitui o processor principal do tipo. Ele entra depois da materialização textual mínima e antes da criação final dos chunks enriquecidos.
+
+##### Etapa 1. Resolução e validação do contrato YAML
+
+O primeiro passo real do multimodal é resolver a configuração correta para o tipo de conteúdo. `resolve_multimodal_config_from_yaml` executa três papéis ao mesmo tempo:
+
+- valida caminhos proibidos e aliases legados;
+- mescla a base compartilhada com overrides específicos da origem;
+- injeta política de persistência de imagens e limites de tamanho quando essa política vier de `ingestion.images.persistence` ou `ingestion.telemetry.persistence`.
+
+No caso web, `normalize_multimodal_config` ainda transforma certas opções de `attachments` em parâmetros de `image_extraction`, como formatos permitidos, timeout de download, concorrência e tamanho máximo. Isso evita dois contratos paralelos para download de imagem e processamento visual.
+
+##### Etapa 2. Construção do runtime multimodal
+
+Com o YAML resolvido, `create_multimodal_processor_from_yaml` delega à `MultimodalComponentFactory`. Essa factory escolhe o extrator certo para o `content_type` e instancia os três componentes principais do runtime:
+
+- `ImageExtractor` para descobrir imagens úteis;
+- `OCRProcessor` para ler texto embutido na imagem;
+- `ImageDescriptor` para descrição visual e classificação.
+
+Se `vision_embedding` estiver habilitado, o provider de embedding visual é preparado sob demanda dentro do próprio `MultimodalContentProcessor`. O runtime também aplica flags importantes já no construtor, como `strict_mode`, `summary_on_empty`, `preserve_image_refs`, `store_images`, `max_image_size_mb`, deduplicação de imagens e `max_images_per_document`.
+
+##### Etapa 3. Gate local por tipo de conteúdo
+
+O multimodal não roda cegamente para qualquer documento. Cada entrypoint faz seu próprio gate:
+
+- imagem isolada depende de bytes reais e de um runtime multimodal inicializado;
+- PDF depende de `_enable_multimodal`, de o documento ser considerado visual e de existir uma fonte visual resolvível;
+- DOCX, PPT, web e Confluence dependem do flag `enabled` vindo do resolvedor multimodal daquele tipo.
+
+Essa separação é importante porque evita custo multimodal em documentos onde a camada textual já resolveu o problema ou onde a origem não oferece evidência visual útil.
+
+##### Etapa 4. Extração de imagens
+
+O processamento de documento em `MultimodalContentProcessor.process_document` começa com a extração de imagens. O runtime resolve o input do extrator, respeita `base_url` quando a origem é web e pede ao extrator especializado a lista de `ImageData`.
+
+Se não houver imagens, o pipeline não falha. Ele registra `multimodal_status=ignored`, define a razão `no_images_detected`, emite stage reports coerentes e devolve o texto base sem enriquecimento visual.
+
+Esse comportamento é importante porque “documento sem imagem” não é erro operacional. É apenas um caso em que o multimodal não agrega valor.
+
+##### Etapa 5. Filtro, deduplicação e seleção de prioridade
+
+Quando imagens existem, o runtime não processa tudo cegamente. Ele aplica uma sequência de filtros:
+
+- corte por tamanho máximo configurado;
+- deduplicação segundo `ImageDeduplicator` e `ImageDeduplicationConfig`;
+- seleção de prioridade com possível truncamento por orçamento de imagens no documento.
+
+O resultado dessa etapa é persistido como artefato de seleção de imagens, acessível por `get_last_image_selection_artifact`. Isso é especialmente importante para PDF, onde a escolha de quais imagens entram no processamento pode alterar custo e qualidade do run.
+
+##### Etapa 6. Preparação de embeddings de segmento para PDF
+
+No caso PDF, antes de entrar no loop por imagem, o runtime pode preparar embeddings por segmentos determinísticos de página. O código confirma um mapa `PdfSegmentEmbeddingAssignment` por faixa de páginas, usado depois ao gerar embedding visual por imagem.
+
+Na prática, isso significa que o multimodal do PDF não é apenas “imagem por imagem”. Existe uma etapa de preparação voltada para alinhar visual e estrutura paginada do documento.
+
+##### Etapa 7. Processamento completo de cada imagem
+
+O coração do runtime está em `_process_single_image`. Para cada `ImageData`, o código executa esta ordem lógica:
+
+1. resolve contexto textual da imagem via extractor ou `context_override`;
+2. tenta gerar descrição visual se `image_description` estiver habilitado;
+3. classifica a imagem em tags;
+4. mede se a descrição agregou valor ou se foi só ruído institucional;
+5. decide se OCR ainda vale a pena depois da análise visual;
+6. se fizer sentido e houver potencial textual, extrai OCR;
+7. recalcula a descrição filtrando respostas de baixo valor;
+8. calcula score de confiança;
+9. gera embedding visual quando habilitado;
+10. persiste o ativo de imagem quando a política permitir.
+
+Esse detalhe é importante: o código não trata OCR como etapa obrigatória. A descrição visual pode levar o runtime a concluir que a imagem é só logo, marca institucional ou elemento com baixo ganho semântico, e nesse caso o OCR pode ser evitado.
+
+##### Etapa 8. Filtragem de descrição de baixo valor
+
+Uma decisão técnica sofisticada confirmada no código é a filtragem de descrições visuais pouco úteis. O runtime mede sinais como:
+
+- novidade lexical em relação ao contexto e ao OCR;
+- diversidade de tokens;
+- presença de sinal técnico ou numérico;
+- ruído institucional como logo, marca e cabeçalho;
+- complexidade visual.
+
+Se a descrição for genérica, redundante ou essencialmente institucional, ela é descartada. Isso reduz poluição semântica no acervo e evita indexar frases como “a imagem mostra um logotipo” como se fossem conhecimento relevante para RAG.
+
+##### Etapa 9. Enriquecimento do texto base
+
+Depois que as imagens são processadas, `_enrich_text_with_images` injeta no texto base referências como:
+
+- descrição da imagem;
+- texto OCR;
+- referências contextuais da imagem.
+
+Quando houver marcador de página, o runtime tenta inserir a evidência próximo da página correspondente. Caso contrário, acrescenta no final. Esse comportamento é controlado por `preserve_image_refs`. Se essa flag estiver desligada, o texto base fica inalterado e a ligação entre chunk e imagem acontece apenas via metadata.
+
+##### Etapa 10. Montagem dos chunks multimodais
+
+`create_multimodal_chunks` pega os chunks textuais base do processor especialista e associa a eles as imagens relacionadas. Quando há apenas um chunk textual, o runtime pode anexar todas as imagens processadas a esse único chunk.
+
+Cada `MultimodalChunk` preserva:
+
+- conteúdo textual base;
+- lista de imagens anexadas;
+- flag `has_visual_content`;
+- `visual_complexity`;
+- embedding visual agregado quando houver;
+- `image_uris`;
+- metadata consolidada das imagens, incluindo OCR, descrição, engines usadas e dimensões.
+
+Para web e Confluence, os wrappers ainda anexam `image_metadata`, `image_urls` e `image_chunks_payload` no próprio metadata do documento, além de propagar estado multimodal para os chunks.
+
+##### Etapa 11. Status, stage reports e fallback
+
+O runtime multimodal mantém três saídas operacionais explícitas:
+
+- `get_last_multimodal_status`, com status agregado do run;
+- `get_last_stage_reports`, com snapshot por etapa;
+- `get_last_image_selection_artifact`, com a decisão de seleção de imagens.
+
+O status carrega campos como quantidade de imagens encontradas, processadas, descartadas e falhadas, além de `fallback_to_text` e razão operacional. Os stage reports seguem a ordem `image_extraction -> multimodal_ocr -> image_description -> vision_embedding`.
+
+No caso PDF, `PdfMultimodalApplicationService` traduz esse estado em metadata persistível do documento, registra checkpoints, grava stage reports no manifesto de execução e mantém fallback explícito para texto quando o processamento visual não rodar ou não produzir valor.
+
+##### O que acontece em caso de sucesso no multimodal
+
+No caminho feliz, o documento já tem um texto base mínimo, o runtime encontra imagens úteis, processa pelo menos parte delas, devolve texto enriquecido e monta chunks multimodais com evidência visual anexada. O operador consegue confirmar isso pelos logs de resumo multimodal, pela contagem de imagens filtradas e processadas, pelos campos `multimodal_status_details`, pelos stage reports e pelos metadados de engine usados em OCR, descrição visual e embedding.
+
+##### O que acontece em caso de erro no multimodal
+
+Os erros confirmados no código variam por etapa:
+
+- contrato YAML inválido por caminho legado ou proibido;
+- extrator de imagem desconhecido ou mal configurado;
+- ausência de bytes para imagem isolada;
+- falha ao extrair imagens do documento;
+- falha do OCR;
+- falha do descritor de imagem;
+- falha do provider de embedding visual;
+- erro ao persistir ativo de imagem;
+- interrupção cooperativa por cancelamento.
+
+O comportamento diante do erro depende de `strict_mode`. Fora do modo estrito, falhas por imagem podem ser absorvidas e o documento segue com fallback textual. Em `strict_mode=true`, o runtime pode interromper o pipeline logo após a primeira falha relevante em uma imagem.
+
+##### Como diagnosticar problemas reais no multimodal
+
+O diagnóstico correto precisa seguir a ordem do pipeline.
+
+1. Confirmar o content type que acionou o multimodal, porque PDF, imagem, web, DOCX e PPT não entram pelo mesmo boundary.
+2. Revisar a configuração canônica resolvida, especialmente se houve migração recente de caminhos legados.
+3. Conferir se o gate local daquele tipo estava realmente habilitado.
+4. Verificar `multimodal_status_details` para saber se o runtime foi ignorado, processado parcialmente, falhou ou caiu em fallback textual.
+5. Abrir os stage reports para identificar em qual etapa o problema surgiu: extração, OCR, descrição ou embedding visual.
+6. Inspecionar o artefato de seleção de imagens quando a suspeita for “imagem importante não processada”.
+7. Se o documento for web, conferir `base_url`, payload de anexos e política de persistência.
+8. Se o documento for PDF, verificar se ele foi classificado como visual e se existia fonte visual resolvível.
+9. Se o resultado ficou semanticamente ruim, investigar se a descrição foi filtrada por baixo valor, se o OCR foi corretamente suprimido ou se a política de seleção descartou imagens demais.
+
+##### Limites e pegadinhas do pipeline multimodal
+
+- Multimodal não significa que toda imagem vira conhecimento útil; o runtime tenta justamente descartar ruído visual.
+- OCR não é garantia de valor; o código pode bloquear OCR quando a análise visual já mostrou que a imagem tem baixo ganho textual.
+- Descrição visual também não é sempre boa; existe filtro explícito para evitar descrições genéricas e institucionais.
+- Embedding visual é opcional e depende de provider válido, preflight correto e configuração habilitada.
+- Web multimodal não substitui o scraping; ele entra depois da aquisição HTML e da resolução de anexos.
+- PDF multimodal também não substitui o pipeline PDF rico; ele é um ramo adicional voltado à evidência visual.
+- Persistir imagem demais pode elevar custo e volume operacional; por isso o contrato inclui política de tamanho e inclusão por tipo/fonte.
+
+Visão técnica: a ingestão multimodal é a camada que impede a plataforma de reduzir documentos ricos a texto achatado quando a evidência relevante está dentro de imagens, páginas técnicas, gráficos, slides ou capturas web.
+
+Visão executiva: essa capacidade reduz risco de perda de evidência em documentos visuais e melhora a previsibilidade de casos onde OCR simples não basta.
+
+Visão comercial: o diferencial vendável suportado pelo código é tratar conteúdo visual de forma governada, com fallback, filtragem de ruído e rastreabilidade operacional, em vez de apenas “ligar visão” de forma opaca.
+
+#### 8.4.6. DOCX
 
 Conceito: DOCX representa documentação corporativa editável, geralmente com parágrafos, seções e estrutura narrativa mais rica do que TXT.
 
@@ -231,25 +729,165 @@ Visão executiva: reduz risco de conhecimento crítico ficar fora da base só po
 
 Visão comercial: é um requisito comum em clientes corporativos, onde a documentação viva do negócio costuma circular em Word antes de qualquer publicação formal.
 
-#### 8.4.6. JSON
+#### 8.4.7. JSON
 
 Conceito: JSON é conteúdo textual com estrutura explícita. O valor dele não está só no texto, mas nas chaves, profundidade, arranjos e perfil semântico do payload.
 
-Tática: o pipeline preserva o JSON inteiro como conteúdo, mas enriquece o documento com metadados estruturais e perfis de processamento. Isso evita que a estrutura se perca totalmente no chunking.
+Tática: o pipeline mantém o JSON bruto como conteúdo canônico do documento, mas extrai uma camada paralela de entendimento operacional. Em vez de “traduzir” JSON para texto livre e perder semântica, a esteira tenta preservar o payload original, registrar estatísticas úteis, identificar conjuntos de registros relevantes e só depois decidir como chunkar.
 
-Técnica: `JsonContentProcessor` usa `JsonMetadataBuilder`, configura perfis como `standard` e `schema_metadata`, controla preservação de estrutura, profundidade máxima e flattening de arrays e registra perfil aplicado ao documento. O processor pode incluir metadados de estrutura JSON, aplicar chunking específico e acionar processamento por domínio quando permitido.
+Técnica: o caminho principal confirmado no código passa por sete componentes encadeados. `ContentTypeDispatcher` detecta `json_file_paths`; `LocalContentFamily` entrega o lote para a esteira local; `FileProcessingOrchestrator` coordena um arquivo por vez; `JsonFileClient` busca o documento bruto; `JsonMetadataBuilder` resolve configuração, valida integridade de bytes e monta o `TextDocument`; `JsonContentProcessor` seleciona o perfil de processamento e gera chunks compatíveis com a estrutura; por fim, o executor genérico de indexação fecha a persistência.
 
-Fluxo prático: o JSON entra como `StorageDocument`, é materializado com conteúdo completo e metadata estrutural e então segue para chunking compatível com o perfil do documento.
+Fluxo prático: o JSON entra na família local como caminho de arquivo, vira `StorageDocument` com bytes brutos obrigatórios, é convertido em `TextDocument` enriquecido com metadados estruturais, passa por normalização e chunking específico e só então segue para indexação.
 
-O que pode dar errado: JSON inválido, profundidade excessiva, chunking inadequado para o perfil ou metadados estruturais insuficientes para o caso.
+##### Pipeline detalhado da ingestão JSON
 
-Como diagnosticar: verificar o perfil selecionado, presença dos metadados de estrutura e parâmetros aplicados ao documento.
+```mermaid
+flowchart TD
+  A[json_file_paths no IngestionRequest] --> B[ContentTypeDispatcher registra step content_type:json]
+  B --> C[LocalContentFamily.process_json]
+  C --> D[_process_files_with_pipeline e FilePipelineBatchCoordinator]
+  D --> E[JsonFileClient busca StorageDocument no FileSystemDataSource]
+  E --> F[JsonMetadataBuilder resolve contrato YAML e valida bytes]
+  F --> G[TextDocument JSON com metadados estruturais]
+  G --> H[JsonContentProcessor seleciona perfil e normaliza o payload]
+  H --> I[Chunking JSON-aware e domain processing opcional]
+  I --> J[Finalizacao do arquivo e indexacao dos chunks]
+```
 
-Visão técnica: JSON é o tipo mais importante para ingestão de payloads estruturados e integrações, porque a qualidade da estrutura é tão importante quanto o texto.
+O diagrama mostra a ordem real do fluxo. O ponto central é este: a plataforma não manda o JSON direto para chunking. Antes disso ela decide se a entrada é realmente JSON, materializa o documento com integridade validada e enriquece a estrutura para que a indexação não trabalhe às cegas.
 
-Visão executiva: ele reduz risco de transformar dados estruturados em texto cego, o que destruiria valor para filtros, buscas e análises futuras.
+##### Etapa 1. Seleção da trilha JSON
 
-Visão comercial: é relevante para clientes que trabalham com exportações de sistemas, APIs, catálogos, cadastros e logs estruturados.
+O pipeline JSON só nasce quando o request chega com `json_file_paths`. Nesse momento, `ContentTypeDispatcher` registra o passo `content_type:json` como executado e desvia o processamento para `_process_json_content`. Isso importa porque a decisão não é inferida por conteúdo textual; ela depende do contrato do request já resolvido.
+
+Na prática, isso reduz ambiguidade operacional. O sistema sabe que está lidando com arquivo local de JSON antes de tocar no parser, o que evita misturar a esteira JSON com TXT, Markdown ou scraping remoto.
+
+##### Etapa 2. Entrada na família local e coordenação em lote
+
+Depois do dispatcher, `LocalContentFamily.process_json` entrega a lista de arquivos para `_process_local_files`, que por sua vez chama `_process_files_with_pipeline`. A partir daí, a plataforma entra no coordenador genérico de lote, inventaria os arquivos encontrados e abre uma execução isolada por arquivo.
+
+Essa etapa existe para desacoplar “processar lote” de “entender JSON”. O lote precisa de contadores, telemetria, tratamento de falha por item e fechamento de resultado. O parser JSON precisa se concentrar em estrutura e chunking. Separar essas responsabilidades mantém o pipeline previsível.
+
+##### Etapa 3. Aquisição do documento bruto
+
+O coordenador de arquivo chama `JsonFileClient`, que aceita apenas `SourceType.LOCAL_FILE`, inicializa `FileSystemDataSource` quando necessário e busca o documento bruto da origem local. O client é propositalmente fino: ele não tenta decidir semântica do payload. O papel dele é garantir que o `StorageDocument` chegue ao processador com os dados mínimos corretos.
+
+No retorno do fetch, o client já chama `JsonContentProcessor.build_from_storage`, aplica normalização de metadados opcionais e isola `structured_content` quando esse resumo existe. Isso mostra uma decisão importante do desenho: o boundary JSON já devolve informação auxiliar pronta para o restante da esteira, sem transformar o client em processador pesado.
+
+##### Etapa 4. Resolução do contrato YAML
+
+`JsonMetadataBuilder` começa resolvendo a configuração final com `resolve_json_ingestion_config`. O contrato confirmado no código aceita apenas o caminho canônico `ingestion.content_profiles.type_specific.json`. Caminhos legados como `content_profiles.type_specific.json`, `ingestion.json` e `json` na raiz são rejeitados com erro explícito.
+
+Essa validação é crítica por três motivos. Primeiro, impede ambiguidade de configuração. Segundo, evita que o runtime aceite YAML legado silenciosamente. Terceiro, garante que todo o pipeline JSON leia o mesmo bloco de configuração ao resolver encoding, tamanho, esquema, qualidade, metadados e heurísticas de domínio.
+
+Os grupos de configuração realmente consumidos pelo pipeline são estes:
+
+- `encoding`: define encoding padrão e fallbacks permitidos para decodificação segura.
+- `size.max_file_size_mb`: impõe limite de tamanho antes de qualquer parse.
+- `schema_detection`: controla `max_depth`, preservação de nomes de campo e flattening de arrays no builder.
+- `coupon_processing` e `catalog_processing`: definem os caminhos de campos usados para reconhecer cupons, produtos e metadados opcionais.
+- `quality_filters`: controla mínimo e máximo de registros e exigências como preço e identificador de cupom.
+- `metadata`: liga ou desliga resumo de esquema, amostras e estatísticas anexadas ao documento.
+- `preserve_structure`, `flatten_arrays`, `chunk_size`, `chunk_overlap` e `max_chunks_per_document`: influenciam o comportamento do `JsonContentProcessor`.
+- `json_processing_profile` na configuração raiz e `processing_profile` no metadata do documento: definem qual perfil de chunking será aplicado quando o documento não usa a heurística especial de `schema_metadata`.
+
+##### Etapa 5. Validação de tamanho, encoding e integridade dos bytes
+
+Antes de montar o documento, `JsonMetadataBuilder` valida o tamanho do arquivo e exige a presença de `raw_bytes` no `StorageDocument`. Se o arquivo ultrapassar o limite configurado ou se os bytes brutos não existirem, o pipeline falha fechado.
+
+Em seguida, `_decode_and_validate_json_bytes` percorre a lista ordenada de encodings permitidos. Para cada encoding, ele tenta decodificar os bytes e, logo depois, faz `json.loads` no texto decodificado. Se a decodificação falhar, registra warning com o encoding tentado. Se a decodificação funcionar mas o parse JSON falhar, registra outro warning indicando rejeição após decode. O documento só é aceito quando as duas etapas passam com o mesmo encoding efetivo.
+
+Essa escolha evita um problema comum em ingestão de JSON: aceitar texto aparentemente legível, mas estruturalmente corrompido por decode inadequado. Aqui o sistema exige integridade de bytes e parse real antes de seguir.
+
+##### Etapa 6. Materialização do documento e enriquecimento estrutural
+
+Com o texto validado, `JsonMetadataBuilder.build_document` monta o `TextDocument` final. É nessa etapa que o pipeline deixa de tratar JSON como “texto com chaves” e passa a tratá-lo como fonte estruturada de conhecimento.
+
+O builder tenta detectar conjuntos de registros com cara de cupom fiscal e catálogo de produtos. A heurística padrão é claramente orientada ao domínio `retail_fiscal`: procura campos de ID, data, valor e cliente para cupons; e campos de SKU, nome, preço, categoria, estoque, imagem e tags para catálogo. Depois disso, normaliza os registros encontrados, calcula estatísticas, coleta amostras e reúne metadados opcionais.
+
+O documento resultante pode carregar, entre outros, estes enriquecimentos:
+
+- `json_info` com tipo de topo e profundidade estimada.
+- `json_preview` com visão resumida da estrutura.
+- `json_schema_summary` e `json_numeric_stats`.
+- `cupom_estatisticas` e `catalogo_estatisticas`.
+- `amostras_cupons` e `amostras_produtos`.
+- `metadados_opcionais` de catálogo e cupons.
+- `quality_flags` e `qualidade_aprovada`.
+- `json_structured_content` e `json_normalized_shadow` apenas em metadata.
+- `pages_info` sintético com página única para compatibilidade com a telemetria do restante da esteira.
+
+O detalhe mais importante aqui é este: o conteúdo persistido no documento continua sendo o JSON bruto. O resumo estruturado fica em metadata. Isso preserva fidelidade do payload original sem abrir mão de inteligência operacional para busca, auditoria e diagnóstico.
+
+##### Etapa 7. Seleção de perfil e chunking JSON-aware
+
+Depois da materialização, `JsonContentProcessor` entra no fluxo padrão de `BaseContentProcessor`: pré-processamento, extração, limpeza, chunking e pós-processamento. No caso do JSON, `_extract_text_content` não “descobre” texto novo; ele garante `pages_info` e retorna o conteúdo já materializado.
+
+Na limpeza, `_clean_text_content` faz um parse do JSON e reserializa com indentação estável. Se o conteúdo for inválido nesse ponto, a falha é obrigatória. No chunking, o processor resolve o perfil efetivo. O perfil pode vir de `metadata.processing_profile`, do tipo especial `schema_metadata` ou do default configurado em `json_processing_profile`. Se o nome do perfil for desconhecido, o código cai explicitamente em `standard` e registra isso em log.
+
+Os perfis confirmados no código são:
+
+- `standard`: inclui metadata estrutural, permite processamento por domínio e aceita fallback de chunking em caminhos secundários da interface.
+- `schema_metadata`: força preservação de estrutura, limita a um chunk, desliga domain processing e desliga fallback.
+
+Com o perfil escolhido, o chunking segue a forma do JSON:
+
+- objeto JSON: ou vira um chunk único com o objeto completo, ou é quebrado por chave de primeiro nível;
+- array JSON: ou vira um chunk único com o array inteiro, ou é quebrado item a item quando `flatten_arrays` está ligado e o array tem mais de um elemento;
+- valor primitivo: vira chunk único.
+
+Depois da criação dos chunks, o processor ainda pode aplicar `DomainProcessingResolver` se o processamento por domínio estiver habilitado. Na prática, isso permite pós-processamento especializado sem contaminar o caminho principal de materialização.
+
+##### Etapa 8. Fechamento do arquivo e indexação
+
+Quando os chunks voltam do processor, `DocumentProcessorExecutor.finalize_chunk_generation` verifica se houve bloqueio por qualidade ou ausência de chunks e decide se o documento pode seguir. Se o resultado estiver vazio por qualidade, a indexação é abortada. Se houver chunks, o fluxo segue para o executor de indexação, que fecha a persistência e atualiza os contadores do lote.
+
+Esse fechamento é importante porque a ingestão JSON não termina quando o parse funciona. Ela termina quando o documento gerou chunks indexáveis e o lote consegue provar isso operacionalmente.
+
+##### O que acontece em caso de sucesso
+
+No caminho feliz, o arquivo JSON entra pela família local, é validado com bytes íntegros, materializado como `TextDocument` com metadata estrutural, passa por chunking orientado à estrutura e sai com chunks prontos para indexação. O operador consegue confirmar o sucesso pelos logs de seleção do step JSON, pelo log de integridade de decode, pelo log de perfil aplicado e pelo fechamento do processor dedicado com quantidade de chunks criada.
+
+##### O que acontece em caso de erro
+
+Os principais erros confirmados no código são estes:
+
+- caminho YAML legado para configuração JSON, rejeitado por `validate_json_yaml_contract`;
+- arquivo grande demais para o limite configurado;
+- ausência de `raw_bytes`, o que impede validar integridade de encoding;
+- falha de decode em todos os encodings permitidos;
+- parse JSON inválido mesmo após decode;
+- documento sem chunks ou bloqueado por qualidade no fechamento do arquivo.
+
+Existe ainda um detalhe importante de arquitetura: a interface `create_chunks` do processor possui um fallback de chunk único para JSON inválido quando o perfil permite, mas esse não é o caminho principal confirmado da ingestão local, porque a esteira principal já falha antes se o JSON não passar pela normalização obrigatória.
+
+##### Como diagnosticar problemas reais
+
+O diagnóstico mais eficiente é seguir a ordem do pipeline.
+
+1. Confirmar que o request realmente chegou com `json_file_paths` e que o dispatcher registrou `content_type:json`.
+2. Verificar se a família local inventariou os arquivos e abriu o processamento por item.
+3. Procurar o log `JSON decodificado com integridade validada`, que confirma tamanho aceito, encoding efetivo e hash dos bytes.
+4. Revisar warnings de decode e parse para entender se a falha foi de encoding ou de JSON estruturalmente inválido.
+5. Confirmar qual perfil foi aplicado no log `JSON_PROFILE`.
+6. Inspecionar os metadados `json_info`, `json_schema_summary`, `quality_flags`, `cupom_estatisticas` e `catalogo_estatisticas` para ver se o enriquecimento funcionou.
+7. Checar os logs `JSON CHUNKS CREATION` e `JSON CHUNKING` para entender se o documento virou chunk único, chunk por chave ou chunk por item.
+8. Se não houver indexação, confirmar se o arquivo caiu em quality filter ou retornou zero chunks no fechamento do executor.
+
+##### Limites e pegadinhas do pipeline JSON
+
+- JSON indexado não significa JSON semanticamente útil. Se os campos que identificam cupom ou catálogo não baterem com o payload real, o documento será aceito, mas o enriquecimento de domínio pode ficar pobre.
+- Preservar estrutura não significa melhor retrieval em todos os casos. Objetos muito grandes podem concentrar conteúdo demais em um chunk único.
+- `schema_metadata` não é um perfil geral. Ele existe para um caso restrito em que a prioridade é representar a estrutura, não permitir pós-processamento rico.
+- O metadata enriquecido melhora busca e auditoria, mas o conteúdo principal continua sendo o JSON bruto. Quem consome o acervo precisa entender essa separação.
+
+Visão técnica: JSON é a esteira mais sensível a contrato, porque erro de encoding, erro de estrutura e erro de chunking podem parecer o mesmo sintoma para quem olha só o resultado final. O desenho atual separa essas causas em pontos diagnósticos distintos.
+
+Visão executiva: esse pipeline reduz risco de a plataforma transformar exportações estruturadas em texto cego. Em termos práticos, isso protege filtros, indicadores, auditoria e futuras estratégias de retrieval sobre dados de integração.
+
+Visão comercial: a feature é especialmente forte para clientes que ingerem exportações de ERP, payloads de APIs, catálogos, cupons fiscais, cadastros e dumps operacionais. O benefício tangível é trazer esse material para o acervo sem destruir a semântica original logo na entrada.
+
+Visão estratégica: a ingestão JSON fortalece a plataforma YAML-first porque concentra regras de contrato, qualidade e chunking em uma esteira especializada e previsível. Isso prepara o produto para ampliar casos de uso estruturados sem espalhar parsing ad hoc por várias camadas.
 
 ## 9. Pipeline ou fluxo principal
 
@@ -619,13 +1257,21 @@ Símbolos relevantes: `HtmlContentProcessor.build_from_storage`, `_html_to_text`
 
 Comportamento confirmado: scripts e estilos são removidos e o HTML é normalizado em texto.
 
+### `src/ingestion_layer/content_type_dispatcher.py` no fluxo Web Scraping
+
+Motivo da leitura: confirmar a entrada do step web scraping e a ponte entre URL e documento prefetched.
+
+Símbolos relevantes: `content_type:web_scraping`, `_process_web_scraping_content`, `_partition_web_documents_for_pipeline`, `_resolve_prefetched_document`.
+
+Comportamento confirmado: a URL entra como fonte remota, o dispatcher separa páginas e anexos e indexa documentos web por URL normalizada antes do pipeline de arquivo.
+
 ### `src/ingestion_layer/clients/web_scraping/_client.py`
 
 Motivo da leitura: confirmar que scraping é um orquestrador de aquisição, não apenas parser HTML.
 
-Símbolos relevantes: `WebScrapingDatasourceMultimodalAdapterClient` e seus componentes delegados.
+Símbolos relevantes: `WebScrapingDatasourceMultimodalAdapterClient`, `_fetch_document_data`, `_transform_to_document_async`, `get_documents_for_pipeline`.
 
-Comportamento confirmado: a captura web coordena fetch, parser, anexos, cache, proxy, anti-bot e multimodalidade.
+Comportamento confirmado: a captura web coordena fetch, parser, anexos, cache, proxy, anti-bot e multimodalidade e, no modo `pipeline_ready`, entrega documentos ricos sem duplicar o processamento final do pipeline.
 
 ### `src/ingestion_layer/remote_content_family.py`
 
@@ -633,7 +1279,15 @@ Motivo da leitura: confirmar como o web scraping entra na família remota do pip
 
 Símbolo relevante: `process_web_scraping`.
 
-Comportamento confirmado: URLs são resolvidas, documentos prefetched são validados e o resultado segue para `_process_files_with_pipeline`.
+Comportamento confirmado: URLs são preparadas pelo client de scraping, anexos são materializados, documentos prefetched são validados e o resultado segue para `_process_files_with_pipeline` com prefetch obrigatório.
+
+### `src/ingestion_layer/file_pipeline_services.py` no reuso de prefetch web
+
+Motivo da leitura: confirmar como a esteira comum reaproveita o documento web já capturado.
+
+Símbolos relevantes: `DataSourceDocumentExecutor.prepare`, `DocumentProcessorExecutor.build_chunks`.
+
+Comportamento confirmado: o executor reutiliza o documento prefetched quando disponível e só então aciona o processor HTML/Web para materialização e chunking.
 
 ### `src/ingestion_layer/processors/web_processor.py`
 
@@ -643,13 +1297,93 @@ Símbolos relevantes: `WebContentProcessor.build_from_storage`, `_update_clean_p
 
 Comportamento confirmado: o HTML remoto ganha `pages_info`, URL, status HTTP e texto limpo antes do chunking.
 
+### `src/ingestion_layer/datasources/filesystem_data_source.py`
+
+Motivo da leitura: confirmar como o arquivo Excel entra na esteira com bytes e content type corretos.
+
+Símbolos relevantes: `_infer_content_type`, `_fetch_document_data`, `_transform_to_document`.
+
+Comportamento confirmado: `.xlsx` e `.xls` viram `StorageDocument` com `raw_bytes`, tamanho, timestamps e `ContentType` específico de Excel.
+
+### `src/ingestion_layer/core/factories.py`
+
+Motivo da leitura: confirmar o registro do processador Excel na fábrica canônica.
+
+Símbolos relevantes: `ContentProcessorFactory`, `ContentType.EXCEL_XLSX`, `ContentType.EXCEL_XLS`.
+
+Comportamento confirmado: os dois formatos de Excel apontam para `ExcelContentProcessor`.
+
+### `src/ingestion_layer/dynamic_data_content_family.py`
+
+Motivo da leitura: confirmar um caminho real de entrada do Excel na esteira compartilhada.
+
+Símbolos relevantes: `_load_dynamic_file_document`, `_convert_document_to_chunks`.
+
+Comportamento confirmado: arquivos dinâmicos `.xlsx/.xls` podem entrar na esteira comum via carregamento do documento e conversão posterior em chunks.
+
 ### `src/ingestion_layer/processors/excel_processor.py`
 
 Motivo da leitura: confirmar a técnica de ingestão de planilhas.
 
-Símbolos relevantes: `ExcelContentProcessor.build_from_storage`, `create_chunks`.
+Símbolos relevantes: `ExcelContentProcessor.build_from_storage`, `validate_storage_document`, `_load_workbook`, `_extract_text_and_metadata`, `create_chunks`.
 
-Comportamento confirmado: a planilha preserva abas, metadados estruturados e chunking adaptativo.
+Comportamento confirmado: a planilha valida contrato do arquivo, usa `openpyxl` ou `xlrd`, preserva abas, schema, estatísticas e produz chunking adaptativo por linhas.
+
+### `src/core/multimodal_runtime/config_resolver.py`
+
+Motivo da leitura: confirmar o contrato YAML canônico do multimodal e os caminhos proibidos.
+
+Símbolos relevantes: `resolve_multimodal_config_from_yaml`, `resolve_local_multimodal_gate_config_from_yaml`, `validate_multimodal_yaml_contract`.
+
+Comportamento confirmado: o runtime multimodal mescla base compartilhada com overrides por tipo e rejeita caminhos legados e proibidos.
+
+### `src/ingestion_layer/multimodal/multimodal_factory.py`
+
+Motivo da leitura: confirmar como o runtime multimodal é montado e qual extrator entra por tipo.
+
+Símbolos relevantes: `MultimodalComponentFactory.create_image_extractor`, `create_multimodal_processor`, `create_multimodal_processor_from_yaml`.
+
+Comportamento confirmado: a factory cria extrator, OCR, descritor e processor multimodal com seleção por `content_type`.
+
+### `src/ingestion_layer/multimodal/multimodal_processor.py`
+
+Motivo da leitura: confirmar a ordem real dos estágios do runtime multimodal e a saída final em chunks.
+
+Símbolos relevantes: `process_document`, `_process_single_image`, `_enrich_text_with_images`, `create_multimodal_chunks`, `get_last_multimodal_status`, `get_last_stage_reports`, `get_last_image_selection_artifact`.
+
+Comportamento confirmado: o runtime extrai imagens, filtra, deduplica, processa OCR/descrição/embedding, enriquece texto e monta chunks multimodais com metadata visual.
+
+### `src/ingestion_layer/processors/image_processor.py`
+
+Motivo da leitura: confirmar a entrada canônica da imagem isolada no runtime multimodal.
+
+Símbolos relevantes: `ImageContentProcessor._initialize_processor`, `_extract_text_content`, `_split_into_chunks`.
+
+Comportamento confirmado: imagem isolada chama `process_single_image` e devolve um único `MultimodalChunk` quando há conteúdo útil.
+
+### `src/ingestion_layer/processors/multimodal_wrappers.py`
+
+Motivo da leitura: confirmar como DOCX, PPT, web e Confluence reaproveitam o runtime multimodal sem substituir seus processors textuais.
+
+Símbolos relevantes: `DocxMultimodalProcessor`, `PptMultimodalProcessor`, `WebMultimodalProcessor`, `ConfluenceMultimodalProcessor`.
+
+Comportamento confirmado: os wrappers preservam a extração textual base, chamam o runtime multimodal e depois anexam metadata visual aos chunks e ao documento.
+
+### `src/ingestion_layer/clients/multimodal_adapter_client.py`
+
+Motivo da leitura: confirmar que PDF, DOCX e PPT locais usam adaptadores e não pipelines multimodais locais paralelos.
+
+Símbolos relevantes: `_MultimodalAdapter`, `DocxMultimodalAdapterClient`, `PptMultimodalAdapterClient`, `PdfMultimodalAdapterClient`.
+
+Comportamento confirmado: os adaptadores leem o arquivo via `FileSystemDataSource` e delegam o parsing ao processor padrão já registrado na factory.
+
+### `src/ingestion_layer/processors/pdf_multimodal_application_service.py`
+
+Motivo da leitura: confirmar a decisão de execução, o status persistido e o fallback textual do multimodal no PDF.
+
+Símbolos relevantes: `should_run_multimodal`, `apply_multimodal_status_metadata`, `_persist_multimodal_stage_reports`, `process_multimodal_document`.
+
+Comportamento confirmado: PDF usa um serviço dedicado para decidir quando rodar multimodal, persistir status e manter fallback explícito para texto.
 
 ### `src/ingestion_layer/processors/docx_processor.py`
 
@@ -659,10 +1393,58 @@ Símbolos relevantes: `DocxContentProcessor.build_from_storage`, `_extract_docx_
 
 Comportamento confirmado: DOCX é validado por bytes e assinatura ZIP e extraído com `python-docx`.
 
+### `src/ingestion_layer/content_type_dispatcher.py` no fluxo JSON
+
+Motivo da leitura: confirmar onde o request entra na trilha JSON.
+
+Símbolos relevantes: `content_type:json`, `_process_json_content`, `_process_files_with_pipeline`.
+
+Comportamento confirmado: a esteira JSON só é acionada quando `json_file_paths` está presente e segue pelo pipeline genérico de arquivos com telemetria por tipo.
+
+### `src/ingestion_layer/local_content_family.py`
+
+Motivo da leitura: confirmar a fronteira da família local para JSON.
+
+Símbolo relevante: `process_json`.
+
+Comportamento confirmado: JSON local é roteado para `_process_local_files`, preservando inventário, telemetria e tratamento de exceção por arquivo.
+
+### `src/ingestion_layer/file_pipeline_services.py` na orquestração de arquivo
+
+Motivo da leitura: confirmar a orquestração por arquivo e o fechamento após chunking.
+
+Símbolos relevantes: `FileProcessingOrchestrator.process_file`, `DocumentProcessorExecutor.build_chunks`, `finalize_chunk_generation`.
+
+Comportamento confirmado: a esteira de um único arquivo separa preparação, execução do processor e indexação, abortando o fechamento quando não há chunks válidos.
+
+### `src/ingestion_layer/clients/json_client.py`
+
+Motivo da leitura: confirmar o boundary especializado do JSON local.
+
+Símbolos relevantes: `JsonFileClient`, `_fetch_document_data`, `_transform_to_document`.
+
+Comportamento confirmado: o client usa `FileSystemDataSource`, materializa o documento via processor e normaliza metadados opcionais antes de devolver o resultado.
+
+### `src/utils/json_config_resolver.py`
+
+Motivo da leitura: confirmar o contrato YAML aceito pela ingestão JSON.
+
+Símbolos relevantes: `validate_json_yaml_contract`, `resolve_json_ingestion_config`.
+
+Comportamento confirmado: a configuração canônica fica em `ingestion.content_profiles.type_specific.json`, com rejeição explícita dos caminhos legados.
+
+### `src/ingestion_layer/processors/json_metadata_builder.py`
+
+Motivo da leitura: confirmar validação de bytes, enriquecimento estrutural e heurísticas de domínio.
+
+Símbolos relevantes: `build_from_storage`, `_decode_and_validate_json_bytes`, `build_document`.
+
+Comportamento confirmado: o builder exige `raw_bytes`, valida encoding com parse real, monta `TextDocument` e anexa estatísticas, amostras, quality flags e metadata estrutural.
+
 ### `src/ingestion_layer/processors/json_processor.py`
 
-Motivo da leitura: confirmar o tratamento estrutural do JSON.
+Motivo da leitura: confirmar o tratamento estrutural do JSON após a materialização.
 
-Símbolos relevantes: `JsonContentProcessor`, `_resolve_profile`, `JsonMetadataBuilder`.
+Símbolos relevantes: `JsonContentProcessor`, `_resolve_profile`, `_split_into_chunks`, `_create_json_chunks`.
 
-Comportamento confirmado: JSON preserva estrutura, perfis de processamento e metadados especializados antes do chunking.
+Comportamento confirmado: JSON preserva estrutura, seleciona perfil, aplica chunking por forma do payload e pode acionar processamento por domínio antes da indexação.

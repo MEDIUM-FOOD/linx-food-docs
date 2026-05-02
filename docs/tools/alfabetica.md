@@ -1,349 +1,423 @@
-# 📖 Lista Alfabética de Ferramentas
-
-> **Total**: 239 ferramentas ativas no catálogo central | **Atualizado**: 08/03/2026
->
-> **Fonte da contagem**: snapshot canônico do builder sincronizado para `integrations.builtin_tool_registry`.
-
-**Navegação Rápida**:
-[A](#a) | [B](#b) | [C](#c) | [D](#d) | [E](#e) | [F](#f) |
-[G](#g) | [H](#h) | [I](#i) | [J](#j) | [K](#k) | [L](#l) |
-[M](#m) | [N](#n) | [O](#o) | [P](#p) | [Q](#q) | [R](#r) |
-[S](#s) | [T](#t) | [U](#u) | [V](#v) | [W](#w) | [X](#x) |
-[Y](#y) | [Z](#z)
-
----
-
-## Como Usar Esta Lista
-
-- 🔗 **Links azuis**: Documentação completa com exemplos
-- 📦 **Categoria**: Tipo de ferramenta
-- 💼 **Uso Comum**: Para que serve na prática
-
-## Leitura relacionada
-
-- Guia geral de tools: [../GUIA-USUARIO-TOOLS.md](../GUIA-USUARIO-TOOLS.md)
-- Tools por finalidade: [./por_finalidade.md](./por_finalidade.md)
-- APIs dinâmicas governadas: [../README-DYNAMIC-API-TOOLS.md](../README-DYNAMIC-API-TOOLS.md)
-- SQL dinâmico e procedures: [../README-DYNAMIC-SQL-TOOLS.md](../README-DYNAMIC-SQL-TOOLS.md)
-- Integrações governadas por tenant: [../README-INTEGRACOES-GOVERNADAS.md](../README-INTEGRACOES-GOVERNADAS.md)
-
----
-
-## A
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `alloy_buscar_pedidos` | domain_tools | Listar pedidos Alloy por status |
-| `advanced_string_inverter` | custom_tools | Manipulação avançada de textos |
-| `api_key_manager` | domain_tools | Gerenciar chaves de API |
-| `apisports_classificacao_liga` | vendor_tools | Tabela API-Sports |
-| `apisports_jogadores_por_time` | vendor_tools | Jogadores por time |
-| `apisports_partida_por_id` | vendor_tools | Partida API-Sports |
-| `apisports_partidas_por_data` | vendor_tools | Agenda API-Sports |
-| `apisports_times_por_nome` | vendor_tools | Times por nome |
-| `anp_revendedores_buscar` | domain_tools | Buscar revendedores ANP por termo |
-| `amazon_sp_api_buscar_produtos` | vendor_tools | Produtos SP-API Amazon |
-
-## B
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `brasilapi_consultar_cep` | vendor_tools | Buscar endereço por CEP (Brasil) |
-| `brasilapi_consultar_cnpj` | vendor_tools | Consultar CNPJ (Brasil) |
-| `brasilapi_listar_bancos` | vendor_tools | Listar bancos brasileiros |
-
-## C
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `calculator` | custom_tools | Calculadora matemática |
-| `chatwoot_listar_conversas` | vendor_tools | Fila de conversas |
-| `chatwoot_obter_conversa` | vendor_tools | Detalhar conversa |
-| `chatwoot_enviar_mensagem` | vendor_tools | Responder conversa |
-| `chatwoot_atualizar_conversa` | vendor_tools | Atualizar status |
-| `chatwoot_listar_contatos` | vendor_tools | Listar contatos |
-| `chatwoot_criar_contato` | vendor_tools | Criar contato |
-| `chatwoot_listar_agentes` | vendor_tools | Listar agentes |
-| `chatwoot_health_check` | vendor_tools | Health da integração |
-| `csv_parser` | domain_tools | Processar arquivos CSV |
-| `cardapio_web_buscar_pedidos` | domain_tools | Listar pedidos Cardapio Web |
-| `crm_food_buscar_pedidos` | domain_tools | Listar pedidos CRM Food |
-| `consulta_remedios_buscar_medicamentos` | domain_tools | Buscar medicamentos |
-
-## D
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| [**`dyn_api<endpoint_id>`**](api_dinamica.md) | domain_tools | **HTTP (YAML ou tabela)** |
-| [**`dyn_sql<query_id>`**](sql_dinamico.md) | domain_tools | **SQL (YAML ou tabela)** |
-| `duckduckgo_search` | external_tools | Buscar na internet |
-| `delivery_much_buscar_pedidos` | domain_tools | Pedidos Delivery Much |
-
-## E
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `email_sender` | domain_tools | Enviar emails automáticos |
-| `excel_reader` | domain_tools | Ler planilhas Excel |
-| `enetpulse_buscar_eventos` | vendor_tools | Eventos/competições (Enetpulse) |
-| `enetpulse_buscar_fixtures` | vendor_tools | Partidas/fixtures (Enetpulse) |
-| `enetpulse_buscar_odds` | vendor_tools | Odds e mercados (Enetpulse) |
-| `enetpulse_buscar_classificacao` | vendor_tools | Standings (Enetpulse) |
-| `enetpulse_buscar_equipes` | vendor_tools | Equipes (Enetpulse) |
-
-## F
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `food99_buscar_pedidos` | domain_tools | Listar pedidos 99Food por status |
-| `fazer_transferencia` | domain_tools | Transferência bancária (exemplo) |
-| `file_browser` | domain_tools | Navegar em arquivos |
-
-## G
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `github_search_repos` | vendor_tools | Buscar repositórios GitHub |
-| `goalserve_classificacao_liga` | vendor_tools | Tabela GoalServe |
-| `goalserve_jogadores_por_time` | vendor_tools | Elenco GoalServe |
-| `goalserve_partida_por_id` | vendor_tools | Partida GoalServe |
-| `goalserve_partidas_por_data` | vendor_tools | Agenda GoalServe |
-| `goalserve_times_por_nome` | vendor_tools | Times GoalServe |
-| `goomer_buscar_pedidos` | domain_tools | Listar pedidos Goomer por status |
-| `google_serper_wrapper` | external_tools | Busca Google (via Serper API) |
-
-## H
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `http_get` | external_tools | Requisições HTTP GET |
-| `http_post` | external_tools | Requisições HTTP POST |
-| `human_gate` ⚠️ | system_tools | **Aprovação humana obrigatória** |
-
-## I
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `image_analyzer` | domain_tools | Analisar imagens com IA |
-| `instagram_publish_media` | vendor_tools | Publicar imagem/vídeo/reel |
-| `instagram_send_direct_message` | vendor_tools | Enviar DM no Instagram |
-| `instagram_fetch_insights` | vendor_tools | Consultar insights de conta |
-| `ifood_buscar_eventos` | vendor_tools | Ler eventos pendentes (iFood) |
-| `ifood_confirmar_eventos` | vendor_tools | Dar ACK em eventos (iFood) |
-
-## J
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `json_parse` | domain_tools | Processar JSON |
-| `json_validate` | domain_tools | Validar formato JSON |
-
-## K
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `kafka_publisher` | vendor_tools | Publicar mensagens Kafka |
-| `keeta_buscar_pedidos` | domain_tools | Listar pedidos Keeta por status |
-
-## L
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `linx_delivery_hub_buscar_pedidos` | domain_tools | Linx Delivery Hub |
-| `linx_neemo_buscar_pedidos` | domain_tools | Pedidos Linx Neemo por status |
-| `linx_product_search` | vendor_tools | Buscar produtos (Linx) |
-| `linx_sales_report` | vendor_tools | Relatório de vendas (Linx) |
-
-## M
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `math_calculator` | custom_tools | Cálculos matemáticos |
-| `mcp_database_wrapper` | domain_tools | Wrapper para bancos MCP |
-| `magalu_hub_buscar_produtos` | vendor_tools | Buscar produtos Magalu Hub |
-| `meus_postos_buscar` | domain_tools | Buscar postos (Meus Postos API) |
-
-## N
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `notion_search` | vendor_tools | Buscar no Notion |
-
-## O
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `openweather_api` | vendor_tools | Consultar clima (OpenWeather) |
-| `opta_buscar_competicoes` | vendor_tools | Ligas/competições (Opta) |
-| `opta_buscar_fixtures` | vendor_tools | Partidas/fixtures (Opta) |
-| `opta_buscar_classificacao` | vendor_tools | Standings (Opta) |
-| `opta_buscar_equipes` | vendor_tools | Equipes/seleções (Opta) |
-| `opta_buscar_jogadores` | vendor_tools | Jogadores (Opta) |
-
-## P
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `pandas_dataframe_agent` | domain_tools | Agente Pandas |
-| `pluggto_buscar_produtos` | vendor_tools | Buscar produtos Plugg.to |
-| `python_repl_domain_wrapper` | domain_tools | Executar código Python |
-| `pdf_reader` | domain_tools | Ler arquivos PDF |
-
-## Q
+# Manual técnico, executivo, comercial e estratégico: catálogo alfabético de tools
 
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| [**`qa_rag`**](../README-RAG.md) ⭐ | vector_store_tools | **Busca em docs (RAG)** |
-| `qa_rag_with_sources` | vector_store_tools | RAG com citações de fonte |
-| `qa_search` | vector_store_tools | Busca simples em vetores |
-
-## R
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `redis_cache_manager` | domain_tools | Gerenciar cache Redis |
-| `requests_get` | external_tools | HTTP GET (alias) |
-
-## S
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `slack_send_message` | vendor_tools | Enviar mensagem Slack |
-| `sportsradar_classificacao_competicao` | vendor_tools | Tabela Sportsradar |
-| `sportsradar_partidas_competicao` | vendor_tools | Agenda Sportsradar |
-| `sportsradar_perfil_jogador` | vendor_tools | Perfil de jogador |
-| `sportsradar_resumo_evento` | vendor_tools | Resumo de evento |
-| `sportsradar_times_competicao` | vendor_tools | Times da competição |
-| `sportmonks_classificacao_temporada` | vendor_tools | Tabela Sportmonks |
-| `sportmonks_jogador_por_id` | vendor_tools | Jogador Sportmonks |
-| `sportmonks_partida_por_id` | vendor_tools | Partida Sportmonks |
-| `sportmonks_partidas_por_data` | vendor_tools | Agenda Sportmonks |
-| `sportmonks_time_por_id` | vendor_tools | Time Sportmonks |
-| `sql_executor` | domain_tools | Executar SQL direto |
-| `string_inverter` | custom_tools | Inverter strings |
-
-## T
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `tavily_search_wrapper` | external_tools | Busca otimizada para IA |
-| `trello_create_card` | vendor_tools | Criar card no Trello |
-| `twitter_search` | external_tools | Buscar tweets recentes (API v2) |
-| `twitter_user_timeline` | external_tools | Timeline recente de usuário |
-| `twitter_mentions_search` | external_tools | Buscar menções a usuário |
-| `twitter_user_lookup` | external_tools | Consultar perfil público |
-
-## U
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `uber_buscar_produtos` | vendor_tools | Estimativas Uber por coordenada |
-| `ucp_discovery_tool` | vendor_tools | Descobrir manifesto UCP |
-| `uuid_generate` | custom_tools | IDs únicos |
-
-## V
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `vector_store_search` | vector_store_tools | Busca vetorial genérica |
-
-## W
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `whatsapp_send_text_message` | vendor_tools | Enviar texto WhatsApp |
-| `whatsapp_send_template_message` | vendor_tools | Enviar template WhatsApp |
-| `wikipedia_search` | external_tools | Buscar na Wikipedia |
-
-## X
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `xml_parser` | domain_tools | Processar arquivos XML |
-
-## Y
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `youtube_search_wrapper` | external_tools | Buscar vídeos YouTube |
-
-## Z
-
-| Ferramenta | Categoria | Uso Comum |
-| ------------ | ----------- | ----------- |
-| `zip_file_manager` | domain_tools | Gerenciar arquivos ZIP |
-| `zedelivery_buscar_pedidos` | domain_tools | Pedidos Zé Delivery por status |
-
----
-
-## 🔍 Pesquisa Rápida
-
-**Procurando por função?** Use **Ctrl+F** (Windows) ou **Cmd+F** (Mac)
-
-Exemplos:
-
-- "email" → encontra ferramentas de email
-- "sql" → encontra ferramentas de banco de dados
-- "whatsapp" → encontra ferramentas WhatsApp
-
----
-
-## 📊 Estatísticas
-
-| Categoria | Quantidade | % do Total |
-| --------- | ---------- | ---------- |
-| **vendor_tools** | 128 | 53.6% |
-| **domain_tools** | 62 | 25.9% |
-| **external_tools** | 39 | 16.3% |
-| **vector_store_tools** | 4 | 1.7% |
-| **custom_tools** | 4 | 1.7% |
-| **system_tools** | 2 | 0.8% |
-| **TOTAL** | **239** | **100%** |
-
----
-
-## ⭐ Ferramentas Mais Usadas (Top 20)
-
-Referência técnica completa:
-`docs/GUIA-USUARIO-TOOLS.md#referência-definitiva-top-20-canônico--alias`
-
-1. **`dyn_api<endpoint_id>`** (alias: `dyn_api<endpoint>`) - API REST dinâmica parametrizada por YAML ou `operation_code`
-2. **`dyn_sql<query_id>`** (alias: `dyn_sql<query>`) - SQL dinâmico parametrizado por YAML ou `query_code`
-3. **`proc_sql<procedure_id>`** (alias: `proc_sql<procedure>`) - Stored procedure dinâmica
-4. **`api_http_get`** - GET para APIs REST
-5. **`api_http_post_json`** - POST JSON para APIs REST
-6. **`http_get`** - GET HTTP genérico
-7. **`http_post`** - POST HTTP genérico
-8. **`duckduckgo_search_wrapper`** (alias: `duckduckgo_search`) - Busca web DuckDuckGo
-9. **`google_serper_wrapper`** (alias: `google_serper`) - Busca Google via Serper
-10. **`tavily_search_wrapper`** (alias: `tavily_search`) - Busca via Tavily
-11. **`brave_search_wrapper`** (alias: `brave_search`) - Busca via Brave
-12. **`json_parse`** - Parse e identação JSON
-13. **`json_validate`** - Validação JSON
-14. **`json_format`** - Formatação JSON
-15. **`json_minify`** - Compactação JSON
-16. **`pandas_dataframe_wrapper`** (alias: `pandas_dataframe_agent`) - Execução pandas via REPL
-17. **`pd_ler_planilha`** - Leitura de CSV/Excel
-18. **`pd_filtrar_planilha`** - Filtro de planilha
-19. **`pd_agrupar_somar`** - Agrupamento e soma
-20. **`pd_estatisticas_basicas`** - Estatísticas básicas de planilha
-
----
-
-## 🆘 Ajuda
-
-**Ferramenta não funciona?**
-
-1. Verifique o nome exato (case-sensitive)
-2. Consulte o [guia central de tools](../GUIA-USUARIO-TOOLS.md)
-3. Veja o [catálogo por finalidade](por_finalidade.md)
-
-**Precisa de uma ferramenta que não existe?**
-
-- Avalie primeiro se uma tool dinâmica resolve o caso ([SQL](sql_dinamico.md) ou [API](api_dinamica.md))
-- Se não resolver, o caminho técnico começa pela camada `src/agentic_layer/tools/`
-
----
-
-**[⬆️ Voltar ao Topo](#-lista-alfabética-de-ferramentas)** |
-**[🏠 Página Principal](../README.md)**
+## 1. O que é este catálogo
+
+Este documento é a porta de entrada para o catálogo de tools da plataforma visto pelo ângulo mais simples possível: ordem alfabética. Ele não é a fonte de verdade do runtime. A fonte de verdade continua sendo o código que declara tools com decorators, o builder que descobre essas implementações e o catálogo builtin persistido em banco.
+
+No código lido, o builder descobre 238 tools concretas a partir de src/agentic_layer/tools. Além dessas 238 ferramentas materializadas, o runtime também reconhece famílias parametrizadas que não aparecem como uma tool concreta no discovery, porque só se tornam reais quando recebem um identificador, como dyn_sql<query_id> e dyn_api<endpoint_id>.
+
+Em termos práticos, esta página responde à pergunta mais operacional de todas: qual nome usar quando eu preciso localizar uma tool ou conferir se ela existe no catálogo do projeto.
+
+## 2. Que problema este documento resolve
+
+Sem uma visão alfabética, a consulta do catálogo fica lenta por três motivos.
+
+- Quem já conhece o nome da tool precisa navegar por vários manuais temáticos até confirmar se ela existe.
+- Quem está depurando YAML, assembly agentic ou prompts perde tempo tentando descobrir se errou o nome ou se a tool realmente não existe.
+- Quem faz atendimento, demonstração ou suporte precisa de um ponto rápido para checar se um capability pedido pelo cliente já está coberto pelo catálogo.
+
+Este manual resolve isso organizando o inventário por ordem de nome, mas sem esconder o funcionamento real da plataforma.
+
+## 3. Como as tools entram na plataforma
+
+O ciclo observado no código é este:
+
+1. Um módulo Python declara uma tool direta com @tool ou uma factory com @tool_factory.
+2. O builder percorre src/agentic_layer/tools, identifica funções, classes e factories válidas e monta a lista descoberta.
+3. O sincronizador grava esse inventário em integrations.builtin_tool_registry, preservando metadados e estado administrativo.
+4. O cache compartilhado carrega o catálogo persistido do banco.
+5. A ConfigurationFactory exige que tools_library exista e chegue vazia no YAML recebido.
+6. O catálogo builtin ativo é então injetado automaticamente na raiz do YAML.
+7. O resolver de catálogo compõe o catálogo efetivo do alvo, respeitando precedência entre raiz, escopo local e catálogo builtin persistido.
+
+Esse desenho importa porque evita o problema clássico de catálogos divergentes: uma coisa no código, outra no YAML e outra na documentação.
+
+## 4. Visão técnica
+
+Tecnicamente, o catálogo atual se divide em seis grupos confirmados pelo builder.
+
+| Categoria | Quantidade descoberta no código | Significado prático |
+| --- | ---: | --- |
+| vendor_tools | 129 | integrações prontas com provedores externos e plataformas de negócio |
+| domain_tools | 60 | ferramentas específicas do domínio da plataforma, inclusive operação governada |
+| external_tools | 39 | busca web, navegação, scraping e chamadas HTTP genéricas |
+| vector_store_tools | 4 | recuperação RAG e busca vetorial |
+| custom_tools | 4 | utilidades especializadas do projeto |
+| system_tools | 2 | controles operacionais e interação humana |
+
+Há também três contratos parametrizados reconhecidos pelo validador agentic, mas não descobertos como tools concretas pelo builder.
+
+- dyn_sql<query_id>
+- dyn_api<endpoint_id>
+- proc_sql<procedure_id>
+
+Esses contratos existem para que o runtime crie a tool sob demanda a partir de configuração YAML ou de registros publicados em banco.
+
+## 5. Visão executiva
+
+Para liderança, este catálogo mostra maturidade de plataforma. O valor não está só na quantidade de tools, mas no fato de elas entrarem por um pipeline governado: descoberta automática, persistência central, ativação administrativa e injeção controlada no runtime.
+
+Na prática, isso reduz custo de implantação, acelera novas demos, melhora previsibilidade operacional e evita dependência de scripts isolados por projeto.
+
+## 6. Visão comercial
+
+Comercialmente, o catálogo é a prova de que a plataforma não depende de um único assistente genérico. Ela já traz blocos vendáveis para varejo, canais sociais, produtividade corporativa, observabilidade, esportes, integrações web e governança de dados.
+
+Isso ajuda a responder duas perguntas comuns de cliente.
+
+- A plataforma já vem com integrações reais ou tudo precisa ser desenvolvido do zero?
+- O agente só conversa ou ele também executa trabalho útil em sistemas de negócio?
+
+O catálogo comprovado no código sustenta a resposta: a plataforma já vem com um acervo operacional relevante e com mecanismo claro para crescer.
+
+## 7. Segmentos em destaque
+
+Os pedidos mais estratégicos observados nesta base hoje estão concentrados em quatro frentes.
+
+- Varejo: marketplace, food delivery, ecommerce e analytics governada com dyn_sql.
+- Social: WhatsApp Cloud, Instagram Graph, Chatwoot e Twitter/X.
+- Esportes: seis provedores com dados complementares de competição, partida, elenco, tabela e odds.
+- Governança: dyn_api, dyn_sql, RAG, observabilidade e catálogo builtin administrável.
+
+Se o objetivo for entender a lógica de negócio por trás das tools, a navegação mais útil não é esta página. Nesse caso, consulte [./por_finalidade.md](./por_finalidade.md), [./varejo.md](./varejo.md), [./social.md](./social.md), [./esportes.md](./esportes.md), [./sql_dinamico.md](./sql_dinamico.md) e [./api_dinamica.md](./api_dinamica.md).
+
+## 8. Catálogo alfabético consolidado
+
+### A
+
+- advanced_string_inverter
+- alloy_buscar_pedidos
+- amazon_sp_api_buscar_produtos
+- anp_revendedores_buscar
+- api_http_get
+- api_http_post_json
+- apisports_classificacao_liga
+- apisports_jogadores_por_time
+- apisports_partida_por_id
+- apisports_partidas_por_data
+- apisports_times_por_nome
+
+### B
+
+- brasilapi_consultar_cep
+- brasilapi_consultar_cnpj
+- brasilapi_consultar_feriados
+- brasilapi_listar_bancos
+- brave_search_wrapper
+- brightdata_webscraper_wrapper
+
+### C
+
+- calculator
+- cardapio_web_buscar_pedidos
+- chatwoot_atualizar_conversa
+- chatwoot_criar_contato
+- chatwoot_enviar_mensagem
+- chatwoot_health_check
+- chatwoot_listar_agentes
+- chatwoot_listar_contatos
+- chatwoot_listar_conversas
+- chatwoot_obter_conversa
+- clima_comparar_servicos
+- cnpj_validar_numero
+- consulta_remedios_buscar_medicamentos
+- cpf_validar_numero
+- crm_food_buscar_pedidos
+
+### D
+
+- datadog_criar_dashboard
+- datadog_enviar_metrica
+- dataforseo_search_answer
+- dataforseo_search_json
+- delivery_much_buscar_pedidos
+- duckduckgo_search_wrapper
+- dyn_api<endpoint_id>
+- dyn_sql<query_id>
+
+### E
+
+- ecommerce_health_check
+- enetpulse_buscar_classificacao
+- enetpulse_buscar_equipes
+- enetpulse_buscar_eventos
+- enetpulse_buscar_fixtures
+- enetpulse_buscar_odds
+
+### F
+
+- fazer_transferencia
+- food99_atualizar_status
+- food99_autenticar
+- food99_buscar_pedidos
+- food99_listar_pedidos
+- food99_obter_pedido
+- food99_sincronizar_cardapio
+
+### G
+
+- gdrive_fetch_files
+- gmail_search_emails
+- gmail_send_email
+- goalserve_classificacao_liga
+- goalserve_jogadores_por_time
+- goalserve_partida_por_id
+- goalserve_partidas_por_data
+- goalserve_times_por_nome
+- google_serper_wrapper
+- google_trends
+- goomer_atualizar_disponibilidade_em_lote
+- goomer_atualizar_status_pedido
+- goomer_autenticar
+- goomer_buscar_pedidos
+- goomer_definir_disponibilidade
+- goomer_listar_cardapios
+- goomer_listar_itens
+- goomer_listar_pedidos
+- goomer_obter_pedido
+
+### H
+
+- http_get
+- http_post
+- hubspot_associar_contato_negocio
+- hubspot_buscar_contato_por_email
+- hubspot_criar_contato
+- hubspot_criar_negocio
+- hubspot_registrar_nota
+- human_gate
+
+### I
+
+- ifood_atualizar_status_pedido
+- ifood_autenticar
+- ifood_buscar_eventos
+- ifood_confirmar_eventos
+- ifood_listar_eventos
+- ifood_listar_status_pedido
+- ifood_obter_pedido
+- ifood_obter_relatorio_financeiro
+- ifttt_trigger
+- instagram_fetch_insights
+- instagram_publish_media
+- instagram_send_direct_message
+
+### J
+
+- jira_get_projects
+- jira_issue_create
+- jira_search_issues
+- json_format
+- json_minify
+- json_parse
+- json_validate
+
+### K
+
+- keeta_buscar_pedidos
+
+### L
+
+- linx_delivery_hub_buscar_pedidos
+- linx_neemo_buscar_pedidos
+- loki_push_logs
+- loki_query_logs
+
+### M
+
+- magalu_hub_buscar_produtos
+- mercadopago_criar_preferencia
+- mercadopago_obter_pagamento
+- meus_postos_buscar
+
+### N
+
+- n8n_trigger
+
+### O
+
+- o365_list_events
+- o365_send_mail
+- o365_upload_file
+- observability_health_check
+- openweather_alertas
+- openweather_clima_atual
+- openweather_previsao
+- opta_buscar_classificacao
+- opta_buscar_competicoes
+- opta_buscar_equipes
+- opta_buscar_fixtures
+- opta_buscar_jogadores
+
+### P
+
+- pandas_dataframe_wrapper
+- pbi_execute_dax
+- pbi_list_datasets
+- pbi_refresh_dataset
+- pd_agrupar_somar
+- pd_converter_planilha
+- pd_criar_coluna
+- pd_estatisticas_basicas
+- pd_exportar_planilha_json
+- pd_filtrar_planilha
+- pd_inserir_linha
+- pd_ler_planilha
+- pd_salvar_planilha
+- pluggto_buscar_produtos
+- proc_sql<procedure_id>
+- pw_click
+- pw_close
+- pw_content
+- pw_extract_text
+- pw_navigate
+- pw_type
+- python_repl_domain_wrapper
+
+### Q
+
+- qa_multi_vector_store
+- qa_rag
+- qa_rag_with_sources
+- qa_search
+
+### R
+
+- rdstation_criar_negocio
+- rdstation_criar_ou_atualizar_lead
+- rdstation_registrar_nota
+- repediu_atualizar_disponibilidade_itens
+- repediu_atualizar_status_pedido
+- repediu_autenticar
+- repediu_listar_itens
+- repediu_listar_pedidos
+- repediu_obter_pedido
+
+### S
+
+- schema_rag_sql
+- sentry_capturar_erro
+- sentry_criar_release
+- shopify_atualizar_cliente
+- shopify_atualizar_estoque
+- shopify_atualizar_produto
+- shopify_atualizar_status_pedido
+- shopify_criar_cliente
+- shopify_criar_produto
+- shopify_delivery_atualizar_estoque
+- shopify_delivery_definir_disponibilidade
+- shopify_delivery_listar_pedidos
+- shopify_delivery_resumo_vendas
+- shopify_listar_clientes
+- shopify_listar_pedidos
+- shopify_listar_produtos
+- shopify_obter_pedido
+- shopify_obter_produto
+- shopify_remover_produto
+- smtp_fetch_emails
+- smtp_send_email
+- sportmonks_classificacao_temporada
+- sportmonks_jogador_por_id
+- sportmonks_partida_por_id
+- sportmonks_partidas_por_data
+- sportmonks_time_por_id
+- sportsradar_classificacao_competicao
+- sportsradar_partidas_competicao
+- sportsradar_perfil_jogador
+- sportsradar_resumo_evento
+- sportsradar_times_competicao
+- string_inverter
+- stripe_criar_payment_intent
+- stripe_criar_refund
+
+### T
+
+- tavily_search_wrapper
+- teams_create_online_meeting
+- teams_list_channels
+- teams_send_channel_message
+- teams_send_chat_message
+- trello_add_checkitem
+- trello_add_checklist
+- trello_add_comment
+- trello_add_label
+- trello_add_member
+- trello_attach_url
+- trello_create_card
+- trello_create_list
+- trello_get_board_lists
+- trello_get_card
+- trello_get_my_boards
+- trello_move_card_to_list
+- trello_remove_label
+- trello_remove_member
+- trello_search_cards
+- trello_update_card
+- twitter_mentions_search
+- twitter_search
+- twitter_user_lookup
+- twitter_user_timeline
+
+### U
+
+- uber_buscar_produtos
+- ucp_discovery_tool
+- uuid_generate
+
+### V
+
+- viacep_consultar_cep
+- vtex_atualizar_estoque
+- vtex_atualizar_status_pedido
+- vtex_buscar_cliente_por_email
+- vtex_listar_pedidos
+- vtex_listar_produtos
+- vtex_obter_pedido
+- vtex_obter_produto
+
+### W
+
+- weatherapi_clima_atual
+- weatherapi_previsao
+- whatsapp_send_template_message
+- whatsapp_send_text_message
+- woocommerce_atualizar_estoque
+- woocommerce_atualizar_produto
+- woocommerce_criar_produto
+- woocommerce_listar_clientes
+- woocommerce_listar_pedidos
+- woocommerce_listar_produtos
+- woocommerce_obter_pedido
+- woocommerce_obter_produto
+- woocommerce_remover_produto
+- write_todos
+
+### Y
+
+- youtube_search_wrapper
+
+### Z
+
+- zedelivery_buscar_pedidos
+
+## 9. Limites e pegadinhas
+
+- Esta lista mostra o catálogo descoberto no código, não o estado administrativo final de ativo ou desativado no banco.
+- dyn_sql<...>, dyn_api<...> e proc_sql<...> não são entradas concretas descobertas pelo builder; são contratos parametrizados do runtime.
+- Uma tool aparecer aqui não significa que qualquer tenant já tenha as credenciais, conexões ou registros necessários para usá-la.
+- Alguns domínios coexistem com duas trilhas complementares, como iFood operacional e iFood por SDK de eventos.
+
+## 10. Evidências no código
+
+- src/agentic_layer/tools/tools_library_builder.py
+  - Motivo da leitura: confirmar descoberta automática, categorias e total de tools concretas.
+  - Comportamento confirmado: o builder percorre src/agentic_layer/tools e monta o catálogo descoberto por @tool, @tool_factory, funções create_* e classes Tool.
+- src/agentic_layer/tools/tools_library_cache.py
+  - Motivo da leitura: confirmar a origem do catálogo efetivo do runtime.
+  - Comportamento confirmado: o catálogo builtin é carregado de integrations.builtin_tool_registry com cache thread-safe.
+- src/config/config_cli/configuration_factory.py
+  - Motivo da leitura: confirmar a injeção em tools_library.
+  - Comportamento confirmado: o YAML precisa trazer tools_library vazia e recebe injeção automática do catálogo ativo do banco.
+- src/config/agentic_assembly/tool_resolver.py
+  - Motivo da leitura: confirmar precedência entre raiz, escopo e catálogo builtin.
+  - Comportamento confirmado: tools locais sobrescrevem por id e o catálogo builtin preenche ausências.
