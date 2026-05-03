@@ -1,5 +1,13 @@
 # FAQ de Onboarding
 
+## Acesso rápido ao acervo completo
+
+Se você preferir explorar a documentação em um ambiente assistido, com
+apresentações, vídeos e materiais complementares centralizados, use este
+link:
+
+- [NotebookLM da documentação completa](https://notebooklm.google.com/notebook/24e1bedb-e415-49cd-9503-0b07593aa507)
+
 Esta FAQ não foi escrita para apontar em qual arquivo alguém deve mexer. Ela foi escrita para responder as dúvidas que realmente aparecem quando alguém tenta entender a plataforma como sistema.
 
 ## 1. O que esta plataforma é, na prática?

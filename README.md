@@ -1,5 +1,13 @@
 # Prometeu Generic RAG
 
+## Destaque: acervo completo no NotebookLM
+
+Se você quiser navegar a documentação em um ambiente assistido, com
+apresentações, vídeos e materiais complementares centralizados, use este
+acesso rápido:
+
+- [NotebookLM da documentação completa](https://notebooklm.google.com/notebook/24e1bedb-e415-49cd-9503-0b07593aa507)
+
 ## Leitura rápida recomendada
 
 Se você quer entender o produto em poucos minutos, esta é a sequência mais eficiente:
@@ -24,6 +32,9 @@ catálogos complementares que levam ao conjunto completo da documentação.
 - [docs/README-TESTS.MD](docs/README-TESTS.MD)
 - [docs/faq-onboarding.md](docs/faq-onboarding.md)
 - [docs/GUIA-COMERCIAL-PLATAFORMA.md](docs/GUIA-COMERCIAL-PLATAFORMA.md)
+- [docs/README-INVESTOR-BRIEF.md](docs/README-INVESTOR-BRIEF.md)
+- [docs/README-PLANO-DOCUMENTAL-COMERCIAL-INVESTIDOR.md](docs/README-PLANO-DOCUMENTAL-COMERCIAL-INVESTIDOR.md)
+- [docs/README-ESTUDOS-DE-CASO.md](docs/README-ESTUDOS-DE-CASO.md)
 - [docs/GUIA-DIDATICO-EXECUCAO-CANAIS.md](docs/GUIA-DIDATICO-EXECUCAO-CANAIS.md)
 - [docs/GUIA-USUARIO-TOOLS.md](docs/GUIA-USUARIO-TOOLS.md)
 - [docs/API-ENDPOINTS-SWAGGER.md](docs/API-ENDPOINTS-SWAGGER.md)
@@ -44,6 +55,7 @@ catálogos complementares que levam ao conjunto completo da documentação.
 - [docs/README-TECNICO-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md](docs/README-TECNICO-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md)
 - [docs/README-CONCEITUAL-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md](docs/README-CONCEITUAL-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md)
 - [docs/README-TECNICO-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md](docs/README-TECNICO-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md)
+- [docs/README-COMPLIANCE-E-SEGURANCA-ENTERPRISE.md](docs/README-COMPLIANCE-E-SEGURANCA-ENTERPRISE.md)
 - [docs/README-SCHEMA-BANCO.md](docs/README-SCHEMA-BANCO.md)
 
 ### Ingestão, ETL e produção de acervo
