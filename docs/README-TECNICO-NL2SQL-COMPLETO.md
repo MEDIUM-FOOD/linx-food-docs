@@ -222,14 +222,183 @@ Isso importa porque mostra que a feature nao e apenas API interna. Existe uma su
 
 ## 15. Como usar em outras bases de dados de ERP
 
-O reuso correto do slice segue esta logica.
+O reuso correto do slice para uma nova base de ERP segue uma trilha curta e repetivel. O exemplo PDV nao e o produto final. Ele e o molde canonico que mostra exatamente o que deve ser trocado para outro ERP.
 
-1. Preparar schema metadata da base de origem.
-2. Exportar o acervo por tabela e indexa-lo no vector store configurado.
-3. Criar ou apontar um YAML runtime com schema_metadata.vectorstore_id e sql_dialect.
-4. Chamar o endpoint dedicado com prompt, user_email, dialect e o contexto YAML.
+### 15.1. Passo 1: escolha um nome logico estavel
 
-O ganho e que o servico nao depende de nomes PDV especificos no contrato. O exemplo PDV e apenas um runtime concreto ja pronto no repositório.
+Antes de qualquer YAML, escolha dois identificadores.
+
+1. database_code: identifica a base no catalogo dbschemas.
+2. vectorstore_id: identifica o acervo vetorial consumido pelo NL2SQL.
+
+No exemplo canônico, os dois papéis ficam assim:
+
+- database_code = pdv_demo
+- vectorstore_id = schema_metadata_pdv
+
+Para outro ERP, o padrao correto e manter nomes semanticamente estaveis, por exemplo:
+
+- database_code = erp_financeiro
+- vectorstore_id = schema_metadata_erp_financeiro
+
+### 15.2. Passo 2: crie o ETL de schema metadata
+
+O jeito mais direto e copiar o molde de [app/yaml/rag-config-pdv-schema-metadata-etl.yaml](app/yaml/rag-config-pdv-schema-metadata-etl.yaml) e trocar somente os campos de identidade e conexao.
+
+Trecho minimo que realmente importa:
+
+```yaml
+extract_transform_load:
+  enabled: true
+  schema_metadata:
+    enabled: true
+    source_database:
+      database_dsn: "${ERP_DATABASE_DSN}"
+      database_type: "postgresql"
+      database_name: "ERP Financeiro"
+      schema: "public"
+      include_sample_rows: false
+      tables:
+        - "*"
+    target_database:
+      database_dsn: "${DBSCHEMAS_DSN}"
+      database_type: "postgresql"
+      database_name: "DBSchemas"
+      database_code: "erp_financeiro"
+      schema: "dbschemas"
+```
+
+O que trocar neste passo:
+
+1. source_database.database_dsn
+2. source_database.database_type
+3. source_database.database_name
+4. source_database.schema
+5. target_database.database_code
+6. client_context.client quando o tenant precisar ser explicito
+
+Se voce quer o caminho mais seguro para ERP, mantenha include_sample_rows=false no inicio. Isso reduz risco de expor dado real enquanto o catalogo ainda esta sendo estabilizado.
+
+### 15.3. Passo 3: materialize e indexe o schema no vector store
+
+Depois do ETL estrutural, copie o molde de [app/yaml/rag-config-pdv-schema-metadata-ingest.yaml](app/yaml/rag-config-pdv-schema-metadata-ingest.yaml) e aponte para o mesmo database_code.
+
+Trecho minimo:
+
+```yaml
+vector_store:
+  id: "schema_metadata_erp_financeiro"
+
+ingestion:
+  dynamic_data:
+    enabled: true
+    sources:
+      - script: "src/ingestion_layer/schema_metadata/schema_metadata_exporter.py:SchemaMetadataJsonExporter"
+        enabled: true
+        output_mode: "memory"
+        parameters:
+          dbschemas_dsn: "${DBSCHEMAS_DSN}"
+          database_code: "erp_financeiro"
+          schema_name: "public"
+          include_sample_rows: false
+```
+
+O detalhe que nao pode quebrar e este: database_code do exportador e vectorstore_id do YAML de ingestao precisam ser coerentes com o passo anterior. Se isso divergir, o runtime de NL2SQL vai consultar um acervo diferente do catalogo que voce acabou de gerar.
+
+### 15.4. Passo 4: crie o runtime de NL2SQL
+
+Agora copie o molde de [app/yaml/rag-config-pdv-nl2sql.yaml](app/yaml/rag-config-pdv-nl2sql.yaml) e troque o bloco schema_metadata e o vector_store correspondente.
+
+Trecho minimo:
+
+```yaml
+schema_metadata:
+  enabled: true
+  vectorstore_id: "schema_metadata_erp_financeiro"
+  sql_dialect: "postgresql"
+
+vector_store:
+  type: "qdrant"
+  id: "schema_metadata_erp_financeiro"
+
+llm:
+  provider: "openai"
+```
+
+Se este YAML estiver correto, o endpoint dedicado de NL2SQL ja consegue trabalhar sobre a nova base, desde que o vector store realmente contenha documentos schema_metadata validos.
+
+### 15.5. Passo 5: pergunte em linguagem natural pelo endpoint dedicado
+
+O contrato mais simples para smoke test do onboarding e o endpoint [src/api/routers/config_nl2sql_router.py](src/api/routers/config_nl2sql_router.py).
+
+Exemplo de payload:
+
+```json
+{
+  "prompt": "Qual foi o faturamento por filial no ultimo mes?",
+  "user_email": "consultor@cliente.com",
+  "dialect": "postgresql",
+  "top_k": 5,
+  "yaml_config_path": "app/yaml/rag-config-erp-financeiro-nl2sql.yaml"
+}
+```
+
+Se o retorno vier com diagnostics como NL2SQL_VECTORSTORE_SELECTED e NL2SQL_SQL_GUARDRAIL_ALLOWED, o encadeamento minimo de NL2SQL esta funcional.
+
+### 15.6. Passo 6: ligue isso a um agente, se quiser resposta agentic
+
+Se a meta nao e apenas usar o endpoint dedicado, mas fazer um agente responder perguntas em NL sobre a nova base, o ponto central e a tool schema_rag_sql.
+
+O validator do assembly confirma tres obrigatoriedades quando a tool aparece no agente ou supervisor:
+
+1. schema_metadata.enabled=true
+2. schema_metadata.vectorstore_id preenchido
+3. schema_metadata.sql_dialect valido entre postgresql, mysql ou mssql
+
+Exemplo minimo de configuracao agentic:
+
+```yaml
+schema_metadata:
+  enabled: true
+  vectorstore_id: "schema_metadata_erp_financeiro"
+  sql_dialect: "postgresql"
+
+multi_agents:
+  - id: "supervisor_erp"
+    execution:
+      type: "agent"
+    agents:
+      - id: "especialista_sql"
+        description: "Responde perguntas sobre a base ERP via NL2SQL."
+        tools:
+          - "schema_rag_sql"
+```
+
+O ganho aqui e importante: o mesmo acervo de schema metadata serve tanto para o endpoint administrativo de NL2SQL quanto para um agente especialista em dados.
+
+### 15.7. O caminho mais facil de validacao antes de indexar tudo
+
+Para reduzir erro de onboarding, existe uma rota mais simples para o primeiro passo estrutural: [src/api/routers/schema_metadata_router.py](src/api/routers/schema_metadata_router.py).
+
+Ela expoe pelo menos estas operacoes uteis.
+
+1. /schema-metadata/preview/tables para listar tabelas da fonte.
+2. /schema-metadata/ingest para ingerir o schema completo em dbschemas.
+3. /schema-metadata/ingest/table para uma tabela especifica.
+
+Isso ajuda a validar conexao, schema e filtro de tabelas antes de rodar a trilha completa de exportacao vetorial.
+
+### 15.8. Resumo ultra direto
+
+Se voce quiser o resumo mais objetivo possivel, e este.
+
+1. Gere schema metadata para a nova base.
+2. Indexe esse schema em um vector store proprio.
+3. Aponte schema_metadata.vectorstore_id para esse acervo.
+4. Defina sql_dialect corretamente.
+5. Use /config/nl2sql/generate ou a tool schema_rag_sql no agente.
+
+O ganho e que o servico nao depende de nomes PDV especificos no contrato. O exemplo PDV e apenas um runtime concreto ja pronto no repositorio.
 
 ## 16. O que o slice nao faz
 
@@ -238,6 +407,7 @@ O ganho e que o servico nao depende de nomes PDV especificos no contrato. O exem
 3. Nao garante suporte universal a qualquer dialeto so porque a arquitetura e generica.
 4. Nao elimina a necessidade de qualidade minima do acervo de schema metadata.
 5. Nao compensa sozinho um catalogo pobre, sem descricoes e sem relacoes bem materializadas.
+6. Nao dispensa a etapa de ETL e ingestao de schema metadata. Se voce pular essa preparacao, o agente perde justamente o contexto que torna o NL2SQL forte.
 
 ## 17. O que acontece em caso de sucesso
 

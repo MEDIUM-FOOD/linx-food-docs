@@ -143,6 +143,54 @@ O ponto de generalidade esta no contrato.
 
 Por isso, o slice serve muito bem para bases de dados de ERP em geral, desde que o schema tenha sido materializado como schema metadata e que o dialeto esteja dentro do suporte confirmado.
 
+### 11.1. O caminho mais simples para uma nova base ERP
+
+Se a pergunta pratica for "o que eu preciso fazer para um agente responder em linguagem natural sobre uma nova base ERP?", o codigo lido reduz isso a uma sequencia bem objetiva.
+
+1. Escolher um identificador logico para a base, como database_code.
+2. Extrair o schema para o catalogo dbschemas.
+3. Indexar esse schema em um vector store proprio de schema metadata.
+4. Apontar o runtime NL2SQL ou o agente para esse mesmo vectorstore_id.
+5. Fazer a pergunta em linguagem natural.
+
+O ponto mais importante e que o runtime nao exige modelagem manual tabela por tabela dentro do prompt. O trabalho pesado fica concentrado em uma preparacao tecnica que a plataforma ja sabe fazer.
+
+### 11.2. Os tres artefatos que tornam isso simples
+
+O caso canonico do repositório mostra que a ativacao controlada de NL2SQL para uma base nova pode ser pensada em tres artefatos, nao em dezenas.
+
+1. Um YAML de ETL de schema metadata.
+2. Um YAML de ingestao vetorial de schema metadata.
+3. Um YAML de runtime para NL2SQL ou agente.
+
+Na pratica, isso deixa o onboarding muito mais simples do que escrever prompts enormes ou cadastrar manualmente cada consulta. Voce troca alguns identificadores centrais e reaproveita o mesmo desenho.
+
+### 11.3. O que realmente muda de um ERP para outro
+
+No slice lido, a arquitetura nao muda por dominio. O que muda, em geral, e apenas o conjunto abaixo.
+
+1. DSN da base de origem.
+2. Tipo do banco e dialeto SQL.
+3. Nome logico da base e schema alvo.
+4. database_code.
+5. vectorstore_id.
+6. Credenciais do provedor de embeddings e do runtime.
+
+Isso e o que torna a feature poderosa para ERP: a plataforma nao esta acoplada a PDV, fiscal, estoque ou vendas. Ela reaproveita o mesmo pipeline para qualquer base relacional empresarial dentro do suporte confirmado.
+
+### 11.4. Como pensar o schema metadata sem complicacao
+
+Schema metadata, aqui, nao deve ser visto como uma tarefa burocratica extra. Ele e o catalogo tecnico que faz o NL2SQL funcionar bem em bases grandes.
+
+Em linguagem simples, o papel dele e este.
+
+1. Descobrir as tabelas reais.
+2. Descobrir as colunas reais.
+3. Descobrir relacoes como PK e FK.
+4. Transformar isso em documentos pesquisaveis.
+
+Sem isso, o agente teria de chutar o caminho tecnico da consulta. Com isso, ele recupera o trecho certo da base antes de propor a SQL.
+
 ## 12. O que o codigo confirma e o que ele ainda nao confirma
 
 O codigo confirma claramente estas coisas.
@@ -217,6 +265,20 @@ Fluxo: o LLM pode ate devolver uma SQL destrutiva, mas o guardrail central a blo
 
 Valor: a interface continua assistiva sem abrir canal mutavel por linguagem natural.
 
+### 19.4. Nova base de ERP em onboarding
+
+Cenario: a empresa quer perguntar em linguagem natural sobre uma nova base de ERP qualquer, como financeiro, estoque ou faturamento.
+
+Fluxo:
+
+1. O time cadastra o schema dessa base no pipeline de schema metadata.
+2. O exportador gera documentos por tabela.
+3. A ingestao indexa esses documentos no vector store escolhido.
+4. O YAML runtime aponta para esse mesmo vectorstore_id.
+5. O agente ou o endpoint dedicado passa a responder perguntas em NL sobre essa base.
+
+Valor: o esforço de onboarding fica concentrado na preparacao do schema, nao em criar prompt artesanal por modulo de ERP.
+
 ## 20. Explicacao 101
 
 Imagine uma base de ERP como uma cidade enorme e confusa. Sem NL2SQL, a pessoa precisa conhecer todas as ruas tecnicas para chegar ao dado certo. Com este slice, a pergunta do usuario primeiro vira uma busca pelos bairros mais relevantes dessa cidade, depois o sistema monta uma rota tecnica inicial em forma de SQL, e por fim um fiscal confere se essa rota nao faz nada perigoso. E por isso que ele funciona melhor em bases muito grandes do que abordagens ingenuas que tentam mostrar a cidade inteira de uma vez.
@@ -228,6 +290,7 @@ Imagine uma base de ERP como uma cidade enorme e confusa. Sem NL2SQL, a pessoa p
 3. O slice melhora muito a navegacao em bases grandes, mas nao elimina a necessidade de revisao humana.
 4. O endpoint dedicado valida explicitamente apenas postgresql, mysql e mssql.
 5. O pipeline de metadata lido nesta tarefa mostra readers para PostgreSQL, SQL Server e Oracle, o que indica uma assimetria de suporte que nao pode ser escondida.
+6. Para uso agentic com a tool schema_rag_sql, o supervisor ou agente tambem precisa declarar schema_metadata.enabled, vectorstore_id e sql_dialect. O validator falha cedo se isso nao existir.
 
 ## 22. Checklist de entendimento
 

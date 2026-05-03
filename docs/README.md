@@ -137,6 +137,7 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 ### 9.1 Plataforma, arquitetura e operação
 
 - [../README.md](../README.md): visão executiva da plataforma e catálogo mestre consolidado.
+- [README-PLATAFORMA-AGENTES-IA.md](./README-PLATAFORMA-AGENTES-IA.md): pitch comercial estratégico da plataforma como base de agentes de IA para software houses de varejo, PDV e ERP.
 - [README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md](./README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md): manual conceitual, executivo, comercial e estratégico da arquitetura macro e da stack do projeto.
 - [README-TECNICO-ARQUITETURA-STACK-PROJETO.md](./README-TECNICO-ARQUITETURA-STACK-PROJETO.md): manual técnico e operacional da topologia multiprocesso, infraestrutura obrigatória e stack confirmada do projeto.
 - [README-CONCEITUAL-BYOK-ISOLAMENTO-CUSTOS-TENANT.md](./README-CONCEITUAL-BYOK-ISOLAMENTO-CUSTOS-TENANT.md): manual conceitual, executivo, comercial e estratégico sobre separação de credenciais, BYOK e isolamento de custos por tenant.
@@ -219,6 +220,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 
 ### 9.5 Tools, schemas, integrações e superfícies especializadas
 
+- [README-CONCEITUAL-TOOLS-NATIVAS-VAREJO-SOCIAIS-ERP.md](./README-CONCEITUAL-TOOLS-NATIVAS-VAREJO-SOCIAIS-ERP.md): manual conceitual, executivo, comercial e estratégico do catálogo builtin de tools com foco em varejo, canais sociais e operação orientada a ERP.
+- [README-TECNICO-TOOLS-NATIVAS-VAREJO-SOCIAIS-ERP.md](./README-TECNICO-TOOLS-NATIVAS-VAREJO-SOCIAIS-ERP.md): manual técnico e operacional do catálogo builtin, da tabela `integrations.builtin_tool_registry`, da injeção automática e das principais families nativas desses domínios.
 - [README-DYNAMIC-API-TOOLS.md](./README-DYNAMIC-API-TOOLS.md): tools dinâmicas orientadas a APIs.
 - [README-CONCEITUAL-DYNAMIC-API-TOOLS.md](./README-CONCEITUAL-DYNAMIC-API-TOOLS.md): manual conceitual, executivo, comercial e estratégico do dyn_api como capability governada.
 - [README-TECNICO-DYNAMIC-API-TOOLS.md](./README-TECNICO-DYNAMIC-API-TOOLS.md): manual técnico e operacional do dyn_api, incluindo runtime, auth profiles, registro persistido, retry e boundaries administrativos.
