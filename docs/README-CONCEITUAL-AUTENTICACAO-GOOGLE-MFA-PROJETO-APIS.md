@@ -49,6 +49,8 @@ Esse desacoplamento prepara o produto para crescer em quatro direções.
 3. Reaproveitar a mesma sessão humana em áreas administrativas diferentes.
 4. Integrar autenticação humana com governança multi-tenant e autorização já existente.
 
+Esse ponto é mais importante do que parece. No código atual, a mesma sessão emitida no login não serve apenas para abrir páginas HTML. Ela também sustenta leitura e atualização de perfil pessoal, cartões de pagamento da conta e governança administrativa de memberships e permissões. Em termos estratégicos, isso transforma autenticação em fundação transversal do portal humano, e não em um formulário isolado.
+
 ## 6. Conceitos necessários para entender
 
 ### Login federado
@@ -103,9 +105,13 @@ Depois que a prova inicial passa, o sistema resolve ou reforça dados internos, 
 
 A sessão web é o objeto operacional que o restante do backend entende. Ela inclui email, provider_id, expiração, snapshot de permissões efetivas, user_account_id, tenant_id e outros metadados úteis para a navegação autenticada.
 
+Na prática, isso permite que o mesmo contrato de sessão alimente não só a proteção de páginas HTML, mas também endpoints autenticados de perfil e governança administrativa sem precisar reinventar um segundo mecanismo de identidade para cada subárea do produto.
+
 ### 8.4. Decisão de MFA
 
 Aqui o sistema consulta o estado TOTP persistido e a política global. Essa etapa existe para separar autenticação principal de autenticação reforçada. O ganho prático é grande: o MFA vira um degrau complementar, não um login independente.
+
+Durante o setup inicial existe um detalhe relevante: o sistema usa uma sessão temporária real e um cache efêmero de ativação. Isso significa que o onboarding do segundo fator não depende de artifício de frontend para “lembrar” o segredo enquanto o usuário escaneia o QR Code. O backend segura esse estado por uma janela curta e controlada.
 
 ### 8.5. Navegação protegida por middleware
 
@@ -151,7 +157,7 @@ Custo: o frontend precisa entender estados intermediários, como mfa_challenge e
 
 Ganho: o segredo temporário não precisa ir direto ao banco antes da confirmação do usuário.
 
-Custo: existe risco operacional de expiração durante o onboarding, que o frontend precisa tratar.
+Custo: existe risco operacional de expiração durante o onboarding, que o frontend precisa tratar. Além disso, a janela curta de ativação exige cuidado porque o cache efêmero mantém o segredo plain temporariamente até a confirmação.
 
 ### Bypass local de desenvolvimento
 
@@ -265,6 +271,7 @@ O resultado é uma entrada mais segura e mais organizada. O Google ajuda a prova
 3. O bypass local não é atalho de produção; é mecanismo explícito de desenvolvimento em loopback.
 4. Autenticação não é autorização. Entrar no sistema não significa, por si só, permissão para toda operação interna.
 5. Existe método de disable no serviço TOTP, mas não foi confirmado endpoint HTTP público para autosserviço de desligamento.
+6. O parâmetro next do gateway não é redirecionamento livre. A UI saneia esse valor para ficar no mesmo origin, então qualquer tentativa de tratá-lo como escape para site externo está conceitualmente errada.
 
 ## 22. Troubleshooting
 
@@ -308,8 +315,8 @@ Como confirmar: verificar nome do cookie, TTL, SameSite, Secure e leitura pelo F
   - Comportamento confirmado: valida audience, issuer, expiração, emissão, domínio permitido e e-mail verificado.
 - src/api/routers/auth_router.py
   - Motivo da leitura: seguir o entrypoint real do login humano e dos endpoints de MFA.
-  - Símbolo relevante: create_federated_session, create_local_session, start_totp_activation e confirm_totp_code.
-  - Comportamento confirmado: login web converge para sessão própria e pode exigir MFA antes do cookie final.
+  - Símbolo relevante: create_federated_session, create_local_session, start_totp_activation, confirm_totp_code, get_account_profile e list_admin_memberships.
+  - Comportamento confirmado: login web converge para sessão própria e a mesma sessão sustenta superfícies autenticadas de perfil e governança.
 - src/api/middleware/federated_session.py
   - Motivo da leitura: entender enforcement da navegação HTML protegida.
   - Símbolo relevante: FederatedSessionMiddleware.
@@ -320,5 +327,5 @@ Como confirmar: verificar nome do cookie, TTL, SameSite, Secure e leitura pelo F
   - Comportamento confirmado: usa cache efêmero para setup, persistência auditável e limitador de tentativas.
 - app/ui/static/js/auth-gateway.js
   - Motivo da leitura: confirmar o fluxo real do frontend com Google e MFA.
-  - Símbolo relevante: executarFluxoGis, finalizeAuthenticatedPayload, renderTotpSetup.
-  - Comportamento confirmado: o gateway entende estados ok, mfa_setup_required e mfa_challenge.
+  - Símbolo relevante: executarFluxoGis, finalizeAuthenticatedPayload, renderTotpSetup, sanitizeRedirect.
+  - Comportamento confirmado: o gateway entende estados ok, mfa_setup_required e mfa_challenge, mostra fallback do GIS e restringe o redirect ao mesmo origin.

@@ -147,6 +147,13 @@ No registro persistido, a operacao HTTP observada no codigo possui campos releva
 - timeout_seconds;
 - publish_to_agents.
 
+No banco, essa operacao vive na tabela integrations.api_operation_registry. Esse e o ativo central do dyn_api por registro. Em termos praticos, e essa tabela que o resolvedor consulta quando o endpoint nao esta no YAML local.
+
+Dois pontos sao especialmente importantes nessa tabela.
+
+1. swagger_source_id e swagger_operation_id preservam o vinculo com a origem OpenAPI quando a operacao veio de importacao.
+2. publish_to_agents separa cadastro administrativo de capability realmente exposta ao runtime agentic.
+
 O perfil de autenticacao governado observado possui campos como:
 
 - auth_profile_code;
@@ -160,6 +167,10 @@ O perfil de autenticacao governado observado possui campos como:
 - secret_ref;
 - credentials_json_encrypted;
 - cache_ttl_seconds.
+
+Esse contrato vive na tabela integrations.api_auth_profile_registry. Ela existe para evitar que cada operacao replique segredo, token e estrategia de autenticacao.
+
+Quando a operacao veio de importacao OpenAPI, a origem do documento fica em integrations.api_swagger_source_registry, que guarda swagger_code, source_type, source_uri ou source_file_name, document_hash, openapi_version e raw_document_json. Isso e importante para auditoria, reimportacao e rastreabilidade.
 
 ### 7.4 Boundaries administrativos confirmados
 
@@ -179,6 +190,10 @@ O codigo lido confirma dois boundaries principais para governanca administrativa
 
 - /admin/integrations/actions/swagger/import
   - Importa especificacao Swagger para o catalogo governado sem publicar automaticamente para agentes.
+
+- /client-portal/integrations/swagger-import
+  - Importa especificacao Swagger remota para o catalogo do tenant no boundary do portal do cliente.
+  - Tambem nao publica automaticamente para agentes.
 
 ## 8. O que acontece em caso de sucesso
 
@@ -215,6 +230,14 @@ Sintoma: o cadastro existe, mas o runtime continua recusando a exposicao.
 Causa provavel: publish_to_agents falso ou is_active falso.
 
 Reacao do sistema: o resolvedor trata o registro como inelegivel para dyn_api.
+
+### Operacao importada via Swagger, mas ainda invisivel ao runtime
+
+Sintoma: a operacao aparece administrativamente, mas dyn_api continua falhando ao materializar.
+
+Causa provavel: importacao bem-sucedida, porem publish_to_agents permaneceu falso, que e exatamente o comportamento padrao da esteira de importacao.
+
+Reacao do sistema: a operacao fica cadastrada e rastreavel, mas nao e exposta ao runtime agentic.
 
 ### protocol_type fora de rest_json
 
@@ -272,6 +295,8 @@ Se o contrato parece correto, revise timeout, URL base, path template, placehold
 
 Quando a operacao vem do catalogo persistido, use os endpoints administrativos para listar operacoes, conferir status, revisar auth profiles e disparar teste seguro da operacao. Isso ajuda a isolar erro de cadastro de erro de runtime agentic.
 
+Se a operacao nasceu de OpenAPI, inclua mais uma pergunta no diagnostico: a origem Swagger foi importada corretamente e a operacao resultante foi de fato publicada para agentes? Sem essa checagem, e comum confundir cadastro importado com capability liberada.
+
 ## 11. Configuracoes que mudam o comportamento
 
 ### publish_to_agents
@@ -298,6 +323,10 @@ Controlam se a autenticacao sera estatica, por api key, basic, bearer, oauth ou 
 
 Influencia o reaproveitamento de token quando a autenticacao dinamica usa cache.
 
+### swagger_source_id e swagger_operation_id
+
+Nao mudam a execucao HTTP diretamente, mas mudam rastreabilidade e manutencao do catalogo. Eles dizem se a operacao veio de importacao OpenAPI e permitem relacionar o registro atual com a fonte de contrato que o originou.
+
 ## 12. Troubleshooting
 
 ### A tool dyn_api e reconhecida, mas o endpoint nao materializa
@@ -319,6 +348,13 @@ Isole Redis e o endpoint de autenticacao. A chamada principal pode estar correta
 ### A operacao veio do Swagger, mas nao aparece para agentes
 
 O import Swagger nao publica automaticamente para agentes. Depois da importacao, ainda e necessario validar o cadastro, revisar status e publicar a operacao de forma coerente com a governanca.
+
+Na pratica, o comportamento confirmado e este.
+
+1. a origem vai para integrations.api_swagger_source_registry;
+2. as operacoes vao para integrations.api_operation_registry;
+3. a importacao e idempotente e pode atualizar registros ja existentes;
+4. as operacoes importadas continuam com publish_to_agents=false ate revisao posterior.
 
 ## 13. Impacto tecnico
 
@@ -357,6 +393,30 @@ Processamento: o resolvedor encontra o registro, mas o considera inelegivel.
 Saida: a tool nao e publicada para o agente.
 
 Impacto: a plataforma protege o ambiente contra exposicao acidental.
+
+### Exemplo 4: importacao Swagger de API de clientes
+
+Cenario: o time quer acelerar cadastro de uma API de clientes sem preencher manualmente cada operacao.
+
+Entrada: um documento OpenAPI e enviado ao endpoint administrativo de importacao ou ao endpoint do portal do cliente.
+
+Processamento: o servico cria ou atualiza a origem na tabela integrations.api_swagger_source_registry, gera operacoes em integrations.api_operation_registry e preserva o vinculo por swagger_source_id.
+
+Saida: as operacoes ficam catalogadas e rastreaveis, mas ainda nao publicadas para agentes.
+
+Impacto: onboarding mais rapido sem perder o gate de governanca.
+
+### Exemplo 5: e-commerce consultando status de pedido
+
+Cenario: um assistente operacional precisa consultar status, entrega e situacao de pagamento numa API interna de commerce.
+
+Entrada: o agente referencia dyn_api para uma operacao HTTP ja homologada e publicada.
+
+Processamento: o runtime resolve operation_code, autentica com profile compartilhado e chama a operacao REST.
+
+Saida: a resposta volta ao agente como capacidade governada, sem criar um conector Python dedicado para esse endpoint.
+
+Impacto: menor backlog de integracoes pequenas e mais velocidade para operar jornadas digitais.
 
 ## 15. Explicacao 101
 
@@ -416,6 +476,16 @@ dyn_api e como uma tomada padronizada para operacoes HTTP aprovadas. Em vez de p
   - Motivo da leitura: confirmar teste seguro e importacao Swagger.
   - Simbolo relevante: /api-operations/test e /swagger/import.
   - Comportamento confirmado: teste controlado e importacao sem publicacao automatica.
+
+- src/integrations/schema.py
+  - Motivo da leitura: confirmar as tabelas reais do catalogo dyn_api.
+  - Simbolo relevante: api_operation_registry, api_auth_profile_registry e api_swagger_source_registry.
+  - Comportamento confirmado: as tres tabelas existem com chaves, checks e relacionamentos dedicados no schema integrations.
+
+- src/integrations/swagger_import_service.py
+  - Motivo da leitura: confirmar semantica exata da importacao OpenAPI.
+  - Simbolo relevante: SwaggerImportApplicationService.execute.
+  - Comportamento confirmado: a importacao e idempotente, cria ou atualiza operacoes e grava publish_to_agents=false para registros importados.
 
 ## 18. Lacunas reais encontradas
 

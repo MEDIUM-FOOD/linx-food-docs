@@ -108,9 +108,8 @@ A ordem mais produtiva costuma ser esta.
 
 Esses dois assuntos se cruzam, mas não são a mesma coisa.
 
-- [README-AG-UI.md](./README-AG-UI.md) cobre o protocolo de interface orientado a eventos e o sidecar compartilhado.
-- [README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md) explica o AG-UI com referencial oficial do ecossistema, a implementação local e o valor em telas ERP.
-- [README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md) detalha endpoint, lifecycle, adapter, SSE, telas ERP e troubleshooting do slice AG-UI.
+- [README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md) explica o protocolo AG-UI implementado na plataforma, o valor dele para integrações agentic e seu encaixe forte em ERP, PDV, e-commerce e autoatendimento.
+- [README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md) detalha endpoint, lifecycle, adapter, SSE, dashboard dinâmico, vantagens de integração e troubleshooting do slice AG-UI.
 - [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md) cobre a pausa humana, o envelope de aprovação e a retomada governada.
 - [README-CONCEITUAL-HIL-APIS-WHATSAPP.md](./README-CONCEITUAL-HIL-APIS-WHATSAPP.md) explica como a pausa humana aparece no boundary de APIs e no uso com WhatsApp sob perspectiva de valor e governança.
 - [README-TECNICO-HIL-APIS-WHATSAPP.md](./README-TECNICO-HIL-APIS-WHATSAPP.md) detalha o fluxo técnico de HIL em APIs e na continuidade operacional com WhatsApp.
@@ -140,6 +139,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [../README.md](../README.md): visão executiva da plataforma e catálogo mestre consolidado.
 - [README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md](./README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md): manual conceitual, executivo, comercial e estratégico da arquitetura macro e da stack do projeto.
 - [README-TECNICO-ARQUITETURA-STACK-PROJETO.md](./README-TECNICO-ARQUITETURA-STACK-PROJETO.md): manual técnico e operacional da topologia multiprocesso, infraestrutura obrigatória e stack confirmada do projeto.
+- [README-CONCEITUAL-BYOK-ISOLAMENTO-CUSTOS-TENANT.md](./README-CONCEITUAL-BYOK-ISOLAMENTO-CUSTOS-TENANT.md): manual conceitual, executivo, comercial e estratégico sobre separação de credenciais, BYOK e isolamento de custos por tenant.
+- [README-TECNICO-BYOK-ISOLAMENTO-CUSTOS-TENANT.md](./README-TECNICO-BYOK-ISOLAMENTO-CUSTOS-TENANT.md): manual técnico e operacional do fluxo que resolve tenant_id, injeta contexto no YAML, carrega segredos do tenant e rastreia consumo.
 - [README-SERVICE-API.md](./README-SERVICE-API.md): boundary HTTP, responsabilidades da API e como o runtime expõe capacidades para clientes e operação.
 - [README-LOGGING.md](./README-LOGGING.md): rastreabilidade, correlação e leitura operacional de logs.
 - [README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md): manual conceitual, executivo, comercial e estratégico da arquitetura de logging com correlation_id, arquivo local e providers remotos.
@@ -201,6 +202,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para seguir o fluxo técnico entre tool, scheduler, worker, finalização HIL e componentes reutilizáveis de AG-UI.
 - [README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do DeepAgent Supervisor completo.
 - [README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual técnico e operacional do DeepAgent Supervisor completo, incluindo AST, runtime, HIL e memória persistente.
+- [README-CONCEITUAL-EXEMPLOS-YAML-DEEPAGENT-ERP.md](./README-CONCEITUAL-EXEMPLOS-YAML-DEEPAGENT-ERP.md): manual conceitual, executivo, comercial e estratégico com leitura orientada por exemplos YAML reais de DeepAgent aplicados a ERP, cockpit e PDV.
+- [README-TECNICO-EXEMPLOS-YAML-DEEPAGENT-ERP.md](./README-TECNICO-EXEMPLOS-YAML-DEEPAGENT-ERP.md): manual técnico e operacional que disseca os YAMLs reais do DeepAgent em food service, retail, cockpit por API e AG-UI PDV.
 - [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md): workflow determinístico baseado em grafo.
 - [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do agente workflow completo.
 - [README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md](./README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md): manual técnico, operacional e de sintaxe do agente workflow completo.
@@ -235,9 +238,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 
 ### 9.6 Interface, pausa humana e canais externos
 
-- [README-AG-UI.md](./README-AG-UI.md): protocolo e arquitetura de interface agentic.
-- [README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md): manual conceitual, executivo, comercial e estratégico do AG-UI com foco em Google, Microsoft e uso em ERP.
-- [README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md): manual técnico, operacional e de uso do AG-UI com foco em Google, Microsoft e telas ERP.
+- [README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md): manual conceitual, executivo, comercial e estratégico do protocolo AG-UI da plataforma.
+- [README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md): manual técnico, operacional e de uso do protocolo AG-UI, incluindo integração, dashboard dinâmico e sidecar compartilhado.
 - [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md): pausa humana, aprovação e retomada governada.
 - [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): mostra o papel do HIL quando a execução já saiu do chat e virou run agendado.
 - [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): mostra como a decisão HIL chega por POST seguro ou por canal e sincroniza o run background.

@@ -8,7 +8,12 @@ O texto foi escrito a partir do código executável lido, não de documentação
 
 ## 2. Entry points e boundaries
 
-O boundary HTTP da autenticação humana está no router com prefixo /api/auth. Ele é incluído pela API principal sem prefixo adicional, então os caminhos públicos confirmados no código são exatamente estes.
+O boundary HTTP da autenticação humana está no router com prefixo /api/auth. Ele é incluído pela API principal sem prefixo adicional. No código lido, esse router concentra duas famílias de superfície.
+
+1. Endpoints públicos de entrada, sessão e MFA.
+2. Endpoints já autenticados de perfil pessoal e governança administrativa, que dependem da mesma sessão web.
+
+Os caminhos públicos confirmados no código são exatamente estes.
 
 1. POST /api/auth/federated/session
 2. POST /api/auth/local/register
@@ -17,6 +22,18 @@ O boundary HTTP da autenticação humana está no router com prefixo /api/auth. 
 5. POST /api/auth/federated/session/totp/confirm
 6. GET /api/auth/federated/session
 7. POST /api/auth/federated/logout
+
+Os caminhos autenticados confirmados no mesmo router são estes.
+
+1. GET /api/auth/account/profile
+2. PUT /api/auth/account/profile
+3. POST /api/auth/account/payment-cards
+4. GET /api/auth/admin/memberships
+5. POST /api/auth/admin/memberships/invitations
+6. POST /api/auth/admin/memberships/{tenant_user_id}/revoke
+7. GET /api/auth/admin/permission-catalog
+8. GET /api/auth/admin/memberships/{tenant_user_id}/governance
+9. PUT /api/auth/admin/memberships/{tenant_user_id}/governance
 
 O enforcement de navegação HTML protegida não acontece nesse router. Ele acontece no middleware [src/api/middleware/federated_session.py](src/api/middleware/federated_session.py), que intercepta requisições HTTP, tenta carregar a sessão do cookie e só redireciona páginas HTML relevantes para /ui/auth-gateway.html.
 
@@ -198,9 +215,9 @@ Login local confirmado em LocalLoginRequest.
 
 ### 6.1. Frontend obtém a credencial
 
-Em [app/ui/static/js/auth-gateway.js](app/ui/static/js/auth-gateway.js), o gateway carrega a biblioteca oficial do Google Identity Services, inicializa o provedor com o client_id exposto à página e usa ux_mode popup. Se o prompt automático falhar, a UI renderiza um botão fallback do próprio GIS.
+Em [app/ui/static/js/auth-gateway.js](app/ui/static/js/auth-gateway.js), o gateway carrega a biblioteca oficial do Google Identity Services, inicializa o provedor com o client_id exposto à página e usa ux_mode popup. Se o prompt automático falhar, a UI renderiza um botão fallback do próprio GIS. O bootstrap do client_id também é redundante por design: ele aceita tanto window.PROMETEU_GOOGLE_CLIENT_ID quanto a meta tag da página via [app/ui/static/js/auth-gateway-bootstrap.js](app/ui/static/js/auth-gateway-bootstrap.js).
 
-Quando o Google devolve a credencial, o frontend envia provider_id igual a google e o id_token recebido para o backend.
+Quando o Google devolve a credencial, o frontend envia provider_id igual a google e o id_token recebido para o backend. O redirecionamento final também é saneado na UI para permanecer no mesmo origin, evitando que o parâmetro next vire desvio aberto de navegação.
 
 ### 6.2. Backend valida o token
 
@@ -291,6 +308,8 @@ POST /api/auth/federated/session/totp/start resolve a sessão por session_token 
 
 No serviço, o segredo é criado por TotpManager.create_activation_payload, criptografado antes de qualquer persistência durável e guardado temporariamente em TotpActivationCache com TTL padrão de 300 segundos.
 
+Um detalhe operacional importante: durante esse onboarding o cache efêmero guarda tanto a forma criptografada quanto a forma plain do segredo para que a UI possa receber o QR Code e o código manual sem exigir persistência definitiva prematura. A persistência durável só acontece depois da confirmação bem-sucedida.
+
 ### 9.3. Confirmação
 
 POST /api/auth/federated/session/totp/confirm resolve a sessão, consulta o limitador, valida o código e segue por um de dois caminhos.
@@ -344,6 +363,8 @@ O gateway da UI lido em [app/ui/static/js/auth-gateway.js](app/ui/static/js/auth
 4. Interpreta status ok, mfa_setup_required e mfa_challenge.
 5. Usa session_token temporário ao chamar os endpoints TOTP.
 6. Se o setup TOTP expirar com 410, reinicia o onboarding do QR Code.
+7. Sanitiza o redirect de sucesso para não sair do mesmo origin.
+8. Mostra fallback visual quando o prompt automático do Google é pulado ou dispensado pelo navegador.
 
 O frontend não emite o cookie final por conta própria. Ele depende do backend para isso.
 
@@ -426,7 +447,8 @@ Isso unifica trilha de identidade e estado do segundo fator, mas também acopla 
 1. O manager lido registra somente o builder do provedor google.
 2. Não foi confirmado endpoint público para desabilitar TOTP, embora o serviço tenha método disable.
 3. Não foram confirmados recovery codes, SMS, WebAuthn ou push approval.
-4. A documentação antiga ainda estava fragmentada entre um manual geral e outro de MFA; este manual e seu par conceitual passam a ser a referência canônica.
+4. O cache efêmero de ativação TOTP guarda o segredo plain durante a janela curta de onboarding; isso é intencional para materializar QR Code e entrada manual, mas exige disciplina operacional sobre TTL e backend de cache.
+5. A documentação antiga ainda estava fragmentada entre um manual geral e outro de MFA; este manual e seu par conceitual passam a ser a referência canônica.
 
 ## 17. Exemplos práticos guiados
 
@@ -468,8 +490,16 @@ O fluxo real é mais simples do que parece quando visto por partes. O Google só
 
 - src/api/routers/auth_router.py
   - Motivo da leitura: confirmar prefixo do router, contratos HTTP, emissão da sessão e endpoints de MFA.
-  - Símbolo relevante: create_federated_session, create_local_session, start_totp_activation, confirm_totp_code, get_federated_session.
-  - Comportamento confirmado: session_token temporário, cookie final, rotas públicas e estados ok ou mfa_*.
+  - Símbolo relevante: create_federated_session, create_local_session, start_totp_activation, confirm_totp_code, get_federated_session, get_account_profile, list_admin_memberships.
+  - Comportamento confirmado: session_token temporário, cookie final, rotas públicas, superfícies autenticadas derivadas da mesma sessão e estados ok ou mfa_*.
+- app/ui/static/js/auth-gateway.js
+  - Motivo da leitura: confirmar bootstrap do Google, fallback visual, MFA no browser e sanitização do redirect.
+  - Símbolo relevante: executarFluxoGis, finalizeAuthenticatedPayload, renderTotpSetup, sanitizeRedirect.
+  - Comportamento confirmado: fallback do GIS, tratamento explícito de mfa_setup_required e mfa_challenge, redirecionamento restrito ao mesmo origin.
+- app/ui/static/js/auth-gateway-bootstrap.js
+  - Motivo da leitura: confirmar como o client_id do Google chega ao gateway.
+  - Símbolo relevante: bootstrap autoexecutável.
+  - Comportamento confirmado: client_id pode vir de variável global ou meta tag da página.
 - src/api/security/federated_auth.py
   - Motivo da leitura: confirmar provedor suportado e regras de validação do token do Google.
   - Símbolo relevante: GoogleIdentityProvider e FederatedAuthManager.

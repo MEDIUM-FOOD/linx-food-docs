@@ -213,6 +213,8 @@ O serviço administrativo do repositório já possui CRUD para queries SQL gover
 
 Isso confirma que Dyn SQL não depende apenas de YAML local. Existe uma trilha oficial de governança administrativa para publicar e manter esse catálogo.
 
+No banco, o ativo central desse slice fica em integrations.sql_query_registry, vinculado a integrations.sql_connection_registry por connection_id. Em termos operacionais, isso significa que dyn_sql por registro sempre nasce do encontro entre uma query governada e uma conexão técnica igualmente governada.
+
 ## 18. O que acontece em caso de sucesso
 
 No caminho feliz, a query é encontrada, a conexão correta é validada, a tool concreta é construída e o agent recebe uma capability reutilizável. Para o runtime, a consulta passa a ser mais um recurso governado do catálogo de tools.
@@ -281,6 +283,24 @@ Resultado técnico: o resolvedor consulta sql_query_registry e sql_connection_re
 Cenário: o cadastro existe, mas publish_to_agents está falso ou a conexão não está read_only.
 
 Resultado técnico: a materialização falha antes de virar capability do agente.
+
+### 22.4. PDV usando KPI de vendas homologado
+
+Cenário: uma tela operacional ou agente de varejo pede dyn_sql para consultar KPI de vendas do período.
+
+Resultado técnico: o runtime resolve query_code no catálogo do tenant, valida a conexão read_only e devolve a capability pronta sem expor SQL livre ao frontend.
+
+### 22.5. ERP consultando posição de pedido governada
+
+Cenário: um supervisor de ERP precisa consultar uma leitura recorrente de pedidos bloqueados.
+
+Resultado técnico: a mesma query governada pode alimentar workflow, supervisor ou interface assistida, desde que o tenant tenha publish_to_agents ativo e a conexão correta cadastrada.
+
+### 22.6. E-commerce em dashboard assistido
+
+Cenário: uma UI assistida precisa materializar um painel de conversão com consultas já aprovadas.
+
+Resultado técnico: dyn_sql vira a fonte governada da capability de leitura e evita duplicação de lógica entre dashboard, AG-UI e agente analítico.
 
 ## 23. Explicação 101
 

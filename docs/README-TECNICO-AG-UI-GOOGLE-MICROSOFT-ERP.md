@@ -1,10 +1,25 @@
-# Manual tecnico, operacional e de uso: Generative UI local com AG-UI no projeto
+# Manual tecnico, operacional e de uso: protocolo AG-UI implementado no projeto
 
 ## 1. O que esta implementado de fato
 
 O slice executavel de Generative UI deste projeto e uma implementacao AG-UI local baseada em FastAPI no backend e HTML estatico com JavaScript puro no frontend. O boundary publico e a rota POST /ag-ui/runs. O request entra em um contrato Pydantic estrito, o backend resolve um contexto imutavel de execucao, delega para um adapter por executionKind e serializa os eventos em text/event-stream. No navegador, um cliente compartilhado consome o stream, aplica eventos em um store local e atualiza sidecar, timeline de tools e area principal da pagina.
 
 Isso importa porque o comportamento real nao esta espalhado em varias rotas nem depende de uma SPA complexa. Ele esta concentrado em poucos componentes coesos: contrato de protocolo, router, orchestrator, adapter de dominio, materializador de dashboard e runtime compartilhado do frontend.
+
+## 1.1. Por que este slice e forte para integracao com agentes
+
+Do ponto de vista tecnico, esta implementacao se destaca porque resolve bem o problema que mais pesa em integracoes agentic reais: como conectar a aplicacao ao runtime sem empurrar complexidade demais para o frontend.
+
+As vantagens confirmadas no codigo sao estas.
+
+1. Existe um boundary unico e dedicado em /ag-ui/runs.
+2. O transporte usa POST com SSE, o que facilita adocao em apps web, portais e webviews.
+3. O contrato e estrito no backend e previsivel no frontend.
+4. O lifecycle do run ja vem pronto, com inicio, eventos intermediarios, terminal e correlation_id.
+5. O cliente nao precisa conhecer SQL, segredos nem detalhes do runtime de agentes.
+6. O mesmo protocolo serve para consulta governada, dashboard dinamico e HIL no sidecar.
+
+Na pratica, isso faz do AG-UI um recurso tecnico forte para apps que querem integrar agentes sem virar refens de chat puro ou de uma SPA pesada.
 
 ## 2. Contrato do request
 
@@ -262,6 +277,10 @@ As regras confirmadas incluem.
 
 Na pratica, isso significa que a flexibilidade do dashboard continua subordinada a um contrato seguro.
 
+## 14.1. O que isso significa para aplicacoes de negocio
+
+Esse modelo e particularmente forte para sistemas corporativos porque combina flexibilidade visual com controle de risco. Em PDV, ERP, e-commerce e autoatendimento, a interface precisa mostrar resultado rico sem abrir porta para payload arbitrario vindo do backend. A DashboardSpec valida exatamente esse tipo de limite.
+
 ## 15. Cliente compartilhado do frontend
 
 O cliente mora em app/ui/static/js/shared/ag-ui-client.js. Ele implementa consumo de SSE por POST, nao por EventSource tradicional. O fluxo confirmado e este.
@@ -277,6 +296,8 @@ O cliente mora em app/ui/static/js/shared/ag-ui-client.js. Ele implementa consum
 9. Suporta retry explicito com maxReconnectAttempts e reconnectDelayMs.
 
 Esse cliente e a principal peca de reuso para terceiros no lado web.
+
+Ele tambem explica por que a implementacao e elegante para integradores: qualquer aplicacao que consiga fazer POST e ler SSE pode conversar com o protocolo. O cliente compartilhado ajuda, mas nao e obrigatorio para consumir a capacidade.
 
 ## 16. Store de estado AG-UI
 
@@ -295,6 +316,8 @@ Comportamentos importantes confirmados.
 
 O ponto forte aqui e que qualquer tela nova que consuma AG-UI pode reaproveitar exatamente o mesmo mecanismo de reconstruicao de estado.
 
+Isso e especialmente valioso em aplicacoes operacionais. Em vez de cada tela implementar sua propria forma de reconstruir progresso, mensagens, tools e estado, o integrador pode reaproveitar um store pronto ou reproduzir a mesma semantica com baixo risco de drift.
+
 ## 17. Sidecar compartilhado
 
 O sidecar mora em app/ui/static/js/shared/ag-ui-sidecar-chat.js. Ele e um componente de pagina estatica, nao uma dependencia de framework pesado.
@@ -309,6 +332,8 @@ As responsabilidades confirmadas sao estas.
 6. Adaptar interrupts AG-UI ao painel HIL compartilhado.
 
 Isso faz do sidecar uma infraestrutura de interface pronta para outras telas, nao um widget colado apenas na demo atual.
+
+Em termos de valor de plataforma, isso eleva bastante o recurso. Um integrador nao recebe apenas um stream bruto. Ele recebe um padrao de experiencia pronto para explicar execucao, mostrar contexto e preparar revisao humana.
 
 ## 18. Controller compartilhado das telas fixas
 
@@ -326,6 +351,8 @@ O comportamento confirmado e este.
 8. Atualiza status da pagina conforme chegam RUN_STARTED, RUN_ERROR, STATE_SNAPSHOT e RUN_FINISHED.
 
 Essa classe e a melhor prova pratica de como terceiros internos podem criar outra tela AG-UI sem reinventar a infraestrutura.
+
+Ela tambem prova algo comercialmente importante: o AG-UI desta plataforma nao depende de framework pesado para ser util. O protocolo ja esta forte o bastante para sustentar telas reais mesmo em UI tradicional.
 
 ## 19. Como criar uma nova tela AG-UI neste projeto
 
@@ -352,6 +379,35 @@ Nesse caso, basta implementar um cliente HTTP capaz de fazer POST em /ag-ui/runs
 Nesse caso, o backend terceiro precisa emitir o mesmo tipo de lifecycle: RUN_STARTED, eventos intermediarios, snapshots ou deltas e um terminal coerente. O frontend pode continuar sendo o mesmo cliente e o mesmo store, desde que o contrato seja respeitado.
 
 O aprendizado tecnico central e este: o reaproveitamento esta no protocolo, nao nas paginas demo.
+
+## 20.1. Cenarios fortes de aplicacao
+
+### 20.1.1. PDV
+
+O codigo atual ja demonstra esse caso com clareza. O adapter retail_demo mostra como uma aplicacao de vendas pode pedir leitura assistida, mostrar a timeline da tool e materializar resultado governado dentro da propria tela operacional.
+
+### 20.1.2. ERP
+
+Mesmo sem adapter ERP pronto no slice lido, a estrutura tecnica e muito adequada a ERP porque combina contrato estrito, correlation_id exposto, timeline de tool, sidecar explicativo e readiness para HIL. Isso serve muito bem a jornadas de aprovacao, revisao e cockpit executivo.
+
+### 20.1.3. E-commerce
+
+O fluxo de checkout_funnel e catalog_opportunities mostra como o protocolo se encaixa em operacao digital. A mesma abordagem pode sustentar cockpits de conversao, sortimento, campanha e mix de pagamento com dashboard dinamico governado.
+
+### 20.1.4. Autoatendimento
+
+Como o protocolo funciona com HTML estatico e JavaScript puro, ele tambem e bem posicionado para portais leves, quiosques e experiencias guiadas que precisem integrar agentes sem carregar uma stack pesada de frontend.
+
+## 20.2. Pontos que tornam o AG-UI tecnicamente vendavel
+
+Se a meta for demonstrar o recurso para cliente tecnico ou patrocinador, estes sao os argumentos mais fortes sustentados pelo codigo.
+
+1. A interface recebe historia de execucao, nao apenas texto.
+2. O backend preserva governanca de capability e de tool.
+3. O protocolo cabe em apps existentes sem replatform obrigatorio.
+4. O dashboard dinamico e seguro por contrato.
+5. O HIL pode ser encaixado na mesma experiencia compartilhada.
+6. O correlation_id fica visivel para diagnostico de ponta a ponta.
 
 ## 21. Contrato real das paginas demo atuais
 

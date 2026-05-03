@@ -1,10 +1,12 @@
-# Manual conceitual, executivo, comercial e estrategico: Generative UI local com AG-UI no projeto
+# Manual conceitual, executivo, comercial e estrategico: protocolo AG-UI implementado na plataforma
 
 ## 1. O que e esta feature
 
 A Generative UI implementada neste projeto e o slice AG-UI: uma interface agentic orientada por eventos, feita para ligar uma tela de negocio a um backend que executa capacidades governadas e devolve progresso, estado, timeline de ferramentas, mensagens e resultado final no mesmo fluxo. Ela nao e um chat generico, nao e apenas streaming de texto e nao e um frontend isolado inventando contrato proprio por pagina. O que existe aqui e um protocolo de interface reutilizavel, aplicado a telas de ERP e analytics, com o backend controlando o que pode ser pedido e o frontend reagindo a eventos estruturados.
 
 Na pratica, isso significa que a tela nao precisa saber como executar SQL, como rastrear correlation_id, como decidir se um dashboard e seguro ou como serializar o lifecycle de um run. Ela so precisa declarar a intencao de negocio, como vendas, checkout, catalogo ou dashboard dinamico, e consumir eventos AG-UI. O backend transforma essa intencao em execucao governada e conta a historia da execucao de ponta a ponta.
+
+Esse e o motivo pelo qual o recurso e crucial na plataforma. Ele transforma agentes em algo integravel por aplicacoes reais. Em vez de cada sistema acoplar um chat improvisado a um backend opaco, o AG-UI entrega um protocolo claro para pedir execucao, acompanhar progresso, renderizar estado e fechar a jornada com governanca.
 
 ## 2. Que problema ela resolve
 
@@ -31,6 +33,8 @@ No slice atual, isso aparece em historias comerciais concretas.
 
 O diferencial comercial nao esta em prometer IA irrestrita. Esta em combinar interface progressiva, governanca e dados operacionais aprovados. Isso responde melhor a objeções de seguranca, risco e previsibilidade.
 
+O efeito comercial mais forte e este: o cliente nao compra apenas um agente. Ele passa a ter uma camada de interface agentic pronta para embutir no proprio sistema, com explicabilidade, observabilidade e disciplina operacional. Isso e muito mais forte do que entregar apenas um endpoint de texto.
+
 ## 5. Visao estrategica
 
 Estrategicamente, o slice AG-UI fortalece a plataforma em quatro frentes.
@@ -41,6 +45,8 @@ Estrategicamente, o slice AG-UI fortalece a plataforma em quatro frentes.
 4. Aproxima a plataforma de um modelo de protocolo aberto de Generative UI, sem forcar troca de stack para React ou SDKs externos.
 
 O resultado pratico e importante: o projeto ganha um eixo de evolucao para UI agentic sem precisar reescrever o produto inteiro. Isso prepara terreno para experiencias futuras mais ricas, inclusive com mais capacidades, mais adapters e outros dominios alem do varejo demo atual.
+
+Para uma plataforma de agentes, isso e uma vantagem competitiva relevante. O AG-UI implementado aqui aproxima o runtime agentic do mundo real das aplicacoes corporativas, onde a interface precisa acompanhar processo, mostrar ferramenta usada, renderizar resultado e sustentar governanca.
 
 ## 6. Conceitos necessarios para entender
 
@@ -137,6 +143,14 @@ O ganho e reduzir risco estrutural de injecao, DOM inseguro e vazamento de segre
 
 O ganho e compatibilidade total com a UI atual do repositório. O custo e menos ecossistema pronto de componentes agentic. Em troca, o projeto prova que uma Generative UI governada nao depende de React para existir.
 
+### 10.5. Protocolo integravel em vez de tela fechada
+
+O ganho e tornar o recurso valioso para terceiros e para novos produtos internos. O AG-UI nao depende do layout exato das demos atuais para fazer sentido. Ele expõe um contrato de run, stream e estado que pode ser reaproveitado por outras aplicacoes.
+
+O custo e exigir disciplina de contrato. Quem integra precisa respeitar o payload tipado, os eventos e a governanca de capability.
+
+Na pratica, esse trade-off e muito favoravel ao contexto enterprise. Ele troca improviso visual por integracao previsivel.
+
 ## 11. Como pode ser utilizado por terceiros e outras implementacoes
 
 O ponto mais importante para terceiros e este: o slice local nao depende do layout exato das paginas demo. O contrato reutilizavel esta em tres blocos.
@@ -153,6 +167,8 @@ A segunda e implementar um novo backend compativel com o mesmo contrato, desde q
 
 Para outras implementacoes internas, o padrao recomendado e criar um novo adapter de dominio e registrá-lo por executionKind, sem alterar o orchestrator. Isso mantem o mesmo protocolo de interface e troca apenas a traducao de negocio.
 
+Essa caracteristica e uma das mais fortes do slice. A plataforma nao esta oferecendo apenas uma tela demo. Ela esta oferecendo uma base pronta para outras aplicacoes se conectarem a agentes com menos atrito e mais governanca.
+
 ## 12. Recursos avancados confirmados no codigo
 
 Os recursos mais relevantes confirmados no slice atual sao estes.
@@ -167,6 +183,8 @@ Os recursos mais relevantes confirmados no slice atual sao estes.
 8. Falha fechada para campos fora do contrato ou configuracao ausente.
 
 Esses recursos mostram que a feature vai alem de streaming textual. Ela implementa uma interface agentic realmente dirigida por estado e eventos.
+
+Eles tambem mostram por que essa implementacao e ideal para apps que desejam integrar com agentes. Um sistema real quer acompanhar processo, explicar o que aconteceu, renderizar resultado progressivo e manter rastreabilidade. O AG-UI local entrega exatamente esse conjunto de capacidades.
 
 ## 13. O que acontece em caso de sucesso
 
@@ -197,6 +215,8 @@ Comercialmente, a feature permite mostrar IA aplicada a problemas reais do clien
 Promessa que pode ser feita: a plataforma entrega UI agentic governada com estado progressivo e integracao a capacidades aprovadas.
 
 Promessa que nao pode ser feita com base no codigo lido: liberdade irrestrita para qualquer frontend executar qualquer acao arbitraria ou gerar interface livre sem contrato.
+
+O que pode ser vendido com muita forca e elegancia e isto: o AG-UI desta plataforma permite colocar agentes dentro de sistemas de negocio com uma experiencia madura, explicavel e segura. Isso ajuda a diferenciar a plataforma de integracoes improvisadas que so conseguem devolver texto sem contexto.
 
 ## 18. Impacto estrategico
 
@@ -234,6 +254,30 @@ Processamento: o backend valida a spec, rejeita conteudo proibido e materializa 
 
 Saida: o canvas nasce vazio e termina pronto, sem HTML livre vindo do agente.
 
+### 19.4. ERP com cockpit de aprovacao e leitura assistida
+
+Cenario: uma tela de ERP precisa explicar excecoes, mostrar progresso da analise e, se necessario, preparar uma revisao humana.
+
+O que o codigo atual prova como base: existe um protocolo com run, timeline de tools, estado progressivo, correlation_id no cliente e painel HIL compartilhado no sidecar.
+
+Impacto: o ERP pode incorporar um agente de forma elegante, sem virar um chat solto dentro do sistema.
+
+### 19.5. E-commerce com cockpit de conversao e sortimento
+
+Cenario: um gestor de e-commerce quer abrir uma tela e entender abandono, desempenho por categoria e oportunidades de catalogo.
+
+O que o slice atual prova: o protocolo ja suporta consulta governada e dashboard dinamico materializado por eventos.
+
+Impacto: o app pode transformar analise agentic em cockpit operacional, e nao apenas em resposta textual.
+
+### 19.6. Autoatendimento e quiosques assistidos
+
+Cenario: uma experiencia de autoatendimento precisa orientar usuario, mostrar progresso e manter o visual de aplicacao, nao de chat genérico.
+
+O que o slice atual prova: o AG-UI funciona com HTML estatico e JavaScript puro, sem exigir stack pesada.
+
+Impacto: a plataforma fica bem posicionada para jornadas embarcadas, portais ou kiosks que precisem integrar agentes com baixo atrito de front-end.
+
 ## 20. Explicacao 101
 
 Pense na feature como um tradutor entre a tela e o backend agentic. A tela diz o que quer fazer. O backend decide como fazer com seguranca. Durante a execucao, ele vai narrando o processo com eventos. A tela usa esses eventos para mostrar progresso, mensagens, ferramentas usadas e resultado final. Isso e a Generative UI local do projeto: uma interface que nasce e evolui a partir da execucao, mas sempre dentro de um contrato seguro.
@@ -254,6 +298,7 @@ O slice atual ainda tem limites claros.
 - Entendi qual problema ela resolve.
 - Entendi por que a interface trabalha por capability e eventos.
 - Entendi como a tela e o backend se conectam.
+- Entendi por que esta implementacao e forte para integrar agentes em sistemas reais.
 - Entendi como terceiros podem reutilizar o contrato.
 - Entendi quais recursos avancados ja existem.
 - Entendi os limites atuais do slice.

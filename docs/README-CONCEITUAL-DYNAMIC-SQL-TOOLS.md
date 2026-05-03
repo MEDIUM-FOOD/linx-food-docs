@@ -51,6 +51,13 @@ Isso é especialmente útil em cenários como.
 4. Dashboards assistidos.
 5. Interfaces AG-UI que precisam de capabilities de leitura já aprovadas.
 
+Exemplos corporativos fortes para esse desenho são estes.
+
+1. PDV consultando KPI de vendas, funil de checkout ou ruptura de estoque sem expor SQL livre ao operador.
+2. ERP consultando posição de pedido, saldo, agenda de entrega ou exceções operacionais a partir de queries homologadas.
+3. E-commerce consultando mix, conversão, abandono ou disponibilidade por canal com queries governadas reaproveitáveis.
+4. Autoatendimento e atendimento assistido consultando segunda via, status de protocolo, limite ou histórico resumido sem abrir acesso amplo ao banco.
+
 ## 5. Visão estratégica
 
 Estratégicamente, Dyn SQL fortalece a plataforma porque transforma o banco de dados em fonte governada de capability agentic, sem transformar a plataforma em executor genérico de SQL arbitrária.
@@ -246,6 +253,18 @@ Dyn SQL resolve isso ao expor apenas a query aprovada, com parâmetros conhecido
 Cenário: uma query publicada não deve mais aparecer para agentes.
 
 A organização pode retirá-la da publicação ou desativá-la no catálogo administrativo, sem refatorar o runtime inteiro.
+
+### 19.4. ERP com cockpit financeiro assistido
+
+Cenário: o time financeiro quer um cockpit assistido para consultar títulos em atraso, pedidos bloqueados e aprovações pendentes.
+
+Dyn SQL permite expor cada leitura recorrente como capability governada, mantendo parâmetros, limite de linhas e conexão técnica sob controle administrativo.
+
+### 19.5. E-commerce com radar de conversão e sortimento
+
+Cenário: uma operação digital quer ler rapidamente abandono, disponibilidade de catálogo e performance por categoria.
+
+Dyn SQL permite reaproveitar a mesma query aprovada em agente especialista, dashboard assistido e AG-UI sem duplicar implementação.
 
 ## 20. Explicação 101
 

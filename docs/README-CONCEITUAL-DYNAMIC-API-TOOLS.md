@@ -35,6 +35,13 @@ Isso responde dores comuns de clientes corporativos:
 
 Um exemplo comercial honesto e um ERP que precisa consultar status de pedido, limite de credito ou disponibilidade de agenda em uma API interna. Se o contrato HTTP for estavel e declarativo, dyn_api reduz o tempo entre a homologacao da operacao e a disponibilizacao para agentes.
 
+Outros exemplos corporativos fortes, coerentes com o desenho atual, sao estes.
+
+- CRM: consultar situacao de cliente, limite de credito ou historico resumido sem abrir uma integracao nova para cada operacao pequena.
+- ERP: consultar pedido, nota, agenda de entrega, saldo de estoque ou aprovacao de compra usando operacoes REST homologadas.
+- E-commerce: ler status de pedido, disponibilidade de entrega, campanha ou catalogo a partir de APIs internas ou externas aprovadas.
+- Autoatendimento e atendimento assistido: consultar dados de cliente, protocolo, segunda via ou status operacional por meio de um conjunto restrito de operacoes publicadas.
+
 ## 5. Visao estrategica
 
 Estrategicamente, dyn_api fortalece a tese da plataforma como runtime YAML-first governado. Ela amplia o conjunto de capacidades reutilizaveis sem transformar cada nova necessidade externa em um ramo especial da arquitetura.
@@ -59,6 +66,16 @@ YAML-first, neste contexto, nao significa que tudo vem apenas de um arquivo YAML
 
 Perfil de autenticacao e o contrato reutilizavel que descreve como uma API exige credenciais. O projeto suporta perfis estaticos e perfis que precisam buscar token dinamicamente. Esse detalhe importa porque dyn_api nao trata autenticacao como detalhe solto do endpoint. Ela a materializa como parte governada da capacidade.
 
+### Tabela de operacoes API
+
+No slice lido, a tabela operacional mais importante para dyn_api e integrations.api_operation_registry. E nela que a operacao HTTP governada fica persistida com codigo estavel, metodo, base_url, path_template, schemas de entrada, timeout, publish_to_agents e, quando aplicavel, vinculo com auth profile e origem Swagger.
+
+Em linguagem simples, essa tabela funciona como o cardapio de operacoes HTTP que podem, ou nao, virar capability de agente.
+
+### Origem Swagger
+
+Quando a operacao vem de uma importacao OpenAPI, a trilha de origem fica guardada em integrations.api_swagger_source_registry. Isso nao e detalhe burocratico. Essa tabela preserva rastreabilidade da fonte importada, tipo de origem, hash do documento e relacao entre a especificacao importada e as operacoes criadas ou atualizadas.
+
 ### Capability governada
 
 Capability governada e uma capacidade que o agente pode usar somente depois de passar por regra explicita de cadastro, ativacao e publicacao. Esse conceito e central para entender por que dyn_api nao e um executor HTTP generico e por que isso e bom para a plataforma.
@@ -70,6 +87,8 @@ O fluxo comeca quando um agente ou workflow referencia a family dyn_api com um e
 Depois disso, a factory tenta resolver o endpoint no bloco local de configuracao. Se encontrar, usa o contrato local. Se nao encontrar, sobe um nivel de governanca e pede ao resolvedor de registro persistido que encontre uma operacao HTTP publicada para o tenant. Quando essa segunda trilha e usada, o runtime tambem pode materializar o auth profile associado.
 
 Com o endpoint resolvido, a factory monta dinamicamente o schema de entrada da tool. Isso e importante porque a tool deixa de ser um disparo cego: ela valida path, query e body antes de chamar a API externa. Em seguida, resolve headers, placeholders, URL final e autenticacao. So depois a chamada HTTP e executada, com timeout e retry no cliente dedicado.
+
+Existe ainda uma etapa anterior importante para operacoes importadas. Antes de virar capability, uma especificacao Swagger pode ser importada para o catalogo governado, gerando ou atualizando a origem em api_swagger_source_registry e as operacoes em api_operation_registry. So depois disso a governanca decide o que realmente sera publicado para agentes.
 
 ## 8. Divisao em etapas ou submodulos
 
@@ -97,6 +116,12 @@ Com contrato e autenticacao prontos, o cliente HTTP executa a chamada usando tim
 
 O que pode dar errado aqui e de infraestrutura: timeout, erro de conexao, resposta invalida ou indisponibilidade do provider externo. O valor desta etapa e encapsular resiliência num cliente unico, em vez de repetir codigo de HTTP por integracao.
 
+### 8.5 Importacao Swagger como esteira de cadastro
+
+Esta etapa existe para acelerar onboarding de APIs sem pular governanca. O documento OpenAPI e lido, validado, normalizado e convertido em registros administrativos. A origem vai para api_swagger_source_registry. As operacoes vao para api_operation_registry.
+
+O ponto mais importante aqui e operacional: importar nao significa publicar. O runtime continua exigindo status ativo e publicacao explicita para agentes.
+
 ## 9. Decisoes tecnicas e trade-offs
 
 ### Priorizar YAML local antes do registro persistido
@@ -114,6 +139,14 @@ Ganho: impede que todo cadastro administrativo vire capacidade agentic automatic
 Custo: aumenta o numero de passos de governanca.
 
 Impacto: reduz risco de expor operacao sensivel por acidente.
+
+### Tornar a importacao Swagger idempotente e sem publicacao automatica
+
+Ganho: facilita onboarding e sincronizacao de contrato sem transformar a importacao em exposicao imediata para agentes.
+
+Custo: adiciona uma etapa administrativa posterior de revisao e publicacao.
+
+Impacto: protege a plataforma contra o erro comum de tratar documento importado como operacao automaticamente segura para uso agentic.
 
 ### Separar operacao HTTP de auth profile
 
@@ -152,6 +185,7 @@ Pense em dyn_api como um jeito de transformar uma chamada HTTP aprovada em um bo
 - dyn_api nao substitui conectores dedicados quando a integracao exige logica complexa, transformacao pesada ou seguranca fora do escopo declarativo lido.
 - dyn_api nao e NL2SQL, nao e dyn_sql e nao e MCP. Ela resolve operacoes HTTP aprovadas, nao geracao de SQL nem acesso generico a tools externas arbitrarias.
 - operacao cadastrada nao significa operacao publicada. O codigo exige status ativo e publicacao para agentes.
+- operacao importada por Swagger tambem nao significa operacao publicada. A importacao popula catalogo e rastreabilidade, mas nao libera a capability automaticamente.
 - autenticacao dinamica nao e detalhe cosmético. Quando usada, depende de cache de token e de infraestrutura Redis disponivel.
 
 ## 15. Checklist de entendimento
@@ -183,6 +217,16 @@ Pense em dyn_api como um jeito de transformar uma chamada HTTP aprovada em um bo
   - Motivo da leitura: confirmar o bounded context administrativo que publica operacoes HTTP e auth profiles.
   - Simbolo relevante: create_api_operation e create_auth_profile.
   - Comportamento confirmado: o catalogo governado separa operacao HTTP e autenticacao reutilizavel.
+
+- src/integrations/schema.py
+  - Motivo da leitura: confirmar as tabelas reais do slice dyn_api.
+  - Simbolo relevante: api_operation_registry e api_swagger_source_registry.
+  - Comportamento confirmado: as operacoes HTTP governadas e suas origens Swagger possuem tabelas dedicadas e relacionadas.
+
+- src/integrations/swagger_import_service.py
+  - Motivo da leitura: confirmar o comportamento da importacao Swagger.
+  - Simbolo relevante: SwaggerImportApplicationService.execute.
+  - Comportamento confirmado: a importacao cria ou atualiza origem e operacoes de forma idempotente, mas grava publish_to_agents=false nas operacoes importadas.
 
 ## 17. Lacunas reais encontradas
 
