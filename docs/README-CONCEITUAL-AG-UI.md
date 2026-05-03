@@ -166,39 +166,39 @@ O que esse diagrama mostra e simples: o protocolo e comum, mas o dominio por tra
 
 Detalhamento aprofundado por etapa:
 
-1. [Fronteira de protocolo](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-FRONTEIRA-DE-PROTOCOLO.md)
-2. [Borda HTTP dedicada](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-BORDA-HTTP-DEDICADA.md)
-3. [Orquestracao do lifecycle](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-ORQUESTRACAO-DO-LIFECYCLE.md)
-4. [Registry e adapters](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-REGISTRY-E-ADAPTERS.md)
-5. [Dominio varejo demo](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-DOMINIO-VAREJO-DEMO.md)
-6. [Runtime compartilhado do frontend](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
-7. [Replay e auditoria](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-REPLAY-E-AUDITORIA.md)
+1. [Fronteira de protocolo](README-CONCEITUAL-AG-UI-FRONTEIRA-DE-PROTOCOLO.md)
+2. [Borda HTTP dedicada](README-CONCEITUAL-AG-UI-BORDA-HTTP-DEDICADA.md)
+3. [Orquestracao do lifecycle](README-CONCEITUAL-AG-UI-ORQUESTRACAO-DO-LIFECYCLE.md)
+4. [Registry e adapters](README-CONCEITUAL-AG-UI-REGISTRY-E-ADAPTERS.md)
+5. [Dominio varejo demo](README-CONCEITUAL-AG-UI-DOMINIO-VAREJO-DEMO.md)
+6. [Runtime compartilhado do frontend](README-CONCEITUAL-AG-UI-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
+7. [Replay e auditoria](README-CONCEITUAL-AG-UI-REPLAY-E-AUDITORIA.md)
 
-### 10.1. [Fronteira de protocolo](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-FRONTEIRA-DE-PROTOCOLO.md)
+### 10.1. [Fronteira de protocolo](README-CONCEITUAL-AG-UI-FRONTEIRA-DE-PROTOCOLO.md)
 
 E a camada que define o request tipado, os eventos oficiais, os outcomes terminais e o replay. Ela existe para evitar que cada pagina crie um contrato proprio.
 
-### 10.2. [Borda HTTP dedicada](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-BORDA-HTTP-DEDICADA.md)
+### 10.2. [Borda HTTP dedicada](README-CONCEITUAL-AG-UI-BORDA-HTTP-DEDICADA.md)
 
 E a camada que expõe discovery, runs e replay. Ela existe para separar AG-UI das rotas antigas e preservar um boundary unico de interface agentic.
 
-### 10.3. [Orquestracao do lifecycle](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-ORQUESTRACAO-DO-LIFECYCLE.md)
+### 10.3. [Orquestracao do lifecycle](README-CONCEITUAL-AG-UI-ORQUESTRACAO-DO-LIFECYCLE.md)
 
 E a camada que conhece run started, run finished, run error, sequencia de evento e persistencia opcional no event store. Ela nao conhece PDV, ERP ou dashboard. Ela conhece o lifecycle.
 
-### 10.4. [Registry e adapters](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-REGISTRY-E-ADAPTERS.md)
+### 10.4. [Registry e adapters](README-CONCEITUAL-AG-UI-REGISTRY-E-ADAPTERS.md)
 
 E a camada que pluga dominios e runtimes especificos no protocolo comum. Isso permite evolucao sem if hardcoded no core.
 
-### 10.5. [Dominio varejo demo](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-DOMINIO-VAREJO-DEMO.md)
+### 10.5. [Dominio varejo demo](README-CONCEITUAL-AG-UI-DOMINIO-VAREJO-DEMO.md)
 
 E a camada hoje mais concreta em termos de experiencia visual pronta. Ela converte capabilities em consultas aprovadas ou em materializacao de dashboard dinamico.
 
-### 10.6. [Runtime compartilhado do frontend](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
+### 10.6. [Runtime compartilhado do frontend](README-CONCEITUAL-AG-UI-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
 
 E a camada que permite reuso entre paginas. Ela concentra cliente SSE, store, sidecar, renderer de tool timeline e renderer de dashboard.
 
-### 10.7. [Replay e auditoria](README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP-REPLAY-E-AUDITORIA.md)
+### 10.7. [Replay e auditoria](README-CONCEITUAL-AG-UI-REPLAY-E-AUDITORIA.md)
 
 E a camada que permite reconstituir a historia da execucao sem reexpor segredo. Ela fortalece suporte, troubleshooting e demonstracao de governanca.
 

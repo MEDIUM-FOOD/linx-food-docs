@@ -23,13 +23,13 @@ O recorte executavel confirmado do lado web inclui estas superficies de reuso.
 
 Detalhamento técnico por etapa:
 
-1. [Fronteira de protocolo](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-FRONTEIRA-DE-PROTOCOLO.md)
-2. [Borda HTTP dedicada](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-BORDA-HTTP-DEDICADA.md)
-3. [Orquestração do lifecycle](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-ORQUESTRACAO-DO-LIFECYCLE.md)
-4. [Registry e adapters](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-REGISTRY-E-ADAPTERS.md)
-5. [Domínio varejo demo](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-DOMINIO-VAREJO-DEMO.md)
-6. [Runtime compartilhado do frontend](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
-7. [Replay e auditoria](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-REPLAY-E-AUDITORIA.md)
+1. [Fronteira de protocolo](README-TECNICO-AG-UI-FRONTEIRA-DE-PROTOCOLO.md)
+2. [Borda HTTP dedicada](README-TECNICO-AG-UI-BORDA-HTTP-DEDICADA.md)
+3. [Orquestração do lifecycle](README-TECNICO-AG-UI-ORQUESTRACAO-DO-LIFECYCLE.md)
+4. [Registry e adapters](README-TECNICO-AG-UI-REGISTRY-E-ADAPTERS.md)
+5. [Domínio varejo demo](README-TECNICO-AG-UI-DOMINIO-VAREJO-DEMO.md)
+6. [Runtime compartilhado do frontend](README-TECNICO-AG-UI-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
+7. [Replay e auditoria](README-TECNICO-AG-UI-REPLAY-E-AUDITORIA.md)
 
 ## 2. Endpoints publicos
 
