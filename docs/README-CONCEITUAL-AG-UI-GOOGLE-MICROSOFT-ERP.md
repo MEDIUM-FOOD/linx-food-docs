@@ -1,247 +1,301 @@
-# Manual conceitual, executivo, comercial e estratégico: AG-UI com referencial Google e Microsoft aplicado ao ERP
+# Manual conceitual, executivo, comercial e estrategico: Generative UI local com AG-UI no projeto
 
-## 1. O que é esta feature
+## 1. O que e esta feature
 
-AG-UI é o protocolo de interface agentic usado para ligar uma aplicação voltada ao usuário a um backend de agente que precisa trabalhar em tempo real, emitir eventos intermediários, atualizar estado, mostrar ferramentas acionadas e encerrar com sucesso, erro ou interrupção humana. No ecossistema oficial do protocolo, ele aparece como uma camada aberta e orientada por eventos, com integrações documentadas para Microsoft Agent Framework e Google ADK. No projeto, porém, ele não foi implementado através desses SDKs. O que existe aqui é uma implementação própria e governada do mesmo modelo conceitual, baseada em FastAPI, SSE, modelos Pydantic estritos e frontend em HTML estático com JavaScript puro.
+A Generative UI implementada neste projeto e o slice AG-UI: uma interface agentic orientada por eventos, feita para ligar uma tela de negocio a um backend que executa capacidades governadas e devolve progresso, estado, timeline de ferramentas, mensagens e resultado final no mesmo fluxo. Ela nao e um chat generico, nao e apenas streaming de texto e nao e um frontend isolado inventando contrato proprio por pagina. O que existe aqui e um protocolo de interface reutilizavel, aplicado a telas de ERP e analytics, com o backend controlando o que pode ser pedido e o frontend reagindo a eventos estruturados.
 
-Isso importa porque evita duas leituras erradas. A primeira seria achar que o projeto consome diretamente um kit AG-UI da Microsoft ou do Google. O código lido não confirma isso. A segunda seria achar que o projeto inventou um streaming qualquer sem relação com o protocolo externo. Também não é isso. O slice atual implementa um contrato de eventos, lifecycle e sincronização de estado que conversa com a lógica do AG-UI oficial, mas foi adaptado à arquitetura real do repositório: API própria, adapters governados, DeepAgent/YAML e telas administrativas estáticas.
+Na pratica, isso significa que a tela nao precisa saber como executar SQL, como rastrear correlation_id, como decidir se um dashboard e seguro ou como serializar o lifecycle de um run. Ela so precisa declarar a intencao de negocio, como vendas, checkout, catalogo ou dashboard dinamico, e consumir eventos AG-UI. O backend transforma essa intencao em execucao governada e conta a historia da execucao de ponta a ponta.
 
 ## 2. Que problema ela resolve
 
-O problema real é que telas agentic de negócio não cabem bem em request/response simples. Um cockpit comercial, um radar de checkout ou um canvas de dashboard precisam mostrar que a execução começou, qual capability foi escolhida, qual consulta governada foi disparada, quando o estado mudou, quando um widget apareceu e se o processo terminou ou pediu revisão humana. Sem um protocolo como AG-UI, cada tela tenderia a criar um mini-contrato próprio de progresso, mensagens e erros.
+Sem uma camada como essa, cada tela rica do produto tenderia a reinventar a propria infraestrutura de progresso, loading, erro, streaming, atualizacao parcial de estado e rastreabilidade. Isso cria dois problemas graves. O primeiro e tecnico: interfaces diferentes passam a falar protocolos diferentes com o backend, o que aumenta acoplamento, duplicacao e fragilidade. O segundo e operacional: o usuario final ve uma experiencia inconsistente e o suporte perde capacidade de diagnosticar o que aconteceu em cada execucao.
 
-No projeto, AG-UI resolve isso criando uma fronteira única entre backend e frontend. A tela abre um único canal para a rota dedicada, o backend continua sendo a autoridade da execução e a interface recebe um stream tipado de eventos reconstituíveis. Isso reduz acoplamento entre tela e motor interno e permite que várias superfícies ERP reutilizem o mesmo protocolo com objetivos diferentes.
+O slice AG-UI resolve isso criando uma lingua comum entre interface e runtime. Em vez de cada pagina montar um mini-backend proprio no navegador, todas passam a usar o mesmo contrato de run, o mesmo stream de eventos e a mesma reconstruicao de estado. Isso reduz custo de evolucao, aumenta governanca e permite que a plataforma trate Generative UI como uma capacidade de produto, nao como um truque de uma pagina especifica.
 
-## 3. Visão executiva
+## 3. Visao executiva
 
-Executivamente, AG-UI importa porque transforma execução agentic em ativo operacional observável. Em vez de depender apenas de uma resposta final, o sistema passa a mostrar trabalho em andamento, trilha de ferramenta, montagem incremental de dashboard e correlação da execução. Isso reduz a sensação de caixa-preta e melhora suporte, demonstração, governança e confiança do usuário final.
+Para lideranca, o valor principal e transformar automacao agentic em algo observavel, governado e reutilizavel. Em vez de uma resposta final sem contexto, a interface mostra quando a execucao comecou, qual capacidade foi acionada, que ferramenta governada foi chamada, como o estado foi montado e como terminou. Isso reduz a sensacao de caixa-preta, melhora suporte e acelera demonstracoes internas e comerciais.
 
-Também reduz custo de evolução. Quando a plataforma quer abrir uma nova tela operacional para vendas, checkout ou catálogo, ela não precisa reinventar toda a camada de streaming e estado. O investimento vai para a capability de negócio e para o adapter governado, não para plumbing repetido de transporte.
+Tambem existe ganho claro de escala. Uma vez que o protocolo de interface esta pronto, novas telas podem nascer em cima da mesma base. O investimento deixa de ser reconstruir plumbing de streaming e passa a ser construir capacidades de negocio. Isso melhora time-to-market e reduz custo marginal de novas superficies operacionais.
 
-## 4. Visão comercial
+## 4. Visao comercial
 
-Comercialmente, AG-UI ajuda a vender experiência agentic aplicada ao ERP, não apenas backend inteligente. O cliente vê uma tela que recebe progresso, explica o que o agente está fazendo, mostra resultado governado e, quando necessário, prepara uma interface dinâmica segura. Isso é diferente de um chat genérico ou de um dashboard estático sem contexto operacional.
+Comercialmente, esta feature permite vender experiencia agentic aplicada ao negocio, nao apenas backend inteligente. O cliente nao recebe so um chat que responde perguntas. Ele recebe uma tela operacional que mostra progresso, explica o que esta acontecendo, materializa resultado governado e, quando necessario, monta um dashboard seguro em tempo real.
 
-No cenário lido no código, isso aparece em quatro histórias vendáveis.
+No slice atual, isso aparece em historias comerciais concretas.
 
-1. Cockpit executivo de vendas, que cruza período, KPIs e leitura assistida sem expor SQL ao navegador.
-2. Radar de checkout e UCP, que acompanha gargalos do funil e explica eventos de abandono, cancelamento e conversão.
-3. Central de oportunidades de catálogo, que cruza estoque, oferta e vendas para priorizar ação comercial.
-4. Canvas dinâmico de dashboard, que materializa widgets e fontes de dados de forma progressiva e segura.
+1. Cockpit executivo de vendas com leitura assistida de KPI do periodo.
+2. Radar de checkout e funil com apoio operacional para identificar gargalos.
+3. Central de oportunidades de catalogo para estoque, trade e pricing.
+4. Canvas dinamico de dashboard com widgets e fontes de dados validadas.
 
-Essas histórias são fortes porque combinam dados governados, interface progressiva e explicação agentic no mesmo fluxo.
+O diferencial comercial nao esta em prometer IA irrestrita. Esta em combinar interface progressiva, governanca e dados operacionais aprovados. Isso responde melhor a objeções de seguranca, risco e previsibilidade.
 
-## 5. Visão estratégica
+## 5. Visao estrategica
 
-Estrategicamente, o slice AG-UI fortalece a plataforma em cinco pontos.
+Estrategicamente, o slice AG-UI fortalece a plataforma em quatro frentes.
 
-1. Cria um contrato estável de interface agentic separado do WebChat e dos endpoints legados.
-2. Permite reaproveitar a mesma base de backend para várias telas ERP com experiências diferentes.
-3. Mantém o controle crítico no servidor: correlation_id, policy de capability, escolha da tool e validação de dashboard.
-4. Aproxima o projeto do ecossistema aberto do AG-UI sem forçar dependência imediata de SDK externo.
-5. Prepara terreno para evoluções futuras como HIL mais rico, composição de subagentes, estado compartilhado mais amplo e integrações adicionais.
+1. Separa claramente interface agentic do backend de negocio, usando um contrato estavel em vez de acoplamento direto entre pagina e dominio.
+2. Cria uma base comum para futuras telas agentic, reduzindo duplicacao de cliente, sidecar, timeline, estado e tratamento de interrupcao.
+3. Mantem o controle critico no servidor, preservando governanca de capability, correlacao, tool call e validacao estrutural.
+4. Aproxima a plataforma de um modelo de protocolo aberto de Generative UI, sem forcar troca de stack para React ou SDKs externos.
 
-## 6. Conceitos necessários para entender
+O resultado pratico e importante: o projeto ganha um eixo de evolucao para UI agentic sem precisar reescrever o produto inteiro. Isso prepara terreno para experiencias futuras mais ricas, inclusive com mais capacidades, mais adapters e outros dominios alem do varejo demo atual.
 
-### 6.1. AG-UI como protocolo aberto
+## 6. Conceitos necessarios para entender
 
-No referencial oficial, AG-UI é descrito como protocolo leve e orientado por eventos que conecta aplicações voltadas ao usuário a backends agentic. A documentação oficial também posiciona o protocolo dentro de uma pilha maior de padrões agentic, ao lado de MCP para tools e A2A para comunicação entre agentes. Isso ajuda a entender o papel do slice local: ele não substitui integração com dados ou com outros agentes; ele trata da interface do usuário com a execução.
+### 6.1. Generative UI
 
-### 6.2. Google ADK e Microsoft Agent Framework como referencial, não como dependência local
+Generative UI, neste contexto, nao significa gerar HTML livre no navegador. Significa que a interface e montada ou atualizada a partir de eventos estruturados produzidos pela execucao agentic. O backend nao devolve so um texto. Ele devolve estado, atividade, timeline, mensagens, deltas e marcos de renderizacao. A tela usa isso para construir uma experiencia viva.
 
-O site oficial do protocolo lista Microsoft Agent Framework e Google ADK como integrações first-party suportadas. Isso significa que o ecossistema AG-UI já se apresenta como compatível com frameworks desses fornecedores. No entanto, o código lido neste repositório não mostra SDK Microsoft Agent Framework nem Google ADK no slice AG-UI. O projeto implementa o contrato de forma própria, usando sua arquitetura existente. Em termos simples: o repositório segue a ideia do protocolo, mas não incorpora essas stacks como runtime local do AG-UI atual.
+### 6.2. AG-UI como contrato de interface
 
-### 6.3. SSE como transporte atual
+No projeto, AG-UI e o contrato que organiza essa conversa. Ele define inicio de run, fim de run, erro, mensagens incrementais, tool calls, snapshots de estado, deltas em JSON Patch, eventos customizados e resultado terminal. Em termos simples, ele padroniza como a tela acompanha o que o backend esta fazendo.
 
-O protocolo oficial admite diferentes transportes. A implementação local escolheu Server-Sent Events na rota dedicada. Isso simplifica consumo em telas administrativas e mantém o browser em um modelo unidirecional de recebimento de eventos enquanto o POST continua sendo o gatilho da execução.
+### 6.3. Capability governada
 
-### 6.4. Adapter de domínio
+A tela nao pede SQL livre nem manda uma consulta arbitraria. Ela pede uma capability de negocio. Isso e importante porque desloca a responsabilidade da execucao para o servidor. O navegador diz a intencao. O backend decide a execucao real. Esse modelo reduz risco de seguranca, facilita auditoria e torna a interface previsivel.
 
-Adapter é a peça que traduz um domínio de negócio para o protocolo AG-UI. O orquestrador não sabe nada sobre varejo, SQL ou dashboard. Ele sabe apenas iniciar run, delegar ao adapter certo e garantir evento terminal coerente.
+### 6.4. Snapshot e delta
 
-### 6.5. Capability governada
+Snapshot e uma fotografia completa do estado. Delta e uma alteracao incremental. Os dois juntos permitem uma UI progressiva: a tela pode nascer vazia, receber um estado inicial e depois ser enriquecida sem recarregar tudo a cada mudanca.
 
-Capability é a ação de negócio permitida ao frontend pedir. No slice atual, a UI não manda SQL livre nem monta query arbitrária. Ela pede capabilities como sales_summary, checkout_funnel, catalog_opportunities e dashboard_dynamic. O backend valida essa capability, escolhe a query aprovada ou a materialização segura correspondente e então emite eventos.
+### 6.5. Sidecar agentic
 
-### 6.6. Snapshot, delta e custom event
+O sidecar e o painel auxiliar que acompanha a tela principal. Ele mostra mensagens, status, correlation_id, timeline de ferramentas e possiveis interrupcoes humanas. Isso evita jogar tudo dentro da area principal da pagina e permite que a interface explique o que esta fazendo sem quebrar o layout operacional.
 
-Snapshot é o estado inteiro. Delta é a mudança incremental, no caso local via JSON Patch. Custom event é um evento adicional documentado pela própria aplicação, usado aqui para marcos de materialização do dashboard. Esses três elementos são a base do comportamento progressivo das telas ERP do projeto.
+### 6.6. DashboardSpec segura
+
+No caso de dashboard dinamico, o backend nao manda HTML ou JavaScript arbitrario. Ele valida uma especificacao fechada, com tipos de widget, layout, fontes de dados governadas e travas de seguranca explicitas. Isso e o oposto de renderizar markup livre vindo da IA.
 
 ## 7. Como a feature funciona por dentro
 
-Conceitualmente, o caminho é simples. A tela ERP não conversa com o domínio interno. Ela monta um pedido AG-UI, aponta para a rota dedicada e fica ouvindo eventos. O backend recebe esse pedido, cria o contexto do run, escolhe um adapter compatível com o tipo de execução, transforma a intenção de negócio em ferramentas ou materialização segura e transmite a história da execução como stream.
+A tela monta um pedido de run com threadId, runId, executionKind, usuario operacional, input de negocio, metadata da tela e uma fonte explicita de configuracao. O backend recebe esse pedido na rota dedicada, registra o correlation_id, escolhe o adapter adequado, emite o inicio do run e comeca a produzir eventos.
 
-No slice atual, esse contrato foi moldado para varejo e analytics de ERP. Por isso a ponte concreta passa por um adapter de demonstração de varejo. Esse adapter resolve capabilities fechadas de vendas, checkout e catálogo para queries dyn_sql aprovadas, e resolve a capability de dashboard dinâmico para uma esteira de validação e materialização de DashboardSpec. O frontend então reconstitui o estado em sidecar, timeline de tools, cards de resultado e canvas dinâmico.
+Se a capability for de consulta governada, o adapter resolve a query aprovada, executa a ferramenta dyn_sql canonicamente, publica o resultado como snapshot de estado e envia uma mensagem curta de conclusao. Se a capability for de dashboard dinamico, o fluxo muda: em vez de chamar dyn_sql diretamente, o backend valida uma DashboardSpec segura e vai materializando o painel por eventos, incluindo snapshot inicial, deltas de data sources, deltas de widgets e estado final pronto para renderizacao.
 
-## 8. Divisão em etapas ou submódulos
+O frontend nao precisa conhecer o dominio interno. Ele so recebe eventos, atualiza o store, renderiza o sidecar e preenche a area principal da tela. Esse desenho e o que torna a feature reutilizavel por outras telas e por terceiros.
 
-### 8.1. Contrato de protocolo
+## 8. Divisao em etapas ou submodulos
 
-É a camada que define o formato aceito pelo frontend e o tipo oficial dos eventos. Ela existe para impedir que cada tela invente seu próprio payload.
+### 8.1. Fronteira de protocolo
+
+E a camada que define o que uma tela pode pedir e que tipo de evento ela pode receber. Ela existe para impedir contratos diferentes por pagina e para falhar fechado quando o payload sai do combinado.
 
 ### 8.2. Borda HTTP dedicada
 
-É a camada que recebe o run AG-UI, valida permissão, exige fonte explícita de configuração YAML e devolve SSE. Ela existe para isolar AG-UI dos endpoints legados.
+E a camada que recebe o run AG-UI. Ela autentica, exige fonte explicita de configuracao e devolve SSE. Ela existe para separar esta experiencia das rotas legadas de agente e para garantir que Generative UI tenha um boundary proprio.
 
-### 8.3. Orquestração de lifecycle
+### 8.3. Orquestracao de lifecycle
 
-É a camada que emite início, delega ao adapter certo e garante fechamento terminal consistente. Ela existe para desacoplar transporte do domínio.
+E a camada que nao conhece varejo, SQL ou dashboard. Ela conhece apenas o lifecycle do run. Seu papel e iniciar a execucao, delegar ao adapter certo e garantir que sempre exista um encerramento coerente, seja de sucesso ou erro.
 
-### 8.4. Adapter de domínio varejo
+### 8.4. Adapter de dominio
 
-É a camada que interpreta capability e transforma intenção ERP em consulta governada ou dashboard dinâmico. Ela existe para impedir regra de negócio no frontend e SQL livre vindo do navegador.
+E a camada que traduz a intencao de negocio em execucao concreta. No slice atual, esse adapter conhece o dominio PDV demo. Ele decide qual capability e permitida, qual query aprovada sera usada e quando o fluxo deve ir para materializacao de dashboard.
 
-### 8.5. Runtime de frontend compartilhado
+### 8.5. Materializacao dinamica de dashboard
 
-É a camada que recebe eventos, reconstrói estado, renderiza sidecar e atualiza a página principal. Ela existe para evitar duplicação de cliente SSE e store por tela.
+E a camada que transforma especificacao de dashboard em eventos reconstituiveis. Ela existe para permitir flexibilidade visual sem abrir risco de HTML, JavaScript, SQL livre, segredos ou correlation_id vazando para o canvas.
 
-## 9. Como usar em telas de um sistema ERP
+### 8.6. Runtime compartilhado do frontend
 
-O uso correto em ERP, segundo o desenho comprovado, segue um padrão repetível.
+E a camada que transforma eventos em experiencia de pagina. Ela inclui o cliente SSE por POST, o sidecar, o store de estado e o controller compartilhado das telas. Ela existe para que cada nova tela reaproveite o mesmo mecanismo sem duplicar infraestrutura.
 
-Primeiro, cada tela define uma intenção de negócio clara, não uma query livre. Depois, a tela monta um contexto mínimo com screenId, título, período e capability. Em seguida, ela usa o cliente SSE compartilhado para abrir um POST em /ag-ui/runs. A resposta vai atualizando sidecar, status operacional e área principal da tela conforme os eventos chegam.
+## 9. Pipeline ou fluxo principal
 
-O projeto já mostra quatro variações concretas desse padrão.
+O fluxo principal do slice AG-UI pode ser entendido assim.
 
-### 9.1. Cockpit executivo de vendas
+1. A pagina abre e monta contexto operacional, como screenId, capability, periodo e YAML carregado no layout mestre.
+2. O usuario dispara a execucao e a tela envia um POST para /ag-ui/runs.
+3. O backend valida autenticacao e configuracao, resolve o correlation_id e inicia o run.
+4. O orchestrator emite RUN_STARTED e entrega a execucao ao adapter registrado para aquele executionKind.
+5. O adapter decide se a capability vira consulta governada ou materializacao de dashboard.
+6. O backend passa a emitir eventos AG-UI: tool calls, mensagens, snapshots, deltas e custom events.
+7. O cliente JavaScript aplica esses eventos no store compartilhado.
+8. O sidecar mostra progresso, correlation_id, mensagens e timeline de ferramentas.
+9. A tela principal renderiza o resultado governado ou o canvas dinamico.
+10. O run termina com RUN_FINISHED ou RUN_ERROR.
 
-É a tela para gestor comercial que quer receita, ticket médio e leitura assistida do período. O backend traduz isso para a capability sales_summary e para a query governada pdv_vendas_kpis_periodo.
+A ordem importa porque ela separa responsabilidade de execucao, narracao da execucao e renderizacao da interface. Isso melhora diagnostico e reduz acoplamento.
 
-### 9.2. Radar checkout e UCP
+## 10. Decisoes tecnicas e trade-offs
 
-É a tela para operação digital que quer enxergar sessões, cancelamentos, conversão e gargalos do funil. O backend traduz isso para checkout_funnel e para a query governada pdv_checkout_funil_status.
+### 10.1. Implementacao local em vez de SDK externo
 
-### 9.3. Central de oportunidades de catálogo
+O projeto escolheu implementar o slice com FastAPI, Pydantic, SSE e JavaScript puro. O ganho e aderencia imediata a arquitetura existente. O custo e nao herdar automaticamente a infraestrutura pronta de um SDK externo. O efeito pratico e positivo: a plataforma controla o contrato e evolui no proprio ritmo.
 
-É a tela para comercial e estoque que quer cruzar saldo, preço, oferta e vendas. O backend traduz isso para catalog_opportunities e para a query governada pdv_catalogo_estoque_oportunidades.
+### 10.2. Capabilities fechadas em vez de payload livre
 
-### 9.4. Canvas dinâmico de dashboard
+O ganho e seguranca, governanca e previsibilidade operacional. O custo e exigir evolucao do catalogo de capabilities sempre que uma nova experiencia de negocio for criada. Essa escolha favorece produto enterprise, onde controle importa mais que liberdade irrestrita no navegador.
 
-É a tela para gestão que quer montar um painel progressivo com widgets seguros e data sources aprovadas. O backend traduz isso para dashboard_dynamic e para a validação e materialização de DashboardSpec, sem liberar HTML, JavaScript, segredo ou correlation_id para dentro da spec.
+### 10.3. Dashboard por especificacao segura em vez de HTML gerado
 
-## 10. Casos de uso e exemplos de negócio
+O ganho e reduzir risco estrutural de injecao, DOM inseguro e vazamento de segredo. O custo e limitar a liberdade visual ao contrato permitido. A consequencia pratica e correta para o contexto do projeto: flexibilidade suficiente para dashboards ricos, sem perder controle.
 
-### 10.1. Reunião diária de vendas
+### 10.4. HTML estatico e JavaScript puro em vez de React
 
-Um gerente abre o cockpit AG-UI e pede leitura do período. O sistema dispara a capability de vendas, mostra a chamada da tool governada, entrega o snapshot com o resultado e usa o sidecar para explicar o indicador. O valor de negócio é acelerar leitura executiva sem planilha paralela nem SQL manual.
+O ganho e compatibilidade total com a UI atual do repositório. O custo e menos ecossistema pronto de componentes agentic. Em troca, o projeto prova que uma Generative UI governada nao depende de React para existir.
 
-### 10.2. Sala de guerra de checkout
+## 11. Como pode ser utilizado por terceiros e outras implementacoes
 
-Uma operação digital suspeita aumento de abandono. A tela de checkout usa AG-UI para mostrar o funil em tempo real e o sidecar explica os gargalos. O valor de negócio é identificar rapidamente onde a conversão caiu sem expor o banco a consultas improvisadas do navegador.
+O ponto mais importante para terceiros e este: o slice local nao depende do layout exato das paginas demo. O contrato reutilizavel esta em tres blocos.
 
-### 10.3. Prioridade comercial de estoque e oferta
+1. A rota POST /ag-ui/runs com payload tipado.
+2. O stream de eventos AG-UI via SSE.
+3. O cliente e store compartilhados do frontend.
 
-O time de catálogo precisa entender quais itens têm estoque alto e baixa tração. A central de oportunidades pede a capability apropriada, recebe resultado governado e usa o sidecar para contextualizar prioridades. O valor de negócio é priorizar ação comercial usando dados confiáveis e narrativa assistida.
+Um terceiro pode reutilizar isso de duas formas.
 
-### 10.4. Montagem de painel executivo seguro
+A primeira e consumir o backend existente, criando uma tela nova que mande executionKind, capability, input contextual e fonte explicita de configuracao, e depois reconstrua o estado a partir dos eventos.
 
-Uma liderança quer um dashboard composto por KPI, série temporal, ranking e mix. Em vez de renderizar HTML livre vindo do agente, o projeto usa DashboardSpec validado, eventos progressivos de materialização e canvas sob controle da aplicação. O valor de negócio é ganhar flexibilidade visual sem abrir risco de segurança na interface.
+A segunda e implementar um novo backend compativel com o mesmo contrato, desde que respeite o lifecycle de eventos, o formato dos snapshots e a disciplina de nao empurrar logica insegura para o navegador. Em ambos os casos, a interface nao precisa ser igual a das demos atuais. O que precisa ser igual e o contrato.
 
-## 11. Decisões técnicas e trade-offs
+Para outras implementacoes internas, o padrao recomendado e criar um novo adapter de dominio e registrá-lo por executionKind, sem alterar o orchestrator. Isso mantem o mesmo protocolo de interface e troca apenas a traducao de negocio.
 
-### 11.1. Implementar AG-UI localmente em vez de depender de SDK Microsoft ou Google
+## 12. Recursos avancados confirmados no codigo
 
-Ganho: aderência imediata à arquitetura do repositório, sem trocar stack frontend nem runtime backend.
+Os recursos mais relevantes confirmados no slice atual sao estes.
 
-Custo: o projeto não recebe automaticamente todos os recursos e middlewares dos SDKs do ecossistema oficial.
+1. Timeline de ferramentas com eventos de inicio, argumentos, fim e resultado.
+2. Snapshot completo de estado para reconstruir a interface.
+3. Deltas incrementais em JSON Patch para atualizar partes do estado sem refazer tudo.
+4. Sidecar reutilizavel com mensagens, status, correlation_id e contexto da tela.
+5. Adaptacao de interrupcoes para o painel HIL compartilhado.
+6. Materializacao progressiva de dashboard por custom events e state deltas.
+7. Retry explicito no cliente SSE do navegador.
+8. Falha fechada para campos fora do contrato ou configuracao ausente.
 
-Conseqüência prática: a implementação local é mais controlada, mas cobre um subconjunto governado do espaço AG-UI.
+Esses recursos mostram que a feature vai alem de streaming textual. Ela implementa uma interface agentic realmente dirigida por estado e eventos.
 
-### 11.2. Usar HTML estático e JavaScript puro
+## 13. O que acontece em caso de sucesso
 
-Ganho: integração direta com a UI atual do projeto e menor custo de stack.
+No caminho feliz, o usuario dispara a tela, o backend aceita o run, o sidecar abre, o correlation_id aparece, a ferramenta governada e executada ou o dashboard e materializado, a area principal recebe estado pronto e a execucao termina com sucesso. O usuario percebe isso como uma tela viva e explicativa, nao como um spinner opaco.
 
-Custo: menos ecossistema pronto do que um cliente React dedicado.
+## 14. O que acontece em caso de erro
 
-Conseqüência prática: o projeto comprova que AG-UI pode servir ERP estático sem depender de React ou CopilotKit.
+Os erros confirmados se dividem em tres grupos.
 
-### 11.3. Capabilities fechadas em vez de payload livre
+1. Erros de boundary, como falta de autenticacao ou falta de fonte de configuracao.
+2. Erros de orquestracao, como executionKind sem adapter registrado.
+3. Erros de dominio governado, como capability invalida, parametro fora do contrato, SQL livre bloqueado, configuracao PDV ausente ou DashboardSpec recusada.
 
-Ganho: segurança, governança e previsibilidade.
+Em todos esses casos, o desenho evita fallback silencioso. O erro aparece como erro explicito de contrato ou de execucao.
 
-Custo: menos flexibilidade para experimentação espontânea pelo navegador.
+## 15. Impacto tecnico
 
-Conseqüência prática: a evolução da tela depende do catálogo de capabilities, não de SQL ou markup soltos.
+Tecnicamente, a feature encapsula complexidade de streaming, estado, ferramentas, materializacao dinamica e HIL em um conjunto coeso de contratos reutilizaveis. Isso reduz acoplamento entre pagina e dominio, facilita testes, melhora observabilidade e cria uma base clara para novas telas agentic.
 
-## 12. O que acontece em caso de sucesso
+## 16. Impacto executivo
 
-No caminho feliz, a tela envia um run com fonte explícita de configuração, o backend devolve RUN_STARTED, o adapter executa a capability governada ou materializa o dashboard, a UI recebe snapshots, deltas e mensagens, e a execução termina com RUN_FINISHED. O operador percebe isso como tela viva, sidecar aberto, resultado principal preenchido e correlation_id disponível para rastreabilidade.
+Executivamente, a feature reduz risco operacional de interfaces caixa-preta, melhora previsibilidade de execucao e cria uma capacidade clara de demonstrar automacao assistida com governanca. Isso ajuda lideranca a confiar mais no uso operacional da IA dentro do produto.
 
-## 13. O que acontece em caso de erro
+## 17. Impacto comercial
 
-Os erros confirmados no slice lido caem em quatro famílias.
+Comercialmente, a feature permite mostrar IA aplicada a problemas reais do cliente com uma interface visivel, rastreavel e segura. O valor tangivel esta em acelerar leitura operacional, reduzir dependencia de planilhas paralelas e transformar dados governados em experiencia interativa.
 
-1. Erro de autenticação ou permissão na borda.
-2. Erro por ausência de fonte explícita de configuração YAML.
-3. Erro de adapter não registrado para o executionKind.
-4. Erro de negócio governado, como capability inválida, SQL livre bloqueado, parâmetro inválido ou configuração PDV ausente.
+Promessa que pode ser feita: a plataforma entrega UI agentic governada com estado progressivo e integracao a capacidades aprovadas.
 
-## 14. Limites e pegadinhas
+Promessa que nao pode ser feita com base no codigo lido: liberdade irrestrita para qualquer frontend executar qualquer acao arbitraria ou gerar interface livre sem contrato.
 
-O slice atual não comprova integração direta com Microsoft Agent Framework nem Google ADK. Eles entram aqui como referencial oficial do ecossistema AG-UI, não como dependência do código local.
+## 18. Impacto estrategico
 
-O slice atual também não comprova WebSocket, voz, anexos multimodais, frontend tool calls arbitrárias nem retomada formal de resume input na rota dedicada. O contrato de modelos tem elementos para continuidade e interrupção, mas a superfície executável lida nesta tarefa está centrada em POST com SSE e outcome de interrupção no encerramento do run.
+Estrategicamente, esta implementacao fortalece a plataforma porque cria um pilar reutilizavel para novas experiencias agentic. Ela prepara o produto para crescer em torno de um contrato comum de interface, em vez de multiplicar telas isoladas com protocolos diferentes. Isso melhora governanca, reaproveitamento e velocidade futura.
 
-Também é erro tratar AG-UI como sinônimo de chat. O caso mais rico lido no projeto é justamente um canvas de dashboard materializado por eventos.
+## 19. Exemplos praticos guiados
 
-## 15. Explicação 101
+### 19.1. Gestor comercial lendo o periodo
 
-Se fosse para explicar de forma simples: o protocolo AG-UI é como a língua que a tela fala com o agente. Google e Microsoft aparecem no ecossistema oficial como frameworks que podem falar essa língua. O projeto, porém, construiu seu próprio tradutor local dessa língua. Quando uma tela ERP pede um cockpit de vendas ou um radar de checkout, ela não fala direto com SQL, nem com o agente bruto. Ela manda um pedido padronizado e vai recebendo a história do que está acontecendo até o resultado final.
+Cenario: um gerente quer resumir o desempenho de vendas do mes.
 
-## 16. Checklist de entendimento
+Entrada: a tela envia capability sales_summary com periodo e contexto da tela.
 
-- Entendi o que é AG-UI no ecossistema oficial.
-- Entendi por que Microsoft Agent Framework e Google ADK entram aqui como referencial externo.
-- Entendi que o projeto não usa esses SDKs diretamente no slice atual.
-- Entendi como a implementação local foi desenhada com FastAPI, SSE, adapters e JS puro.
-- Entendi como reutilizar o protocolo em telas ERP de vendas, checkout, catálogo e dashboard.
-- Entendi os principais casos de uso e exemplos de negócio.
-- Entendi os limites do que está implementado hoje.
+Processamento: o backend resolve a query aprovada, executa dyn_sql e publica o resultado como snapshot.
 
-## 17. Evidências no código
+Saida: a pagina mostra o resultado governado e o sidecar explica a execucao.
+
+### 19.2. Operacao digital monitorando checkout
+
+Cenario: a equipe suspeita aumento de abandono.
+
+Entrada: a tela envia capability checkout_funnel.
+
+Processamento: o adapter traduz isso para uma query governada de funil.
+
+Saida: a interface mostra o status do funil e a narrativa assistida no sidecar.
+
+### 19.3. Lideranca pedindo um painel dinamico
+
+Cenario: a area quer um dashboard com KPI, serie temporal, ranking e mix.
+
+Entrada: a tela envia capability dashboard_dynamic com DashboardSpec segura.
+
+Processamento: o backend valida a spec, rejeita conteudo proibido e materializa widgets por eventos.
+
+Saida: o canvas nasce vazio e termina pronto, sem HTML livre vindo do agente.
+
+## 20. Explicacao 101
+
+Pense na feature como um tradutor entre a tela e o backend agentic. A tela diz o que quer fazer. O backend decide como fazer com seguranca. Durante a execucao, ele vai narrando o processo com eventos. A tela usa esses eventos para mostrar progresso, mensagens, ferramentas usadas e resultado final. Isso e a Generative UI local do projeto: uma interface que nasce e evolui a partir da execucao, mas sempre dentro de um contrato seguro.
+
+## 21. Limites e pegadinhas
+
+O slice atual ainda tem limites claros.
+
+1. O adapter registrado por padrao e apenas retail_demo.
+2. O transporte comprovado e SSE por POST, nao WebSocket.
+3. O projeto nao prova, neste slice, uso direto de SDK Microsoft Agent Framework ou Google ADK.
+4. A interface nao aceita SQL livre, HTML livre, JavaScript livre, segredos nem correlation_id vindo de DashboardSpec.
+5. Nem toda capability imaginavel ja existe; a extensao correta passa por novo adapter ou novo catalogo governado.
+
+## 22. Checklist de entendimento
+
+- Entendi que a Generative UI local do projeto e o slice AG-UI.
+- Entendi qual problema ela resolve.
+- Entendi por que a interface trabalha por capability e eventos.
+- Entendi como a tela e o backend se conectam.
+- Entendi como terceiros podem reutilizar o contrato.
+- Entendi quais recursos avancados ja existem.
+- Entendi os limites atuais do slice.
+
+## 23. Evidencias no codigo
 
 - src/api/schemas/ag_ui_models.py
-  - Motivo da leitura: confirmar contrato tipado de request, eventos, deltas e outcome interrupt.
-  - Símbolo relevante: AgUiRunRequest, AgUiRunStartedEvent, AgUiRunFinishedEvent, AgUiStateDeltaEvent.
-  - Comportamento confirmado: fronteira estrita e aliases oficiais do protocolo.
+  - Motivo da leitura: confirmar o contrato dos eventos, do run e dos deltas.
+  - Simbolo relevante: AgUiRunRequest, AgUiRunFinishedEvent, AgUiStateDeltaEvent.
+  - Comportamento confirmado: a interface agentic local e governada por modelos estritos e JSON Patch.
 
 - src/api/routers/ag_ui_router.py
-  - Motivo da leitura: confirmar endpoint dedicado, exigência de config explícita e retorno SSE.
-  - Símbolo relevante: POST /ag-ui/runs.
-  - Comportamento confirmado: AG-UI roda em rota própria e devolve X-Correlation-Id.
+  - Motivo da leitura: confirmar a fronteira publica da feature.
+  - Simbolo relevante: POST /ag-ui/runs.
+  - Comportamento confirmado: a Generative UI local tem rota dedicada, exige configuracao explicita e devolve SSE.
 
 - src/api/services/ag_ui_run_orchestrator.py
-  - Motivo da leitura: confirmar lifecycle do run e resolução por executionKind.
-  - Símbolo relevante: AgUiRunOrchestrator.
-  - Comportamento confirmado: emite RUN_STARTED, delega ao adapter e garante terminal RUN_FINISHED ou RUN_ERROR.
+  - Motivo da leitura: confirmar o lifecycle do run.
+  - Simbolo relevante: AgUiRunOrchestrator.
+  - Comportamento confirmado: o orchestrator emite RUN_STARTED e garante terminal de sucesso ou erro.
 
 - src/api/services/ag_ui_retail_demo_adapter.py
-  - Motivo da leitura: confirmar tradução de capabilities ERP para dyn_sql governado e dashboard dinâmico.
-  - Símbolo relevante: RetailDemoAgUiAdapter, RetailDemoQueryCatalog.
-  - Comportamento confirmado: browser não envia SQL livre; capability define query aprovada.
+  - Motivo da leitura: confirmar como a intencao de negocio vira execucao governada.
+  - Simbolo relevante: RetailDemoAgUiAdapter.
+  - Comportamento confirmado: o backend traduz capability em dyn_sql aprovado ou em materializacao de dashboard.
 
 - src/api/services/ag_ui_dashboard_materialization.py
-  - Motivo da leitura: confirmar materialização progressiva de DashboardSpec.
-  - Símbolo relevante: DashboardMaterializationService.
-  - Comportamento confirmado: snapshot inicial, deltas, custom events e estado ready ou validation_failed.
+  - Motivo da leitura: confirmar o canvas dinamico por eventos.
+  - Simbolo relevante: DashboardMaterializationService.
+  - Comportamento confirmado: snapshot inicial, deltas, custom events e status final ready ou validation_failed.
 
 - app/ui/static/js/shared/ag-ui-client.js
-  - Motivo da leitura: confirmar cliente SSE real do frontend.
-  - Símbolo relevante: createAgUiSseClient.
-  - Comportamento confirmado: POST + text/event-stream + retry explícito sem correlation_id inventado no browser.
+  - Motivo da leitura: confirmar o contrato reutilizavel do lado do navegador.
+  - Simbolo relevante: createAgUiSseClient.
+  - Comportamento confirmado: o cliente faz POST SSE, captura correlation_id e suporta retry explicito.
 
-- app/ui/static/ui-admin-plataforma-ag-ui-vendas-cockpit.html
-  - Motivo da leitura: confirmar tela ERP de vendas.
-  - Comportamento confirmado: cockpit executivo de vendas com filtros, sidecar e área de resultado governado.
+- app/ui/static/js/shared/ag-ui-retail-demo-page.js
+  - Motivo da leitura: confirmar o padrao de tela reutilizavel.
+  - Simbolo relevante: AgUiRetailDemoPageController.
+  - Comportamento confirmado: uma nova pagina pode reutilizar o mesmo fluxo mudando screenId, capability e contexto.
 
-- app/ui/static/ui-admin-plataforma-ag-ui-checkout-radar.html
-  - Motivo da leitura: confirmar tela ERP de checkout.
-  - Comportamento confirmado: radar de checkout e UCP com filtros e resultado governado.
-
-- app/ui/static/ui-admin-plataforma-ag-ui-catalogo-central.html
-  - Motivo da leitura: confirmar tela ERP de catálogo.
-  - Comportamento confirmado: central de oportunidades com sidecar e resultado governado.
-
-- app/ui/static/ui-admin-plataforma-ag-ui-dashboard-dinamico.html
-  - Motivo da leitura: confirmar tela ERP de canvas dinâmico.
-  - Comportamento confirmado: workbench de dashboard com histórico, canvas e ações de reset e retry.
+- app/ui/static/js/shared/ag-ui-sidecar-chat.js
+  - Motivo da leitura: confirmar sidecar e HIL compartilhados.
+  - Simbolo relevante: createAgUiSidecarChat.
+  - Comportamento confirmado: mensagens, tools, correlation_id e interrupcoes ficam desacoplados da area principal da tela.

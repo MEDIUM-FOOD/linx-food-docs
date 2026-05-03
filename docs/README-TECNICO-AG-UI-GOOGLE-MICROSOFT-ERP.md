@@ -1,365 +1,531 @@
-# Manual técnico, operacional e de uso: AG-UI com referencial Google e Microsoft aplicado ao ERP
+# Manual tecnico, operacional e de uso: Generative UI local com AG-UI no projeto
 
-## 1. O que é esta feature
+## 1. O que esta implementado de fato
 
-No plano técnico, o slice AG-UI deste projeto é uma implementação dedicada de interface agentic por eventos sobre a rota POST /ag-ui/runs. O backend recebe um request tipado, cria um contexto imutável de execução, resolve um adapter por executionKind, emite eventos AG-UI ordenados e serializa tudo em Server-Sent Events. O frontend em JavaScript puro consome esse stream, atualiza store compartilhado, renderiza sidecar, linha do tempo de tools, snapshots de estado e áreas principais de telas ERP.
+O slice executavel de Generative UI deste projeto e uma implementacao AG-UI local baseada em FastAPI no backend e HTML estatico com JavaScript puro no frontend. O boundary publico e a rota POST /ag-ui/runs. O request entra em um contrato Pydantic estrito, o backend resolve um contexto imutavel de execucao, delega para um adapter por executionKind e serializa os eventos em text/event-stream. No navegador, um cliente compartilhado consome o stream, aplica eventos em um store local e atualiza sidecar, timeline de tools e area principal da pagina.
 
-## 2. Que problema ela resolve
+Isso importa porque o comportamento real nao esta espalhado em varias rotas nem depende de uma SPA complexa. Ele esta concentrado em poucos componentes coesos: contrato de protocolo, router, orchestrator, adapter de dominio, materializador de dashboard e runtime compartilhado do frontend.
 
-Tecnicamente, a feature resolve o problema de sincronizar backend agentic e interface sem polling, sem payloads ad hoc por página e sem vazamento da lógica de domínio para o navegador. Ela também resolve um problema de governança: o frontend não escolhe SQL, não cria correlation_id e não materializa dashboard por HTML arbitrário. Tudo isso fica controlado pelo backend e pelo contrato tipado.
+## 2. Contrato do request
 
-## 3. Referencial externo: AG-UI oficial, Microsoft e Google
+A entrada canônica do slice esta em AgUiRunRequest. Os campos relevantes confirmados no codigo sao estes.
 
-O referencial externo lido na documentação oficial do protocolo descreve AG-UI como padrão aberto, leve e orientado por eventos para conectar aplicações voltadas ao usuário a backends agentic, com suporte documentado a integrações first-party para Microsoft Agent Framework e Google ADK. Esse ponto é importante para leitura técnica correta do projeto.
+1. threadId: identidade logica da thread da interface.
+2. runId: identidade do run atual.
+3. executionKind: chave usada para escolher o adapter.
+4. user_email: usuario operacional.
+5. input: payload de negocio.
+6. metadata: contexto adicional da tela.
+7. yaml_config, yaml_inline_content ou encrypted_data: fonte explicita de configuracao.
 
-O slice atual não usa Microsoft Agent Framework nem Google ADK no código. Não há import, SDK ou adapter desses frameworks na implementação AG-UI local lida. A aproximação com o ecossistema oficial acontece no nível de arquitetura e contrato: lifecycle do run, eventos tipados, sincronização de estado, deltas, tool events, interrupções e transporte HTTP em streaming. Em termos práticos, o projeto implementa sua própria ponte compatível com a lógica do protocolo, adaptada à stack FastAPI + HTML estático + JavaScript puro.
+O boundary falha fechado se nenhuma dessas fontes de configuracao for enviada. Isso e um comportamento importante: a UI AG-UI local nao executa com contexto implicito nem com fallback silencioso.
 
-## 4. Como a feature funciona por dentro
+## 3. Borda HTTP e transporte
 
-O caminho executável real tem cinco etapas.
+A rota dedicada fica em src/api/routers/ag_ui_router.py. O comportamento comprovado e este.
 
-### 4.1. Recepção do run
+1. Prefixo /ag-ui.
+2. Endpoint POST /runs.
+3. Permissao exigida: agent_execute.
+4. Rate limit herdado da camada de agente.
+5. Resposta em StreamingResponse com media_type text/event-stream.
+6. Header X-Correlation-Id devolvido ao frontend.
 
-O router dedicado recebe um AgUiRunRequest, valida permissão de execução agentic, exige uma fonte explícita de configuração entre yaml_config, yaml_inline_content e encrypted_data, resolve correlation_id e monta AgUiRunContext.
+O router nao conhece o dominio. Ele apenas valida o request, resolve o correlation_id, monta AgUiRunContext e injeta AgUiSseEventEncoder no fluxo de resposta.
 
-### 4.2. Início do lifecycle
+## 4. AgUiRunContext e isolamento do lifecycle
 
-O AgUiRunOrchestrator emite RUN_STARTED assim que recebe o contexto. Isso garante que o frontend saiba imediatamente que a execução começou, mesmo antes de qualquer tool ou resposta textual.
+O contexto de execucao foi modelado como dataclass imutavel. Ele concentra correlation_id, thread_id, run_id, user_email, execution_kind, input, parent_run_id, metadata e as tres possibilidades de fonte de configuracao.
 
-### 4.3. Resolução do adapter
+Esse desenho tem valor tecnico direto: depois que o router monta o contexto, as camadas seguintes nao ficam pescando dados soltos do request. Isso reduz acoplamento e ajuda a manter o orchestrator cego ao dominio.
 
-O orchestrator escolhe um adapter a partir de executionKind. No slice atual, o router registra apenas retail_demo. Se não existir adapter compatível, a execução termina com RUN_ERROR e código AG_UI_ADAPTER_NOT_FOUND.
+## 5. Orquestrador do run
 
-### 4.4. Tradução do domínio
+O orchestrator mora em src/api/services/ag_ui_run_orchestrator.py. Ele tem responsabilidade unica: governar o lifecycle AG-UI.
 
-O adapter de varejo interpreta o input, valida capability, bloqueia chaves de SQL livre, resolve configurações do ambiente PDV, escolhe a query governada ou o caminho de dashboard dinâmico e começa a emitir eventos AG-UI.
+O comportamento confirmado no codigo e este.
 
-### 4.5. Encerramento terminal
+1. Loga inicio do run com marker canônico.
+2. Emite RUN_STARTED imediatamente.
+3. Resolve o adapter por executionKind.
+4. Repassa os eventos produzidos pelo adapter.
+5. Considera RUN_FINISHED e RUN_ERROR como terminais.
+6. Se o adapter nao emitir evento terminal, fecha automaticamente com RUN_FINISHED e outcome success.
+7. Se nao houver adapter, retorna RUN_ERROR com AG_UI_ADAPTER_NOT_FOUND.
+8. Se houver erro de dominio controlado, retorna RUN_ERROR com o code especifico.
+9. Se houver erro inesperado, retorna RUN_ERROR com AG_UI_RUN_FAILED.
 
-Se o adapter não emitir um evento terminal próprio, o orchestrator fecha a execução com RUN_FINISHED e outcome de sucesso. Se o adapter lançar AgUiExecutionError, o orchestrator envia RUN_ERROR com o código de domínio. Se houver exceção inesperada, envia AG_UI_RUN_FAILED.
+Esse desenho permite adicionar novos adapters sem alterar a logica de lifecycle.
 
-## 5. Submódulos técnicos relevantes
+## 6. Encoder SSE
 
-### 5.1. Modelos de protocolo
+O encoder mora em src/api/services/ag_ui_event_encoder.py e e validado por teste dedicado. A funcao dele e transformar cada BaseEvent em uma mensagem SSE independente, no formato event/data, terminada por linha em branco.
 
-Essa camada está em ag_ui_models. Ela define request, resume input, mensagens, deltas JSON Patch, outcomes de sucesso e interrupção, eventos de texto, eventos de tool, snapshots de estado, snapshots de atividade, custom e raw events.
+Em termos praticos, isso garante duas coisas.
 
-O comportamento confirmado relevante é este.
+1. O frontend recebe um payload completo por evento, nao fragmentos sem tipo.
+2. O contrato de serializacao do protocolo fica centralizado, e nao espalhado pelo router ou pelo adapter.
 
-1. Os modelos são estritos e rejeitam campos extras.
-2. A serialização usa aliases camelCase oficiais.
-3. TEXT_MESSAGE_CONTENT exige delta não vazio.
-4. RUN_FINISHED suporta outcome interrupt com lista de interrupts.
-5. STATE_DELTA usa lista de operações JSON Patch.
+## 7. Modelos de evento disponiveis
 
-### 5.2. Borda HTTP
+O arquivo src/api/schemas/ag_ui_models.py define os eventos oficiais. Os grupos mais relevantes para a interface local sao estes.
 
-Essa camada está em ag_ui_router. Ela existe para separar AG-UI dos endpoints legados de agente e streaming. O endpoint real é POST /ag-ui/runs e responde com media type text/event-stream.
-
-O comportamento confirmado relevante é este.
-
-1. Sem autenticação, o endpoint falha fechado.
-2. Sem fonte explícita de configuração, falha com 400.
-3. O correlation_id vem do request state ou é gerado no backend.
-4. O header X-Correlation-Id volta na resposta.
-
-### 5.3. Encoder SSE
-
-Essa camada está em ag_ui_event_encoder. Ela serializa cada evento como par event/data e fecha cada mensagem com linha em branco, no formato esperado por consumidores SSE. Isso simplifica o cliente de frontend e reforça a ideia de que o backend transmite um BaseEvent completo por mensagem.
-
-### 5.4. Orquestrador de run
-
-Essa camada está em ag_ui_run_orchestrator. Ela é propositalmente cega ao domínio. Seu único trabalho é controlar o lifecycle AG-UI.
-
-O comportamento confirmado relevante é este.
-
-1. Emite RUN_STARTED antes de chamar o adapter.
-2. Considera RUN_FINISHED e RUN_ERROR como eventos terminais.
-3. Fecha automaticamente com RUN_FINISHED quando o adapter não encerra explicitamente.
-4. Converte ausência de adapter e erro de domínio em RUN_ERROR tipado.
-
-### 5.5. Adapter de varejo
-
-Essa camada está em ag_ui_retail_demo_adapter. Ela concentra a implementação de negócio do slice atual.
-
-O comportamento confirmado relevante é este.
-
-1. Capabilities aprovadas são sales_summary, checkout_funnel, catalog_opportunities, customer_segments e dashboard_dynamic.
-2. Não há execução de SQL livre vinda do browser.
-3. Cada capability resolve uma query_id aprovada em catálogo fechado.
-4. O executor usa a factory canônica de dyn_sql.
-5. dashboard_dynamic não usa executor SQL direto; passa pela materialização de DashboardSpec.
-
-Observação importante: customer_segments existe no catálogo do adapter, mas o slice lido de telas estáticas não confirmou uma página ERP específica usando essa capability hoje.
-
-### 5.6. Materialização de dashboard
-
-Essa camada está em ag_ui_dashboard_materialization e em ag_ui_dashboard_models. Ela valida a spec e a converte em eventos reconstituíveis para o frontend.
-
-O comportamento confirmado relevante é este.
-
-1. Snapshot inicial nasce com status materializing.
-2. Em caso de spec válida, o backend publica evento de validação, deltas de spec, data sources e widgets, e depois marca status ready.
-3. Em caso de spec inválida, o backend troca status para validation_failed, devolve erros estruturados e emite mensagem textual curta.
-
-### 5.7. Runtime compartilhado do frontend
-
-Essa camada está em ag-ui-client, ag-ui-sidecar-chat, ag-ui-retail-demo-page e páginas HTML estáticas do admin. Ela permite que várias telas ERP consumam o mesmo protocolo sem reescrever cliente SSE e sidecar.
-
-O comportamento confirmado relevante é este.
-
-1. O browser faz POST para /ag-ui/runs, não GET EventSource clássico.
-2. O cliente lê blocos SSE incrementais do body.
-3. O browser não gera correlation_id.
-4. O sidecar adapta interrupções AG-UI ao painel de HIL compartilhado.
-5. O controller base monta payload com screenId, capability, período, metadata e fonte de configuração vinda do layout mestre.
-
-## 6. Contrato operacional do request
-
-O request real aceito pelo endpoint tem estes campos principais.
-
-1. threadId: identidade lógica da thread da tela.
-2. runId: identidade do run específico.
-3. executionKind: chave usada para resolver o adapter.
-4. user_email: usuário operacional da execução.
-5. input: payload de negócio.
-6. metadata: contexto de tela.
-7. yaml_config ou yaml_inline_content ou encrypted_data: fonte explícita de configuração.
-
-No runtime local das telas ERP, o controller base monta payloads com executionKind igual a retail_demo, metadata contendo screenId, screenTitle, yamlPath e inputMode, e input contendo capability, parameters, context e, no caso do dashboard, dashboardSpec.
-
-## 7. Lifecycle de eventos no slice atual
-
-O fluxo mais comum das telas fixas de ERP segue esta ordem.
+### 7.1. Lifecycle do run
 
 1. RUN_STARTED.
-2. STEP_STARTED.
-3. TOOL_CALL_START.
-4. TOOL_CALL_ARGS.
-5. TOOL_CALL_END.
-6. TOOL_CALL_RESULT.
-7. STATE_SNAPSHOT.
-8. TEXT_MESSAGE_START.
-9. TEXT_MESSAGE_CONTENT.
-10. TEXT_MESSAGE_END.
-11. STEP_FINISHED.
-12. RUN_FINISHED.
+2. RUN_FINISHED.
+3. RUN_ERROR.
 
-No dashboard dinâmico, em vez de tool timeline simples, a execução ganha CUSTOM events de dashboard, STATE_SNAPSHOT inicial e várias STATE_DELTA para spec, dataSources, widgets e status final ready.
+### 7.2. Etapas observaveis
 
-## 8. Como usar em telas ERP do projeto
+1. STEP_STARTED.
+2. STEP_FINISHED.
 
-### 8.1. Padrão de montagem de uma tela nova
+### 7.3. Mensagens incrementais
 
-O padrão comprovado no projeto é este.
+1. TEXT_MESSAGE_START.
+2. TEXT_MESSAGE_CONTENT.
+3. TEXT_MESSAGE_END.
+4. TEXT_MESSAGE_CHUNK.
 
-1. Criar uma tela HTML com área de filtros, área principal de resultado e host do sidecar.
-2. Reusar o controller compartilhado de varejo ou especializá-lo para a tela.
-3. Definir screenId, screenTitle, capability e prompt padrão.
-4. Reaproveitar o endpoint /ag-ui/runs.
-5. Resolver a fonte de configuração a partir do layout mestre, não via segredo ou SQL no DOM.
+### 7.4. Timeline de tools
 
-### 8.2. Cockpit executivo de vendas
+1. TOOL_CALL_START.
+2. TOOL_CALL_ARGS.
+3. TOOL_CALL_END.
+4. TOOL_CALL_RESULT.
+5. TOOL_CALL_CHUNK.
 
-Uso prático: tela para diretoria comercial ou gerente de unidade consultar receita, ticket médio e leitura do período.
+### 7.5. Estado e atividade
 
-Implementação confirmada: capability sales_summary, query pdv_vendas_kpis_periodo, filtros de início e fim, sidecar para explicação adicional e área principal preenchida por snapshot governado.
+1. STATE_SNAPSHOT.
+2. STATE_DELTA.
+3. MESSAGES_SNAPSHOT.
+4. ACTIVITY_SNAPSHOT.
+5. ACTIVITY_DELTA.
 
-### 8.3. Radar checkout e UCP
+### 7.6. Extensibilidade
 
-Uso prático: tela para operação digital monitorar funil, cancelamentos, abandono e sinais UCP.
+1. RAW.
+2. CUSTOM.
 
-Implementação confirmada: capability checkout_funnel, query pdv_checkout_funil_status, filtros de período, cards de indicador previstos e painel principal com resultado governado.
+### 7.7. Interrupcao humana
 
-### 8.4. Central de oportunidades de catálogo
+RUN_FINISHED suporta outcome interrupt com lista de interrupts. Isso evita criar um evento inventado separado para HIL. O contrato ja trata pausa terminal como parte do encerramento do run.
 
-Uso prático: tela para trade marketing, pricing e estoque priorizarem oportunidades comerciais.
+## 8. Adapter de dominio atual: retail_demo
 
-Implementação confirmada: capability catalog_opportunities, query pdv_catalogo_estoque_oportunidades, filtros de período e narrativa assistida no sidecar.
+O unico adapter registrado por padrao no router e RetailDemoAgUiAdapter.default(). Ele esta em src/api/services/ag_ui_retail_demo_adapter.py.
 
-### 8.5. Canvas dinâmico de dashboard
+Essa classe e o coracao da implementacao de negocio do slice atual. Ela converte o input do navegador em uma de duas rotas.
 
-Uso prático: tela para montar painel executivo seguro com widgets governados.
+1. Consulta governada por dyn_sql.
+2. Materializacao dinamica de dashboard.
 
-Implementação confirmada: capability dashboard_dynamic, DashboardSpec local validada no frontend antes do envio, safety com correlationIdAllowed false, três dataSources dyn_sql aprovadas e canvas que sai de vazio para quatro widgets.
+O adapter nao aceita qualquer payload. Ele trabalha com capability fechada. As capabilities confirmadas no catalogo sao estas.
 
-## 9. Como usar em um ERP além das telas demo
+1. sales_summary.
+2. checkout_funnel.
+3. catalog_opportunities.
+4. customer_segments.
+5. dashboard_dynamic.
 
-Para usar AG-UI em telas de ERP fora da demo atual, a recomendação técnica baseada no código é esta.
+## 9. Regras de seguranca no adapter
 
-1. Trabalhar por capability, nunca por SQL ou markup livre.
-2. Deixar o frontend responsável só por contexto de tela, filtros e renderização.
-3. Deixar o backend responsável por correlation_id, catálogo de queries, validação de input e estado terminal.
-4. Reaproveitar o sidecar e o cliente SSE compartilhados.
-5. Usar snapshots e deltas para a área principal da tela, e não apenas texto incremental.
+O adapter implementa protecoes importantes que precisam aparecer em qualquer documentacao tecnica seria.
 
-Em termos práticos, uma tela ERP nova pode ser de financeiro, compras, logística, SLA ou atendimento, desde que siga a mesma disciplina: capability fechada, data sources aprovadas e renderização sob controle da aplicação.
+### 9.1. Bloqueio de SQL livre
 
-## 10. Relação com Google e Microsoft no desenho técnico
+O input e percorrido recursivamente. Se aparecer chave como sql, raw_sql, sql_query ou statement, a execucao falha com AG_UI_RETAIL_FREE_SQL_BLOCKED.
 
-O ponto tecnicamente importante não é fingir que o projeto já roda em cima de Microsoft Agent Framework ou Google ADK. O ponto correto é este.
+### 9.2. Capability obrigatoria
 
-1. O protocolo oficial AG-UI já se apresenta como compatível com esses frameworks.
-2. O slice local implementa os mesmos blocos conceituais centrais: run, stream de eventos, snapshots, deltas, tools, estado, erro e interrupção.
-3. Isso cria um caminho de evolução mais limpo caso o projeto deseje, no futuro, ligar um backend desses frameworks ao mesmo frontend AG-UI ou a uma adaptação próxima.
+Se o payload nao trouxer capability valida, a execucao falha com erro especifico de contrato.
 
-Hoje, porém, a integração comprovada é outra: FastAPI no backend, SSE no transporte, adapters governados no domínio e JavaScript puro no frontend.
+### 9.3. Parametros escalares e controlados
 
-## 11. O que acontece em caso de sucesso
+Os parametros da capability sao validados contra o catalogo da query aprovada. Faltas, extras ou valores complexos como lista e objeto sao recusados.
 
-No caminho feliz, o endpoint autentica, aceita o payload, devolve o header X-Correlation-Id, o cliente consome RUN_STARTED, a capability é resolvida com segurança, o estado da tela é preenchido progressivamente e a execução termina com RUN_FINISHED. Os testes confirmam esse comportamento tanto no boundary quanto nas páginas Playwright.
+### 9.4. Configuracao de banco obrigatoria
 
-## 12. O que acontece em caso de erro
+O adapter depende de DATABASE_VAREJO_DSN e DATABASE_VAREJO_SCHEMA. Se faltarem, a execucao falha com AG_UI_RETAIL_CONFIG_MISSING. O schema tambem precisa ser identificador simples, sem formato arbitrario.
 
-### 12.1. Sem autenticação
+## 10. Catalogo governado de queries
 
-Sintoma: 401 logo na chamada.
+O catalogo local mapeia capability para query aprovada. Cada entrada tem capability, query_id, descricao, SQL, parametros, fetch_mode e result_format. Antes do uso, cada query passa por policy de somente leitura baseada em sqlparse.
 
-Causa provável: ausência de X-API-Key ou sessão compatível.
+As resolucoes confirmadas sao estas.
 
-### 12.2. Sem fonte explícita de configuração
+1. sales_summary -> pdv_vendas_kpis_periodo.
+2. checkout_funnel -> pdv_checkout_funil_status.
+3. catalog_opportunities -> pdv_catalogo_estoque_oportunidades.
+4. customer_segments -> pdv_clientes_segmentacao.
 
-Sintoma: 400 no endpoint.
+O ganho tecnico disso e central: a interface pede intencao, nao comando de banco. O backend preserva governanca e ainda usa a fabrica canonica de dyn_sql do projeto.
 
-Causa provável: ausência de yaml_config, yaml_inline_content e encrypted_data.
+## 11. Fluxo de consulta governada
 
-### 12.3. Adapter inexistente
+Quando a capability nao e dashboard_dynamic, o adapter segue este fluxo.
 
-Sintoma: RUN_ERROR com AG_UI_ADAPTER_NOT_FOUND.
+1. Valida o input como objeto com capability e parameters.
+2. Resolve configuracao do ambiente PDV.
+3. Monta o catalogo fechado de queries.
+4. Resolve a query correspondente a capability.
+5. Valida parametros.
+6. Emite STEP_STARTED.
+7. Emite TOOL_CALL_START.
+8. Emite TOOL_CALL_ARGS com JSON dos parametros.
+9. Executa dyn_sql pela factory canônica.
+10. Emite TOOL_CALL_END.
+11. Emite TOOL_CALL_RESULT com o retorno bruto.
+12. Emite STATE_SNAPSHOT com retailDemo.capability, queryId, toolName e result.
+13. Emite mensagem textual curta de conclusao.
+14. Emite STEP_FINISHED.
+15. O orchestrator encerra com RUN_FINISHED se nenhum terminal foi enviado antes.
 
-Causa provável: executionKind sem registro no orchestrator.
+Esse fluxo e o padrao da interface AG-UI para paginas fixas de vendas, checkout e catalogo.
 
-### 12.4. SQL livre bloqueado
+## 12. Materializacao dinamica de dashboard
 
-Sintoma: RUN_ERROR com AG_UI_RETAIL_FREE_SQL_BLOCKED.
+Quando a capability e dashboard_dynamic, o adapter nao executa dyn_sql diretamente. Ele desvia para DashboardMaterializationService.
 
-Causa provável: payload do navegador trouxe chaves como sql, raw_sql ou equivalente.
+A materializacao segue este contrato.
 
-### 12.5. Configuração PDV ausente
+1. Detecta capability dashboard_dynamic.
+2. Extrai dashboardSpec ou dashboard_spec do input.
+3. Cria um dashboardId baseado no run.
+4. Emite CUSTOM retail.dashboard.spec.started.
+5. Emite STATE_SNAPSHOT inicial com status materializing, spec nula, widgets vazios, dataSources vazios e errors vazios.
+6. Valida a DashboardSpec.
+7. Se a spec for invalida, emite custom de falha, muda status para validation_failed, publica errors estruturados e envia mensagem textual curta.
+8. Se a spec for valida, emite custom de validacao, deltas de substituicao da spec, deltas de inclusao de data sources, deltas de inclusao de widgets, custom de render pronto e delta final com status ready.
 
-Sintoma: RUN_ERROR com AG_UI_RETAIL_CONFIG_MISSING.
+Esse desenho e importante porque transforma o dashboard em um processo progressivo e auditavel, nao em um blob pronto sem historia.
 
-Causa provável: DATABASE_VAREJO_DSN ou DATABASE_VAREJO_SCHEMA não configurados.
+## 13. Contrato da DashboardSpec
 
-### 12.6. DashboardSpec inválida
+A fronteira do dashboard fica em src/api/schemas/ag_ui_dashboard_models.py. O contrato confirmado e fechado e versionado. Os elementos principais sao estes.
 
-Sintoma: status validation_failed no estado do dashboard e mensagem textual de recusa.
+1. version = 1.0.
+2. title.
+3. layout em grid, com columns, rowHeight e gap.
+4. filters opcionais.
+5. widgets.
+6. dataSources.
+7. narrative.
+8. refreshPolicy.
+9. safety.
 
-Causa provável: spec fora do contrato validado.
+### 13.1. Tipos permitidos de widget
 
-## 13. Observabilidade e diagnóstico
+1. kpi.
+2. line_chart.
+3. bar_chart.
+4. donut_chart.
+5. table.
+6. insight_card.
+7. alert.
+8. timeline.
+9. ranking.
 
-O diagnóstico do slice AG-UI costuma seguir esta ordem.
+### 13.2. Fonte de dados permitida
 
-1. Confirmar se o request chegou ao endpoint /ag-ui/runs.
-2. Ler o X-Correlation-Id devolvido ao frontend.
-3. Confirmar qual executionKind foi usado.
-4. Ver se o erro ocorreu antes do adapter ou dentro dele.
-5. Em telas ERP, comparar status do sidecar, timeline de tools e snapshot principal.
+A fonte de dados confirmada hoje e dyn_sql, com queryId governada e allowedParameters declarados.
 
-Os logs do orchestrator e da materialização de dashboard são marcados com início, passo, erro e fim, o que ajuda a reconstruir a execução.
+### 13.3. Safety obrigatoria
 
-## 14. Limites atuais confirmados no código
+O contrato exige cinco travas explicitas com valor False.
 
-1. Só há um adapter registrado por padrão: retail_demo.
-2. O transporte comprovado é SSE via POST, não WebSocket.
-3. Não há SDK Microsoft Agent Framework nem Google ADK no slice local.
-4. Não há prova no slice lido de anexos multimodais, voz ou frontend tool calls genéricas.
-5. Há suporte de contrato para interruption outcome, mas a retomada formal dedicada deste slice não foi confirmada na mesma rota AG-UI.
+1. htmlAllowed.
+2. scriptAllowed.
+3. freeSqlAllowed.
+4. secretsAllowed.
+5. correlationIdAllowed.
 
-## 15. Troubleshooting
+Isso deixa claro que o dashboard dinamico nao e um caminho para burlar governanca.
 
-### Erro 401 ou 403
+## 14. Validador de DashboardSpec
 
-Revisar autenticação e permissão agent_execute.
+A validacao existe em duas camadas no repositório.
 
-### Erro 400 pedindo configuração
+1. Camada Python no backend.
+2. Camada JavaScript segura para a UI dinamica.
 
-Verificar se a tela carregou YAML inline, yaml_config ou encrypted_data no contexto mestre.
+As regras confirmadas incluem.
 
-### Sidecar abre mas resultado não preenche
+1. Rejeicao de chaves proibidas como html, script, sql, query, dsn, secret e correlationId.
+2. Rejeicao de HTML, JavaScript e SQL livre em strings.
+3. Rejeicao de campos fora do contrato.
+4. Rejeicao de widget que referencia data source inexistente.
+5. Rejeicao de parametro nao declarado em allowedParameters.
+6. Rejeicao de layout impossivel ou sobreposto.
 
-Verificar se chegou STATE_SNAPSHOT ou apenas texto. Se só houver texto, o adapter pode não estar emitindo snapshot para aquela capability.
+Na pratica, isso significa que a flexibilidade do dashboard continua subordinada a um contrato seguro.
 
-### Dashboard continua vazio
+## 15. Cliente compartilhado do frontend
 
-Verificar se o input saiu com capability dashboard_dynamic e se a DashboardSpec passou na validação local e remota.
+O cliente mora em app/ui/static/js/shared/ag-ui-client.js. Ele implementa consumo de SSE por POST, nao por EventSource tradicional. O fluxo confirmado e este.
 
-### Tool errada ou inexistente
+1. Resolve a URL do endpoint.
+2. Monta headers com Content-Type JSON e Accept text/event-stream.
+3. Inclui X-API-Key se ela existir.
+4. Nao gera correlation_id no browser.
+5. Faz POST com o payload do run.
+6. Captura X-Correlation-Id da resposta.
+7. Faz parse incremental de blocos SSE.
+8. Reconstrui cada evento a partir das linhas event: e data:.
+9. Suporta retry explicito com maxReconnectAttempts e reconnectDelayMs.
 
-Verificar se a capability enviada bate com o catálogo fechado do adapter.
+Esse cliente e a principal peca de reuso para terceiros no lado web.
 
-### Correlation ID ausente na UI
+## 16. Store de estado AG-UI
 
-Verificar se a resposta do endpoint retornou o header X-Correlation-Id e se o cliente SSE o capturou.
+O store mora em app/ui/static/js/shared/ag-ui-state-store.js. Ele converte eventos em estado local mutavel e notificavel. O estado inicial contem run, messages, tools, state, activities, steps, interrupts, rawEvents, customEvents e lastEvent.
 
-## 16. Explicação 101
+Comportamentos importantes confirmados.
 
-Pense assim: o protocolo AG-UI é o canal pelo qual a tela acompanha o trabalho do agente. Microsoft e Google aparecem no ecossistema oficial como formas de usar essa mesma ideia com outros frameworks. O projeto fez isso do seu jeito, com a própria API e a própria UI. A tela ERP pede uma capability, o backend decide o trabalho real e vai narrando o processo com eventos até montar o resultado. Isso é o que torna a interface agentic visível, governada e reutilizável.
+1. RUN_STARTED muda status para running.
+2. RUN_FINISHED seta outcome e lista de interrupts quando houver interrupt.
+3. RUN_ERROR marca estado de erro.
+4. Eventos de texto montam mensagem incremental por messageId.
+5. Eventos de tool alimentam timeline compartilhada.
+6. STATE_SNAPSHOT substitui state inteiro.
+7. STATE_DELTA aplica JSON Patch simples.
+8. ACTIVITY_SNAPSHOT e ACTIVITY_DELTA atualizam atividades em andamento.
 
-## 17. Checklist de entendimento
+O ponto forte aqui e que qualquer tela nova que consuma AG-UI pode reaproveitar exatamente o mesmo mecanismo de reconstruicao de estado.
 
-- Entendi a diferença entre o protocolo oficial e a implementação local.
-- Entendi a superfície HTTP real do slice AG-UI.
-- Entendi o papel do orchestrator, do adapter e do encoder SSE.
-- Entendi como capabilities ERP são traduzidas para queries aprovadas ou dashboard seguro.
-- Entendi como o frontend consome o stream com JavaScript puro.
-- Entendi os erros, limites e pontos de troubleshooting.
+## 17. Sidecar compartilhado
 
-## 18. Evidências no código
+O sidecar mora em app/ui/static/js/shared/ag-ui-sidecar-chat.js. Ele e um componente de pagina estatica, nao uma dependencia de framework pesado.
+
+As responsabilidades confirmadas sao estas.
+
+1. Montar o DOM do sidecar.
+2. Mostrar status, correlation_id, contexto, mensagens, timeline de tools e interrupcoes.
+3. Reaproveitar o store de estado.
+4. Abrir e fechar o painel.
+5. Enviar mensagem para o backend via buildRunPayload configuravel.
+6. Adaptar interrupts AG-UI ao painel HIL compartilhado.
+
+Isso faz do sidecar uma infraestrutura de interface pronta para outras telas, nao um widget colado apenas na demo atual.
+
+## 18. Controller compartilhado das telas fixas
+
+O controller fica em app/ui/static/js/shared/ag-ui-retail-demo-page.js. Ele mostra claramente como uma nova tela pode ser criada sem reimplementar o protocolo.
+
+O comportamento confirmado e este.
+
+1. Recebe screenId, screenTitle, capability e defaultPrompt.
+2. Resolve API key a partir do layout mestre.
+3. Resolve YAML inline ou encrypted_data a partir do layout mestre.
+4. Exige userEmail operacional.
+5. Monta payload com executionKind retail_demo.
+6. Inclui metadata com screenId, screenTitle, yamlPath e inputMode.
+7. Monta input com capability, parameters, message e context.
+8. Atualiza status da pagina conforme chegam RUN_STARTED, RUN_ERROR, STATE_SNAPSHOT e RUN_FINISHED.
+
+Essa classe e a melhor prova pratica de como terceiros internos podem criar outra tela AG-UI sem reinventar a infraestrutura.
+
+## 19. Como criar uma nova tela AG-UI neste projeto
+
+O caminho tecnico recomendado, baseado no codigo atual, e este.
+
+1. Definir a capability de negocio que a tela precisa.
+2. Se ela pertencer ao dominio atual, incluir a capability no catalogo governado do adapter de varejo. Se pertencer a outro dominio, criar novo adapter e novo executionKind.
+3. Criar uma pagina HTML estatica com host para status, sidecar, filtros e area principal.
+4. Reusar AgUiRetailDemoPageController ou criar controller equivalente.
+5. Fazer a area principal reagir a STATE_SNAPSHOT e, se necessario, a STATE_DELTA.
+6. Nao colocar SQL, segredo ou correlation_id no DOM como fonte de verdade.
+7. Validar com testes unitarios e Playwright.
+
+## 20. Como terceiros podem consumir o protocolo
+
+Terceiros podem integrar de duas formas.
+
+### 20.1. Consumir o backend local
+
+Nesse caso, basta implementar um cliente HTTP capaz de fazer POST em /ag-ui/runs e consumir SSE. O cliente precisa entender event/data, ler JSON e reagir aos tipos de evento.
+
+### 20.2. Reproduzir o contrato em outro backend
+
+Nesse caso, o backend terceiro precisa emitir o mesmo tipo de lifecycle: RUN_STARTED, eventos intermediarios, snapshots ou deltas e um terminal coerente. O frontend pode continuar sendo o mesmo cliente e o mesmo store, desde que o contrato seja respeitado.
+
+O aprendizado tecnico central e este: o reaproveitamento esta no protocolo, nao nas paginas demo.
+
+## 21. Contrato real das paginas demo atuais
+
+As paginas confirmadas por leitura e testes sao estas.
+
+1. Cockpit de vendas.
+2. Radar de checkout.
+3. Central de catalogo.
+4. Dashboard dinamico.
+
+As tres primeiras usam o fluxo de consulta governada. A quarta usa o fluxo de DashboardSpec materializada.
+
+## 22. O que acontece em caso de sucesso
+
+### 22.1. Páginas fixas de varejo
+
+No caminho feliz, a pagina dispara o run, recebe RUN_STARTED, exibe correlation_id, mostra tool call governada, recebe STATE_SNAPSHOT com retailDemo.result, renderiza o resultado na area principal e fecha com RUN_FINISHED.
+
+### 22.2. Dashboard dinamico
+
+No caminho feliz, o canvas comeca vazio, recebe snapshot inicial materializing, passa a receber spec, dataSources e widgets por deltas, exibe historico de construcao e termina com status ready e RUN_FINISHED.
+
+## 23. O que acontece em caso de erro
+
+Os cenarios de erro confirmados no codigo incluem estes.
+
+1. 401 por ausencia de autenticacao.
+2. 400 por ausencia de yaml_config, yaml_inline_content ou encrypted_data.
+3. RUN_ERROR com AG_UI_ADAPTER_NOT_FOUND quando executionKind nao esta registrado.
+4. RUN_ERROR com AG_UI_RETAIL_CAPABILITY_REQUIRED quando capability esta ausente.
+5. RUN_ERROR com AG_UI_RETAIL_CAPABILITY_NOT_ALLOWED quando a capability nao esta no catalogo.
+6. RUN_ERROR com AG_UI_RETAIL_INVALID_PARAMETERS quando faltam parametros, sobram parametros ou algum valor nao e escalar.
+7. RUN_ERROR com AG_UI_RETAIL_FREE_SQL_BLOCKED quando o payload tenta trazer SQL livre.
+8. RUN_ERROR com AG_UI_RETAIL_CONFIG_MISSING quando o ambiente PDV esta incompleto.
+9. validation_failed no dashboard quando a DashboardSpec viola o contrato.
+
+## 24. Observabilidade e diagnostico
+
+A investigacao de problemas nesse slice deve seguir esta ordem.
+
+1. Confirmar se o request chegou a /ag-ui/runs.
+2. Confirmar autenticacao e permissao de agent_execute.
+3. Ler o X-Correlation-Id devolvido ao frontend.
+4. Verificar executionKind e capability enviados.
+5. Ver se o erro ocorreu antes do adapter, dentro do adapter ou na materializacao do dashboard.
+6. Diferenciar falta de configuracao de erro de dominio.
+7. Conferir no frontend se houve RUN_STARTED sem STATE_SNAPSHOT, porque isso costuma separar falha de execucao de falha de renderizacao.
+
+Os logs do orchestrator e da materializacao usam markers canônicos, o que ajuda a rastrear o fluxo com correlation_id.
+
+## 25. Testes que comprovam o comportamento
+
+O slice AG-UI tem evidencias de teste relevantes.
+
+### 25.1. Contrato de protocolo
+
+O teste test_ag_ui_protocol_contract confirma alias oficiais, rejeicao de campos extras, deltas JSON Patch e outcome interrupt em RUN_FINISHED.
+
+### 25.2. Boundary HTTP
+
+O teste test_ag_ui_router confirma autenticacao obrigatoria, exigencia de configuracao explicita, resposta SSE e coexistencia com rotas antigas /agent/execute, /agent/continue e /status/stream/{task_id}.
+
+### 25.3. Browser das paginas fixas
+
+O teste Playwright das telas fixas confirma sidecar abrindo, correlation_id aparecendo, DOM sendo atualizado e ausencia de correlation_id dentro do payload enviado.
+
+### 25.4. Browser do dashboard dinamico
+
+O teste Playwright do dashboard confirma canvas vazio no inicio, materializacao de quatro widgets via stream, historico da construcao e safety com correlationIdAllowed false.
+
+## 26. Troubleshooting
+
+### 26.1. Recebo 400 dizendo que falta configuracao
+
+Causa provavel: a pagina nao carregou YAML inline nem payload criptografado no layout mestre.
+
+Como confirmar: inspecionar o payload enviado e verificar ausencia de yaml_inline_content, yaml_config e encrypted_data.
+
+### 26.2. A UI abre o sidecar mas nao mostra resultado
+
+Causa provavel: houve RUN_STARTED, mas nao houve STATE_SNAPSHOT ou houve RUN_ERROR antes do snapshot.
+
+Como confirmar: inspecionar os eventos recebidos no cliente e o estado final do store.
+
+### 26.3. O dashboard fica vazio
+
+Causa provavel: a spec foi recusada ou a pagina nao reagiu aos deltas.
+
+Como confirmar: verificar se chegou retail.dashboard.validation.failed ou se o state.retailDashboard.status nao saiu de materializing.
+
+### 26.4. O backend recusa a capability
+
+Causa provavel: capability nao cadastrada no catalogo ou payload com nome diferente do esperado.
+
+Como confirmar: comparar a capability enviada com o catalogo do adapter.
+
+### 26.5. O correlation_id nao aparece na tela
+
+Causa provavel: o cliente nao capturou o header X-Correlation-Id ou o backend falhou antes de responder.
+
+Como confirmar: inspecionar headers da resposta e callback onCorrelationId do cliente.
+
+## 27. Limites atuais
+
+1. O router registra apenas retail_demo por padrao.
+2. O transporte comprovado e SSE por POST.
+3. O dominio atual documentado e PDV demo.
+4. customer_segments existe no adapter, mas a leitura desta rodada nao confirmou tela estatica dedicada para essa capability.
+5. A rota AG-UI atual nao prova, por si so, um fluxo de retomada dedicado na mesma superficie publica.
+
+## 28. Explicacao 101
+
+O backend AG-UI deste projeto funciona como uma esteira de eventos. A tela manda um pedido padronizado. O servidor valida o pedido, decide qual capacidade de negocio vai rodar e vai avisando a tela do que esta acontecendo. A tela nao precisa adivinhar o estado da execucao. Ela recebe esse estado pronto e vai desenhando a experiencia conforme os eventos chegam.
+
+## 29. Checklist de entendimento
+
+- Entendi a rota publica do slice.
+- Entendi como o orchestrator isola o lifecycle.
+- Entendi como o adapter traduz capability em execucao governada.
+- Entendi como funciona a materializacao de dashboard.
+- Entendi como o cliente, o store e o sidecar podem ser reutilizados.
+- Entendi como criar uma nova tela ou um novo adapter.
+- Entendi os testes e os limites atuais.
+
+## 30. Evidencias no codigo
 
 - src/api/routers/ag_ui_router.py
-  - Motivo da leitura: confirmar entrada HTTP, autenticação, config source e SSE.
-  - Comportamento confirmado: POST /ag-ui/runs é a rota executável do slice.
+  - Motivo da leitura: confirmar endpoint dedicado, configuracao obrigatoria e SSE.
+  - Comportamento confirmado: POST /ag-ui/runs devolve stream AG-UI com X-Correlation-Id.
 
 - src/api/services/ag_ui_run_orchestrator.py
   - Motivo da leitura: confirmar lifecycle do run.
-  - Comportamento confirmado: RUN_STARTED inicial, resolução por executionKind e fechamento terminal coerente.
-
-- src/api/services/ag_ui_event_encoder.py
-  - Motivo da leitura: confirmar serialização SSE.
-  - Comportamento confirmado: cada AgUiBaseEvent vira event/data com JSON oficial do payload.
+  - Comportamento confirmado: RUN_STARTED inicial, resolucao por executionKind e fechamento terminal.
 
 - src/api/services/ag_ui_retail_demo_adapter.py
-  - Motivo da leitura: confirmar catálogo fechado de capabilities e queries PDV.
-  - Comportamento confirmado: SQL livre é bloqueado e capability vira dyn_sql governado.
+  - Motivo da leitura: confirmar governanca de capability, dyn_sql e dashboard.
+  - Comportamento confirmado: SQL livre bloqueado, queries aprovadas e desvio para dashboard_dynamic.
 
 - src/api/services/ag_ui_dashboard_materialization.py
-  - Motivo da leitura: confirmar materialização progressiva do dashboard.
-  - Comportamento confirmado: custom events e deltas constroem o canvas dinamicamente.
+  - Motivo da leitura: confirmar materializacao progressiva do canvas.
+  - Comportamento confirmado: snapshot inicial, deltas estruturados e status final ready ou validation_failed.
+
+- src/api/schemas/ag_ui_dashboard_models.py
+  - Motivo da leitura: confirmar o contrato fechado de DashboardSpec.
+  - Comportamento confirmado: layout, widgets, dataSources, refreshPolicy e safety obrigatoria.
 
 - app/ui/static/js/shared/ag-ui-client.js
-  - Motivo da leitura: confirmar cliente SSE do frontend.
-  - Comportamento confirmado: POST, leitura incremental do body, retry explícito e captura do X-Correlation-Id.
+  - Motivo da leitura: confirmar cliente reutilizavel para SSE por POST.
+  - Comportamento confirmado: parse incremental, callback de correlation_id e retry explicito.
+
+- app/ui/static/js/shared/ag-ui-state-store.js
+  - Motivo da leitura: confirmar reconstruicao de estado a partir de eventos.
+  - Comportamento confirmado: snapshots, deltas, mensagens, tools e interrupts viram estado navegavel.
 
 - app/ui/static/js/shared/ag-ui-sidecar-chat.js
-  - Motivo da leitura: confirmar sidecar, store e adaptação de interrupções.
-  - Comportamento confirmado: sidecar reutilizável e adaptação para painel HIL compartilhado.
+  - Motivo da leitura: confirmar sidecar e adaptacao para HIL.
+  - Comportamento confirmado: painel reutilizavel desacoplado da area principal da pagina.
 
 - app/ui/static/js/shared/ag-ui-retail-demo-page.js
-  - Motivo da leitura: confirmar padrão de tela ERP sobre AG-UI.
-  - Comportamento confirmado: monta payload com capability, contexto de tela e fonte de configuração do layout mestre.
-
-- app/ui/static/js/ag-ui-dashboard-dinamico.js
-  - Motivo da leitura: confirmar geração local de DashboardSpec e consumo do canvas.
-  - Comportamento confirmado: DashboardSpec segura usa apenas queryIds governadas e correlationIdAllowed false.
+  - Motivo da leitura: confirmar como novas paginas podem reutilizar o slice.
+  - Comportamento confirmado: payload padronizado e consumo integrado com status e sidecar.
 
 - tests/unit/test_ag_ui_protocol_contract.py
-  - Motivo da leitura: confirmar regras fortes do contrato de protocolo.
-  - Comportamento confirmado: aliases oficiais, deltas JSON Patch e outcome interrupt.
+  - Motivo da leitura: confirmar rigidez do contrato.
+  - Comportamento confirmado: alias oficiais, falha fechada para campo extra e outcome interrupt.
 
 - tests/unit/test_ag_ui_router.py
-  - Motivo da leitura: confirmar boundary HTTP e coexistência com rotas antigas.
-  - Comportamento confirmado: rota AG-UI não substitui /agent/execute nem /agent/continue.
-
-- tests/unit/test_ag_ui_retail_demo_adapter.py
-  - Motivo da leitura: confirmar capabilities, bloqueio de SQL livre e dashboard dinâmico.
-  - Comportamento confirmado: adapter termina em RUN_FINISHED no caminho feliz e RUN_ERROR no caminho bloqueado.
+  - Motivo da leitura: confirmar o boundary HTTP.
+  - Comportamento confirmado: autenticacao obrigatoria, configuracao explicita e coexistencia com rotas antigas.
 
 - tests/playwright/test_ag_ui_varejo_demo_pages.py
-  - Motivo da leitura: confirmar telas ERP fixas no browser.
-  - Comportamento confirmado: sidecar abre, correlation_id aparece e DOM recebe resultado governado.
+  - Motivo da leitura: confirmar comportamento das paginas fixas no browser.
+  - Comportamento confirmado: correlation_id, sidecar aberto, payload sem correlation_id e DOM atualizado.
 
 - tests/playwright/test_ag_ui_dashboard_dinamico.py
-  - Motivo da leitura: confirmar canvas dinâmico no browser.
-  - Comportamento confirmado: canvas sai de vazio para quatro widgets via stream AG-UI.
+  - Motivo da leitura: confirmar comportamento do dashboard dinamico no browser.
+  - Comportamento confirmado: canvas vazio no inicio, quatro widgets materializados e safety com correlationIdAllowed false.

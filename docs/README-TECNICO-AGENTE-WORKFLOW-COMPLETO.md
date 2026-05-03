@@ -2,51 +2,80 @@
 
 ## 1. O que é esta feature
 
-No plano técnico, agente workflow é o subsistema que pega a seção workflows do YAML, transforma esse documento em AST tipada, valida coerência semântica, resolve o workflow ativo, monta um StateGraph LangGraph e expõe execução e retomada pela borda HTTP e pelos orquestradores internos. O valor técnico está em fechar o ciclo YAML -> AST -> validação -> runtime -> pause/continue sem depender de convenções implícitas.
+No plano técnico, agente workflow é o subsistema que recebe a seção workflows do YAML agentic, converte esse bloco em AST tipada, valida coerência semântica, resolve o workflow ativo, monta um StateGraph LangGraph e expõe execução, retomada e integração com runtime background.
+
+O valor técnico da feature está em fechar o ciclo inteiro.
+
+YAML -> AST -> compilação canônica -> validação -> resolução de contexto -> runtime -> observabilidade -> retomada.
+
+Essa cadeia evita que o sistema trate processo corporativo como prompt livre ou como wiring espalhado em código.
 
 ## 2. Que problema ela resolve
 
-O problema técnico resolvido aqui é evitar duas classes de falha. A primeira é executar um fluxo inválido porque o YAML parecia bem formado, mas continha ids conflitantes, labels sem destino, tool inexistente ou sub_workflow quebrado. A segunda é perder continuidade operacional em fluxos com pausa humana, retry ou execução longa. O workflow resolve isso impondo um pipeline técnico de validação e um runtime com thread_id, checkpointer e normalização de resposta.
+Tecnicamente, o workflow resolve dois grupos de falha.
+
+O primeiro grupo é erro de contrato: YAML aparentemente válido, mas com workflow selecionado inexistente, tool ausente, ids duplicados, rota sem destino, edge inválida ou sub_workflow recursivo.
+
+O segundo grupo é erro de continuidade: processo longo sem thread estável, pausa humana sem checkpoint, tentativa de retomar sem identidade da execução ou execução assíncrona sem trilha observável.
+
+O recurso evita os dois grupos com validação forte e runtime governado.
 
 ## 3. Conceitos necessários para entender
 
-### 3.1. Estrutura canônica do estado
+### 3.1. Estado canônico do workflow
 
-O estado do workflow é um TypedDict com messages, input_text, last_output, current_step, metadata, context, variables, status, error_log e max_iterations. Em linguagem prática, messages guarda histórico conversacional, variables guarda dados estruturados compartilhados, metadata guarda trilha operacional e context/last_output fazem a cola entre nodes.
+O estado operacional do runtime carrega, no mínimo, messages, input_text, last_output, current_step, metadata, context, variables, status, error_log e max_iterations. Em termos práticos:
+
+- messages guarda histórico conversacional ou operacional.
+- variables guarda dados estruturados compartilhados entre nodes.
+- metadata guarda trilha de execução, aprovações, snapshots e decisões.
+- last_output e context fazem a cola entre uma etapa e outra.
 
 ### 3.2. Catálogo oficial de modos
 
-O catálogo de modos suportados pelo runtime nasce do NodeFactory.registry. Essa lista é a referência real do executor e também alimenta o schema/catalog do assembly. Se um modo não estiver ali, não existe no runtime oficial.
+O catálogo real do executor nasce do NodeFactory.registry em AgentWorkflow. Se um modo não estiver nessa registry, ele não existe no runtime oficial, mesmo que alguém tente descrevê-lo em YAML.
 
 ### 3.3. Retry policy
 
-retry_policy é a política canônica de repetição por node. Ela aceita max_attempts, backoff_seconds e breaker_threshold. O runtime rejeita chaves não suportadas e unifica a execução via ExecutionPolicyRunner.
+retry_policy é o contrato canônico de repetição por node. As chaves aceitas são max_attempts, backoff_seconds e breaker_threshold. A execução concreta é delegada a ExecutionPolicyRunner.
 
 ### 3.4. Human approval
 
-human_approval.enabled ativa um gate baseado em interrupt. O node pausa a thread, devolve payload serializável e espera a continuação com Command resume. O runtime do projeto preserva esse padrão do LangGraph e o amarra à borda /workflow/continue.
+human_approval.enabled ativa um gate de pausa via interrupt. O node constrói um payload serializável, suspende a thread e depende de Command resume para retomar a mesma execução.
 
-### 3.5. Edge-first
+### 3.5. Dois modelos assíncronos
 
-Quando edges existe e não está vazia, o workflow muda para edge-first. Nesse modo, a ordem visual do array de nodes deixa de ser a regra principal de transição. Quem manda são as arestas declaradas e suas condições.
+O projeto possui dois caminhos assíncronos para workflow.
+
+- O assíncrono da API, disparado por /workflow/execute em modo direct_async, com FastAPI BackgroundTasks e progress tracking.
+- O background persistido da capacidade agentic, que aceita target_type workflow, agenda execuções, persiste runs e permite recorrência.
+
+Eles servem para problemas operacionais diferentes e não devem ser confundidos.
 
 ## 4. Como a feature funciona por dentro
 
-O caminho real começa em AgenticAssemblyService. Ao resolver o alvo workflow, o serviço parseia a seção workflows com WorkflowParser, monta AgenticDocumentAST, chama DocumentSemanticValidator e, para esse alvo, delega a WorkflowSemanticValidator. O validador compila a AST para um fragmento YAML canônico e anexa diagnósticos. Esse fragmento é o material governado que o runtime deveria consumir.
+O caminho real começa no assembly agentic. A seção workflows é parseada por WorkflowParser, compilada por WorkflowCompiler e validada por WorkflowSemanticValidator. O resultado governado é o fragmento que o runtime deveria consumir.
 
-Quando a execução começa, WorkflowConfigResolver revisa o payload governado, extrai workflows_defaults, tools_library, local_tools_configuration e memória, resolve o workflow ativo e entrega ActiveWorkflowContext. AgentWorkflow carrega esse contexto, roda WorkflowIntegrityAnalyzer, inicializa ToolsFactory, MemoryFactory e checkpointer, tenta reaproveitar um artefato compilado por hash e, se não houver cache compatível, constrói um StateGraph novo.
+Na execução, WorkflowConfigResolver aplica o detector de drift do contrato, extrai defaults, compõe tools_library, resolve memória e escolhe o workflow ativo. AgentWorkflow usa esse contexto para:
 
-Na execução, AgentWorkflow monta o estado inicial, resolve thread_id, aplica recursion_limit quando há loops fora do executor, invoca o grafo de forma assíncrona e normaliza o envelope final. WorkflowOrchestrator transforma isso em OrchestratorResult. WorkflowRouter então expõe o resultado ou agenda execução assíncrona, conforme o modo selecionado.
+1. carregar a configuração do fluxo ativo;
+2. rodar WorkflowIntegrityAnalyzer;
+3. inicializar ToolsFactory, MemoryFactory e checkpointer;
+4. tentar reaproveitar o grafo compilado por hash;
+5. construir o StateGraph caso o cache não seja válido;
+6. executar ou retomar a thread.
+
+WorkflowOrchestrator encapsula esse runtime e devolve OrchestratorResult. WorkflowRouter usa o orquestrador para expor execute e continue. O runtime de background agentic também usa o mesmo orquestrador quando target_type é workflow.
 
 ## 5. Divisão em etapas ou submódulos
 
 ### 5.1. AST e schema
 
-Responsabilidade: definir o contrato formal de workflow.
+Responsabilidade: definir o contrato formal do recurso.
 
 Recebe: YAML agentic.
 
-Entrega: WorkflowAST, WorkflowNodeAST, WorkflowEdgeAST, WorkflowCollectionAST e JSON Schema para UI e tooling.
+Entrega: WorkflowAST, WorkflowNodeAST, WorkflowEdgeAST, WorkflowCollectionAST.
 
 Valor: impedir que o runtime aceite estrutura sem gramática.
 
@@ -54,470 +83,709 @@ Valor: impedir que o runtime aceite estrutura sem gramática.
 
 Responsabilidade: ler o documento e coletar diagnóstico sem interromper cedo demais.
 
-Recebe: workflows bruto do YAML.
+Entrega: ASTs parciais, diagnósticos e UnsupportedNodeAST quando necessário.
 
-Entrega: lista de WorkflowAST, nodes unsupported quando necessário e diagnósticos por path.
-
-Valor: permitir análise rica sem promover texto inválido a fluxo executável.
+Valor: produzir evidência melhor para erro de modelagem.
 
 ### 5.3. Compilação canônica
 
-Responsabilidade: normalizar ids de workflow e node e eliminar unsupported da compilação real.
+Responsabilidade: normalizar ids, rejeitar unsupported na compilação real e gerar fragmento consistente.
 
-Recebe: lista de WorkflowAST.
-
-Entrega: fragmento YAML canônico com ids estáveis.
-
-Valor: impedir runtime frágil por identificadores ruins.
+Valor: diminuir fragilidade do runtime.
 
 ### 5.4. Validação semântica
 
-Responsabilidade: checar coerência de seleção, catálogo de tools, referências, edges e expressões.
+Responsabilidade: bloquear ambiguidades, referências cruzadas inválidas, tools inexistentes, sub_workflow incorreto, edges ruins e expressões quebradas.
 
-Recebe: workflows compilados, selected_workflow, defaults e tool_catalog efetivo.
-
-Entrega: ValidationReport com compiled_fragment.
-
-Valor: falhar fechado antes do runtime.
+Valor: falhar fechado antes da execução.
 
 ### 5.5. Resolução de contexto
 
-Responsabilidade: escolher o workflow ativo e materializar defaults, tools e memória do ponto de vista do runtime.
+Responsabilidade: escolher o workflow ativo e materializar defaults, memória e catálogo de tools do ponto de vista do runtime.
 
-Recebe: fragmento governado.
-
-Entrega: ActiveWorkflowContext.
-
-Valor: evitar adivinhação de fluxo e centralizar precedência de merge.
+Valor: centralizar precedência e impedir seleção implícita insegura.
 
 ### 5.6. Runtime executor
 
-Responsabilidade: montar ou reutilizar StateGraph, executar nodes e consolidar saída.
-
-Recebe: ActiveWorkflowContext e input.
-
-Entrega: final_response, execution_steps, workflow_metadata, outgoing_message e thread_id.
+Responsabilidade: compilar ou reutilizar StateGraph, executar nodes e consolidar saída.
 
 Valor: transformar contrato em execução observável.
 
-### 5.7. Borda HTTP e canais
+### 5.7. Borda HTTP
 
-Responsabilidade: expor execute e continue para API e canais externos.
+Responsabilidade: expor execução direta, execução assíncrona curta e retomada HIL.
 
-Recebe: payload HTTP ou mensagem de canal.
+Valor: conectar o runtime ao produto.
 
-Entrega: resposta síncrona, task assíncrona ou retomada HIL.
+### 5.8. Background runtime persistido
 
-Valor: conectar o runtime ao produto real.
+Responsabilidade: executar workflow como alvo durável e agendável dentro da capacidade agentic de background execution.
+
+Valor: suportar jobs corporativos recorrentes e auditáveis.
 
 ## 6. Pipeline ou fluxo principal
 
-### 6.1. Parse da seção workflows
+### 6.1. Parse
 
-WorkflowParser lê workflows. Se workflows não for lista, devolve WORKFLOWS_TIPO_INVALIDO. Se um node vier com modo desconhecido, ele registra NODE_MODE_NAO_SUPORTADO e cria UnsupportedNodeAST. Esse detalhe é importante porque o parser é tolerante, mas o compilador não deixa unsupported seguir adiante.
+WorkflowParser lê workflows. Se workflows não for lista, emite WORKFLOWS_TIPO_INVALIDO. Se um node vier com modo desconhecido, emite diagnóstico e converte para UnsupportedNodeAST. Isso é parse tolerante, não aceitação do modo inválido.
 
-### 6.2. Compilação canônica
+### 6.2. Compilação
 
-WorkflowCompiler normaliza ids, emite warning quando precisa ajustar identificador e rejeita unsupported da compilação com WORKFLOW_NODE_UNSUPPORTED. Também corrige duplicação de id de node acrescentando sufixo quando necessário.
+WorkflowCompiler normaliza ids de workflow e nodes. Unsupported não entra no fragmento compilado final. Isso garante que o executor não receba um node que a plataforma já sabe ser ilegítimo.
 
-### 6.3. Validação forte
+### 6.3. Validação semântica
 
-WorkflowSemanticValidator valida coleção, tools, local_tools_configuration, referências cruzadas, edges e expressões. Se selected_workflow estiver ausente com vários workflows habilitados, produz WORKFLOW_SELECAO_OBRIGATORIA. Se houver sub_workflow autorreferente, produz SUB_WORKFLOW_AUTOREFERENCIA. Se uma edge referenciar origem ou destino inexistente, a validação falha.
+WorkflowSemanticValidator valida:
+
+- coleção de workflows;
+- selected_workflow;
+- tools e local_tools_configuration;
+- referências cruzadas;
+- edges;
+- expressões;
+- integridade do catálogo de modos usando NodeFactory.registry.
 
 ### 6.4. Resolução do workflow ativo
 
-WorkflowConfigResolver aplica drift detector, extrai defaults, normaliza workflows, escolhe o workflow ativo e monta ActiveWorkflowContext. Se selected_workflow apontar para fluxo inexistente ou desabilitado, falha cedo. Se houver vários habilitados sem seleção, também falha cedo.
+WorkflowConfigResolver aplica regras de seleção.
+
+- Um único workflow habilitado pode ser resolvido sem selected_workflow.
+- Vários habilitados exigem selected_workflow.
+- selected_workflow apontando para fluxo inexistente ou desabilitado falha cedo.
 
 ### 6.5. Inicialização do runtime
 
-AgentWorkflow.initialize carrega a config, roda WorkflowIntegrityAnalyzer, inicializa factories e compila o grafo. Se o relatório de integridade vier inválido, lança WorkflowIntegrityError e nem chega a criar o StateGraph.
+AgentWorkflow.initialize executa, em ordem:
 
-### 6.6. Construção do grafo
+1. _load_workflow_config
+2. _analyze_workflow_integrity
+3. _initialize_factories
+4. _create_dynamic_workflow
 
-_add_nodes_to_graph registra cada node pelo id. _add_edges_to_graph decide o modo de transição. Se is_edge_mode for verdadeiro, EdgeCompiler compila edges declarativas. Caso contrário, _add_node_driven_edges_to_graph usa a ordem dos nodes e as condições específicas de router, if e executor.
+Se o relatório de integridade vier inválido, o runtime lança WorkflowIntegrityError e interrompe antes da compilação do grafo.
 
-### 6.7. Execução e continuidade
+### 6.6. Construção do StateGraph
 
-run monta o estado inicial com input_text, messages iniciais, variables vazias, metadata vazia, status running e max_iterations local do executor. Depois invoca o grafo com config contendo thread_id, session_id, correlation_id, user_email e workflow_id. continue_execution repete a inicialização do runtime e chama ainvoke com Command resume na mesma thread.
+_add_nodes_to_graph registra os nodes. _add_edges_to_graph decide o modo de transição.
 
-## 7. Sintaxe completa do workflow
+- Se edges existir e não estiver vazia, o fluxo entra em edge-first e delega a EdgeCompiler.
+- Caso contrário, usa node-driven com base na ordem dos nodes e nos campos específicos de router, if e executor.
+
+### 6.7. Execução
+
+run resolve thread_id, define config com workflow_id, correlation_id, user_email e session_id, calcula recursion_limit quando há loops fora do executor e invoca o grafo de forma assíncrona.
+
+### 6.8. Continuidade HIL
+
+continue_execution reinicializa o runtime, recompõe invoke_config com a mesma thread e chama ainvoke(Command(resume=...)). Esse detalhe é o coração da retomada real.
+
+## 7. Sintaxe do workflow
 
 ## 7.1. Bloco de seleção
 
-selected_workflow escolhe o workflow ativo. Se existir mais de um workflow habilitado, esse campo deixa de ser opcional na prática.
+selected_workflow escolhe o alvo ativo. Quando há mais de um workflow habilitado, esse campo deixa de ser opcional na prática.
 
 ## 7.2. Bloco de defaults
 
-workflows_defaults agrega defaults compartilhados entre fluxos. O slice lido confirmou consumo de memory, local_tools_configuration e tools_library. O objetivo é reduzir duplicação entre múltiplos workflows do mesmo documento.
+workflows_defaults agrega defaults compartilhados. O slice lido confirmou consumo de memory, tools_library e local_tools_configuration.
+
+## 7.3. Item de workflow
+
+Cada item de workflows aceita, no contrato canônico:
+
+- id
+- name
+- description
+- enabled
+- settings
+- tools_library
+- local_tools_configuration
+- local_mcp_configuration
+- nodes
+- edges
+
+## 7.4. Settings
+
+O campo com consumo confirmado no runtime lido é settings.max_iterations. O schema também expõe background_execution_subagent, mas o consumo específico desse subbloco não foi confirmado no slice executor lido nesta tarefa.
+
+## 7.5. Campos compartilhados de node
+
+Todos os nodes herdam os campos comuns de WorkflowNodeBaseAST.
+
+- id
+- mode
+- prompt
+- reads
+- writes
+- tools
+- params
+- settings
+- router
+- retry_policy
+- human_approval
+
+## 7.6. Edges declarativas
+
+Cada edge aceita:
+
+- from
+- to
+- when
+- default
+
+from pode ser START ou um node_id. to pode ser END ou um node_id. when é expressão booleana. default é a rota fallback daquela origem.
+
+## 8. Exemplos de sintaxe baseada no código real
+
+### 8.1. Exemplo edge-first real do modelo
+
+```yaml
+workflows:
+  - id: "workflow_edge_first_demo"
+    enabled: false
+    settings:
+      max_iterations: 50
+    nodes:
+      - id: "classificar_pedido"
+        mode: "router"
+        prompt:
+          system: |
+            Classifique o pedido em A, B ou DEFAULT.
+        router:
+          allowed_labels: ["A", "B", "DEFAULT"]
+
+      - id: "tratar_rota_a"
+        mode: "agent"
+        prompt:
+          system: |
+            Trate a rota A com resposta objetiva.
+        tools: []
+
+      - id: "tratar_rota_b"
+        mode: "agent"
+        prompt:
+          system: |
+            Trate a rota B com resposta objetiva.
+        tools: []
+
+    edges:
+      - from: "START"
+        to: "classificar_pedido"
+      - from: "classificar_pedido"
+        to: "tratar_rota_a"
+        when: "metadata.router_decision == 'A'"
+      - from: "classificar_pedido"
+        to: "tratar_rota_b"
+        default: true
+```
+
+### 8.2. Exemplo node-driven real com sub_workflow
+
+```yaml
+  - id: "workflow_food_atendimento_modular"
+    enabled: false
+    nodes:
+      - id: "preparar_modular"
+        mode: "set"
+        reads:
+          - "input_text"
+        params:
+          assign:
+            vars.food.pergunta_normalizada: "{input_text}"
 
-## 7.3. Bloco workflows
+      - id: "delegar_faq_modular"
+        mode: "sub_workflow"
+        params:
+          workflow_id: "workflow_food_responde_perguntas"
+          inherit_variables: true
+          inherit_metadata: true
+          inherit_messages: false
+          input_path: "vars.food.pergunta_normalizada"
+          result_path: "last_output"
+        writes:
+          - "vars.food.resposta_base"
+```
 
-Cada item de workflows aceita id, name, description, enabled, settings, tools_library, local_tools_configuration, local_mcp_configuration, nodes e edges.
+### 8.3. Exemplo real de planner e executor
 
-## 7.4. settings
+```yaml
+  - id: "workflow_food_planejamento_estrategico"
+    enabled: false
+    settings:
+      max_iterations: 200
+    nodes:
+      - id: plan
+        mode: planner
+        prompt:
+          system: |
+            Você é um planner. Gere um plano objetivo para resolver a solicitação do usuário.
+        tools:
+          - duckduckgo_search
+          - qa_rag_with_sources
 
-O campo consumido de forma confirmada no runtime é max_iterations. O schema também expõe background_execution_subagent, mas o consumo operacional específico desse subbloco não foi confirmado no slice lido do executor.
+      - id: execute
+        mode: executor
+        settings:
+          retry_policy:
+            max_attempts: 3
+            backoff_seconds: 2
+            breaker_threshold: 2
+          failure_policy:
+            mode: "request_human"
+            human_message: >-
+              Falha ao executar o passo do plano.
+```
 
-## 7.5. nodes
+## 9. Catálogo de nodes suportados
 
-Todos os nodes compartilham os campos comuns id, mode, prompt, reads, writes, tools, params, settings, router, retry_policy e human_approval. Alguns modos ignoram parte desses campos, mas a gramática comum reduz divergência entre implementações.
+O catálogo oficial confirmado pelo runtime é este.
 
-## 7.6. edges
+### 9.1. agent
 
-Cada edge declarativa aceita from, to, when e default. from pode ser START ou um node_id. to pode ser END ou um node_id. when é expressão booleana segura. default só pode aparecer uma vez por origem e não pode coexistir com when na mesma edge.
+Responsabilidade: executar raciocínio e geração possivelmente com tools.
 
-## 7.7. Comandos e marcadores operacionais importantes
+Sinais importantes: prompt.system, tools, retry_policy, human_approval.
 
-START e END são marcadores de entrada e saída do grafo em edges declarativas.
+### 9.2. set
 
-Command resume é o mecanismo de retomada HIL usado pelo orquestrador e pela borda /workflow/continue.
+Responsabilidade: atribuir valores declarativos em variables ou payloads derivados.
 
-thread_id é a identidade estável da thread persistida.
+Sinal importante: params.assign.
 
-execution_mode no endpoint define se a API tenta executar de forma direta ou assíncrona.
+### 9.3. if
 
-workflow.execute é a permissão exigida pela borda HTTP.
+Responsabilidade: decidir TRUE ou FALSE por expressão e desviar para true_go_to ou false_go_to.
 
-## 8. Catálogo de nodes suportados
+Sinais importantes: condition, true_go_to, false_go_to.
 
-### 8.1. agent
+### 9.4. function
 
-O que é: node que delega a um LLM possivelmente com tools.
+Responsabilidade: executar transformação local, normalmente expressão segura sobre dados do estado.
 
-Por que existe: encapsular raciocínio e geração em um passo controlado.
+Sinal importante: params.expression.
 
-Campos relevantes: prompt.system, tools, retry_policy, human_approval.
+### 9.5. tool
 
-Lê: messages, variables, context, input_text.
+Responsabilidade: invocar explicitamente uma tool do catálogo, sem delegar a decisão a um agent genérico.
 
-Escreve: messages, last_output, context, variables.
+### 9.6. merge
 
-Pode falhar: por tool inválida, timeout, erro do modelo ou uso legado de retries fora de retry_policy.
+Responsabilidade: combinar leituras múltiplas em um payload consolidado.
 
-### 8.2. set
+### 9.7. router
 
-O que é: node de atribuição declarativa.
+Responsabilidade: escolher label de rota e disparar transição baseada em allowed_labels, go_to_node e fallback.
 
-Por que existe: inicializar ou consolidar variáveis sem chamar modelo.
+### 9.8. rule_router
 
-Campos relevantes: params.assign.
+Responsabilidade: roteamento determinístico por regra, sem depender de decisão LLM.
 
-Lê: input_text, metadata e valores de variables usados em templates.
+### 9.9. transform
 
-Escreve: variables.
+Responsabilidade: transformar mensagens ou payloads conforme tipo definido em settings.
 
-Pode falhar: assign vazio ou rendering inválido.
+### 9.10. planner
 
-### 8.3. if
+Responsabilidade: gerar plano estruturado que será consumido pelo executor.
 
-O que é: bifurcação determinística por expressão.
+### 9.11. executor
 
-Por que existe: desviar o fluxo sem chamar LLM.
+Responsabilidade: percorrer passos do plano, respeitar retry_policy, failure_policy e loop interno.
 
-Campos relevantes: condition, true_go_to, false_go_to.
+### 9.12. schema_validator
 
-Lê: variables, messages, input_text.
+Responsabilidade: validar payload contra schema antes de seguir.
 
-Escreve: last_output com TRUE ou FALSE e metadata de decisão.
+### 9.13. sub_workflow
 
-Pode falhar: condição vazia ou expressão inválida.
+Responsabilidade: chamar outro workflow do mesmo documento, com regras de herança de variables, metadata e messages.
 
-### 8.4. function
+### 9.14. whatsapp_media_resolver
 
-O que é: execução de expressão ou script seguro.
+Responsabilidade: resolver payload multimídia de WhatsApp em formato operacional.
 
-Por que existe: pequenos cálculos, parsing e transformação sem tool externa.
+### 9.15. whatsapp_send
 
-Campos relevantes: params.expression ou params.script, timeout_seconds, result_var, aliases, allowed_functions.
+Responsabilidade: montar outgoing_message estruturado para o canal WhatsApp.
 
-Lê: variables, messages, input_text e context.
+## 10. Recursos avançados confirmados no código
 
-Escreve: variables no result_var ou writes.
+Os recursos avançados confirmados pelo slice lido são estes.
 
-Pode falhar: timeout, função não permitida, script inválido.
+### 10.1. Edge-first declarativo
 
-### 8.5. tool
+Quando edges existe e não está vazia, AgentWorkflow usa EdgeCompiler para montar o grafo a partir das arestas, em vez de depender da ordem dos nodes.
 
-O que é: invocação explícita de uma tool do catálogo.
+### 10.2. Cache do workflow compilado por hash
 
-Por que existe: separar “chamar a tool X” de um agent genérico.
+O runtime calcula workflow_hash e armazena o artefato compilado no resource pool. Se o hash bater, reaproveita o grafo compilado.
 
-Campos relevantes: params.tool_id, params.arguments, params.extract, timeout_seconds.
+### 10.3. Reads, writes e snapshots
 
-Lê: variables, input_text, context.
+BaseNodeHandler resolve reads, aplica writes, registra data_flow, read_snapshots e write_snapshots em metadata. Isso é importante para auditoria do dado e não só da resposta final.
 
-Escreve: variables extraídas e last_output.
+### 10.4. Execution trace por node
 
-Pode falhar: tool inexistente, argumentos inválidos, timeout ou erro interno da tool.
+BaseNodeHandler registra execution_trace com status, duração e código de erro por node.
 
-### 8.6. merge
+### 10.5. Retry canônico por node
 
-O que é: consolidador de múltiplas leituras.
+ExecutionPolicyRunner centraliza retry, backoff e circuit breaker. Isso evita que cada node implemente resiliência do seu próprio jeito.
 
-Por que existe: juntar payload base e payload dinâmico, ou unir resultados parciais.
+### 10.6. Human approval com interrupt
 
-Campos relevantes: params.strategy, initial, aliases.
+BaseNodeHandler monta payload de human approval, chama interrupt e grava auditoria da decisão em metadata quando a thread é retomada.
 
-Lê: todos os paths em reads.
+### 10.7. Sub-workflow com proteção contra recursão
 
-Escreve: variables via writes.
+SubWorkflowNode mantém workflow_stack e bloqueia recursão quando o workflow alvo já está na pilha.
 
-Pode falhar: reads vazia ou valor incompatível com a estratégia.
+### 10.8. Background execution canônico
 
-### 8.7. router
+AgenticBackgroundExecutionRuntime aceita target_type workflow e delega a execução ao WorkflowOrchestrator, reaproveitando a espinha oficial do recurso.
 
-O que é: decisão por labels usando LLM e router config.
+### 10.9. Limitação explícita para waiting_hil em workflow background
 
-Por que existe: roteamento sem hardcode de regra única.
+Se o resultado de workflow em background persistido voltar com status waiting_hil, o runtime lança BackgroundExecutionValidationError para não deixar um run pausado sem continuidade durável.
 
-Campos relevantes: router.allowed_labels, router.go_to_node, router.fallback_node, prompt.system, retry_policy.
+## 11. Configurações que mudam o comportamento
 
-Lê: messages e contexto do prompt.
+- selected_workflow: escolhe o alvo ativo.
+- enabled: define se o fluxo pode ser selecionado.
+- settings.max_iterations: altera recursion_limit e o comportamento do executor.
+- retry_policy: altera a resiliência por node.
+- human_approval: ativa interrupt e governança humana.
+- failure_policy do executor: muda o destino da falha do passo.
+- edges: força o modo edge-first.
+- tools_library: altera o catálogo de tools do workflow.
+- local_tools_configuration: altera a configuração local das tools do fluxo.
 
-Escreve: metadata.router_decision, last_output e possivelmente fallback.
+Dois pontos merecem prudência documental.
 
-Pode falhar: label inválida, destino inexistente ou exaustão do retry.
+- settings.background_execution_subagent existe no contrato AST, mas o consumo específico não foi confirmado no slice executor lido.
+- local_mcp_configuration aparece no contrato e em YAMLs reais, mas seu consumo específico pelo runtime do workflow não foi confirmado nesta investigação.
 
-### 8.8. rule_router
+## 12. Contratos de API e execução
 
-O que é: roteamento por regras determinísticas.
+### 12.1. /workflow/execute
 
-Por que existe: substituir LLM quando a decisão cabe em expressão segura.
+WorkflowRequest aceita:
 
-Campos relevantes: params.rules, params.default_label e router.go_to_node.
+- message
+- user_email
+- thread_id opcional
+- format
+- correlation_id opcional
+- encrypted_data
+- execution_mode
+- estimated_duration_seconds
 
-Lê: variables e input_text.
+O router autentica com workflow.execute, resolve YAML, seleciona modo e executa.
 
-Escreve: label escolhida no metadata.
+### 12.2. /workflow/continue
 
-Pode falhar: regras mal formadas ou expressão inválida.
+WorkflowContinueRequest exige:
 
-### 8.9. transform
+- thread_id
+- correlation_id
+- human_response
+- encrypted_data opcional
+- user_email opcional
 
-O que é: node de transformação pré-configurada.
+O router falha cedo se thread_id estiver ausente ou vazio.
 
-Por que existe: limpeza e adaptação de mensagens ou payloads sem usar modelo.
+### 12.3. Execução assíncrona curta
 
-Campos relevantes: settings.kind e parâmetros específicos da transformação.
+WorkflowExecutionService.schedule_async usa BackgroundTasks para agendar `_execute_workflow_async`. Esse é o caminho efêmero da API para execução assíncrona com progress tracking.
 
-Lê: messages, variables, last_output.
+### 12.4. Execução background persistida
 
-Escreve: mensagens ou payload transformado.
+A tool schedule_background_execution_request aceita workflow como target_type e persiste agenda, solicitação e runs no subsistema background execution.
 
-Pode falhar: kind inválido ou regex/operação inválida.
+Exemplo fiel ao contrato da tool:
 
-### 8.10. planner
+```yaml
+# Exemplo conceitual de uso via tool governada
+target_type: workflow
+target_ref: workflow_erp_conciliacao_contas_pagar
+requested_command: "Concilie títulos vencidos e liquidados nas últimas 24 horas"
+schedule_type: cron
+cron_expression: "0 2 * * *"
+timezone: "America/Sao_Paulo"
+```
 
-O que é: gerador de plano estruturado.
+## 13. O que acontece em caso de sucesso
 
-Por que existe: decompor uma tarefa em steps antes da execução iterativa.
+### 13.1. Sucesso síncrono
 
-Campos relevantes: prompt.system, settings.output_key, cursor_key, enforce_list, coerce_json, auto_ids.
+WorkflowOrchestrator devolve final_response, execution_steps, thread_id, workflow_metadata, analysis, outgoing_message e channel_response quando houver.
 
-Lê: messages, context, metadata.
+### 13.2. Sucesso com pausa HIL
 
-Escreve: metadata com plano e cursor.
+No foreground, o runtime pode pausar a thread e depois continuar por /workflow/continue.
 
-Pode falhar: JSON ruim, schema de plano inválido ou tool não resolvida.
+### 13.3. Sucesso em background persistido
 
-### 8.11. executor
+No runtime agentic de background, o resultado é normalizado como run terminal válido com telemetry e result_payload.
 
-O que é: executa um passo do plano por vez.
+## 14. O que acontece em caso de erro
 
-Por que existe: materializar o padrão planner/executor com controle de loop.
+### 14.1. Erro de parse
 
-Campos relevantes: settings.output_key, cursor_key, emit_step_summary, retry_policy, human_approval, failure_policy.
+Sintoma: WORKFLOWS_TIPO_INVALIDO, NODE_TIPO_INVALIDO, EDGE_TIPO_INVALIDO.
 
-Lê: metadata do plano e cursor.
+Reação: diagnóstico estruturado e bloqueio do caminho governado.
 
-Escreve: avanço do cursor, last_output, messages e indicadores de plan_done.
+### 14.2. Erro de validação semântica
 
-Pode falhar: passo inválido, erro de execução, exaustão do retry ou pedido de revisão humana.
+Sintoma: WORKFLOW_SELECAO_OBRIGATORIA, WORKFLOW_SELECIONADO_INEXISTENTE, WORKFLOW_TOOL_INEXISTENTE, SUB_WORKFLOW_AUTOREFERENCIA.
 
-### 8.12. schema_validator
+Reação: ValidationReport inválido.
 
-O que é: valida payload contra JSON Schema.
-
-Por que existe: impedir que o fluxo siga com estrutura inválida.
-
-Campos relevantes: params.schema, source, parse_json, on_error.
-
-Lê: last_output ou source configurado.
-
-Escreve: payload validado em writes quando cabível.
-
-Pode falhar: schema ruim, payload inválido ou acionar request_human conforme on_error.
-
-### 8.13. sub_workflow
-
-O que é: chama outro workflow como subfluxo.
-
-Por que existe: modularizar processos maiores.
-
-Campos relevantes: params.workflow_id, inherit_variables, inherit_metadata, inherit_messages, input_value, input_path, result_path.
-
-Lê: input_text, variables, messages.
-
-Escreve: resultado do filho no result_path ou writes.
-
-Pode falhar: workflow inexistente, autorreferência ou recursão detectada.
-
-### 8.14. whatsapp_media_resolver
-
-O que é: resolve mídia para payload WhatsApp.
-
-Por que existe: transformar URL em media_id pronto para canal.
-
-Campos relevantes: payload_path, write_path, product_list_key, caption_field, url_field, media_type, cache_ttl_seconds, allow_url_fallback.
-
-Lê: payload estruturado com produtos.
-
-Escreve: variables com payload enriquecido por media_id.
-
-Pode falhar: payload ausente, cache indisponível ou upload sem fallback possível.
-
-### 8.15. whatsapp_send
-
-O que é: monta a mensagem final estruturada do canal.
-
-Por que existe: separar preparação de envio do resto da lógica de negócios.
-
-Campos relevantes: payload_path, write_path, product_list_key e text_key.
-
-Lê: payload resolvido.
-
-Escreve: outgoing_message estruturado.
-
-Pode falhar: payload inválido ou ausência de conteúdo esperado.
-
-## 9. Configurações que mudam o comportamento
-
-selected_workflow muda o alvo ativo.
-
-enabled muda a elegibilidade do fluxo.
-
-settings.max_iterations muda recursion_limit e limite do executor quando aplicável.
-
-tools_library muda o catálogo local do workflow.
-
-local_tools_configuration muda overrides de tools.
-
-retry_policy muda resiliência por node.
-
-human_approval muda se um node pausa ou não.
-
-failure_policy do executor muda se a falha encerra, só loga ou pede humano.
-
-edges muda toda a estratégia de transição.
-
-## 10. Contratos de API, execução e retomada
-
-Em /workflow/execute, WorkflowRequest exige message e user_email e aceita thread_id, format, correlation_id, encrypted_data, execution_mode e estimated_duration_seconds. O router autentica com workflow.execute, resolve o YAML, escolhe modo híbrido e delega para WorkflowExecutionService e WorkflowOrchestrator.
-
-Em /workflow/continue, WorkflowContinueRequest exige thread_id, correlation_id e human_response. O router normaliza o thread_id com _require_continue_thread_id e não cria fallback silencioso. Depois hidrata config, instancia WorkflowOrchestrator e chama continue_execution.
-
-Em canais, ChannelExecutionEngine reutiliza WorkflowOrchestrator em _execute_workflow e transforma outgoing_message em OutgoingMessage tipado para responders.
-
-## 11. O que acontece em caso de sucesso
-
-No sucesso síncrono, run devolve success verdadeiro, final_response, execution_steps, thread_id, workflow_metadata, channel_response e outgoing_message quando houver. WorkflowOrchestrator embala isso em OrchestratorResult e o router serializa a resposta final.
-
-No sucesso com pausa humana, o estado intermediário expõe metadata com requires_human ou status paused e um thread_id reutilizável. A conclusão real vem na chamada /workflow/continue.
-
-## 12. O que acontece em caso de erro
-
-### 12.1. Falha de parse
-
-Sintoma: diagnósticos como WORKFLOWS_TIPO_INVALIDO, NODE_TIPO_INVALIDO ou EDGE_TIPO_INVALIDO.
-
-Reação: o parser devolve diagnóstico e fragmento parcial; o runtime não deveria consumir payload não confirmado.
-
-### 12.2. Falha de validação semântica
-
-Sintoma: WORKFLOW_SELECIONADO_INEXISTENTE, WORKFLOW_SELECAO_OBRIGATORIA, WORKFLOW_TOOL_INEXISTENTE, SUB_WORKFLOW_INEXISTENTE.
-
-Reação: ValidationReport inválido e bloqueio de confirm.
-
-### 12.3. Falha de integridade runtime
+### 14.3. Erro de integridade runtime
 
 Sintoma: WorkflowIntegrityError antes da compilação do grafo.
 
-Reação: AgentWorkflow.initialize aborta sem inicializar factories ou StateGraph.
+Reação: initialize aborta sem criar grafo executável.
 
-### 12.4. Falha de execução do node
+### 14.4. Erro de execução de node
 
-Sintoma: erro registrado pelo ExecutionPolicyRunner, error_log ou exception no orquestrador.
+Sintoma: exception no node, trace do ExecutionPolicyRunner, error_log ou falha do orquestrador.
 
-Reação: retry até o limite, breaker quando aplicável e propagação do erro quando esgotado.
+Reação: retry até o limite e propagação do erro ao esgotar a política.
 
-### 12.5. Falha de retomada
+### 14.5. Erro de retomada
 
-Sintoma: 400 por thread_id ausente ou 404 por thread/checkpoint não encontrado.
+Sintoma: 400 por thread_id inválido ou 404 por checkpoint/thread não encontrado.
 
-Reação: router falha cedo e não inventa thread nova.
+Reação: router falha cedo e não inventa continuidade.
 
-## 13. Observabilidade e diagnóstico
+### 14.6. Erro específico do workflow background com waiting_hil
 
-O runtime registra execution_trace em metadata, data_flow com reads/writes por node, read_snapshots e write_snapshots, além de logs estruturados com marcadores como WORKFLOW_EXECUTION_START, WORKFLOW_EDGE_TRANSITION, WORKFLOW_INTEGRITY_ERROR e ORCHESTRATOR_END. O diagnóstico real costuma seguir esta ordem.
+Sintoma: run background falha ao pausar por HIL.
 
-1. Confirmar workflow_id e thread_id.
-2. Confirmar se o problema veio da validação ou do runtime.
-3. Ver execution_trace, workflow_metadata e error_log.
-4. Revisar router_decision, if_results, plan cursor ou writes relevantes.
+Reação: AgenticBackgroundExecutionRuntime lança erro explícito dizendo que workflow em background ainda não suporta continuidade durável para waiting_hil.
 
-## 14. Estado da arte e comparação
+## 15. Observabilidade e diagnóstico
 
-O LangGraph oficial posiciona workflows como fluxos com trilhas predeterminadas, distintos de agentes mais dinâmicos. Também recomenda StateGraph como base, interrupt para human-in-the-loop e Command resume com o mesmo thread_id para continuidade.
+O runtime registra e expõe sinais fortes de diagnóstico.
 
-O projeto segue esse núcleo, mas adiciona uma camada de governança que não é padrão em exemplos básicos do framework. Em vez de construir o grafo manualmente em código, ele passa por AST, schema, parser, compiler, validator e drift detector. Isso é mais pesado do que os exemplos oficiais de prompt chaining, routing, orchestrator-worker ou evaluator-optimizer, mas responde a uma necessidade empresarial diferente: controlar o contrato antes da execução.
+- logs com correlation_id;
+- execução por node em execution_trace;
+- data_flow com reads e writes;
+- read_snapshots e write_snapshots;
+- workflow_metadata;
+- router_decision e if_results;
+- thread_id para continuidade;
+- telemetry e result_payload no background persistido.
 
-Na prática, o runtime atual está mais próximo do estado da arte de workflows governados do que de um tutorial LangGraph puro. Ao mesmo tempo, ele ainda mantém algumas lacunas típicas de produto em evolução, como campos expostos no contrato cujo consumo operacional específico não ficou provado no slice lido.
+Ordem prática de investigação:
 
-## 15. Exemplos práticos guiados
+1. Confirmar workflow_id, thread_id e correlation_id.
+2. Ver se a falha aconteceu antes ou depois do initialize.
+3. Checar se o runtime entrou em edge-first ou node-driven.
+4. Ler execution_trace e snapshots.
+5. Revisar tool_catalog, selected_workflow e referências cruzadas.
 
-### 15.1. Exemplo real de edge-first
+## 16. Estado da arte e comparação
 
-workflow_edge_first_demo mostra from START para classificar_pedido, condições when olhando metadata.router_decision e uma edge default por origem. Esse exemplo ensina a sintaxe de edges e a diferença entre rota condicionada e rota default.
+O LangGraph oficial trata workflow como fluxo com trilha predeterminada, normalmente sobre StateGraph, com uso de interrupt e Command resume para human-in-the-loop. O projeto segue esse núcleo, mas adiciona uma camada de governança que não aparece em exemplos básicos do framework.
 
-### 15.2. Exemplo real de planner/executor
+Em vez de montar o grafo manualmente direto em código, a plataforma passa por AST, parser, compiler, validator, resolver e runtime com caching e background execution. Isso torna a feature mais pesada do que um tutorial de LangGraph, mas muito mais alinhada a ambiente empresarial governado.
 
-O fluxo Planejamento Estratégico Food Service usa planner, executor e finalize. Ele prova que planner grava plano estruturado e executor itera com retry_policy e failure_policy request_human.
+## 17. Exemplos práticos guiados
 
-### 15.3. Exemplo real de social commerce Instagram
+### 17.1. Real do repositório: Instagram comentário para reply e DM
 
-workflow_instagram_comment_followup usa set, agent, function e merge para produzir um payload final de reply público e DM. Ele mostra como reads, writes e last_output formam uma esteira de dados entre nodes.
+workflow_instagram_comment_followup usa set, agent, function e merge para sair do comentário bruto e chegar em um payload final de resposta pública e DM.
 
-### 15.4. Exemplo real de WhatsApp multimídia
+### 17.2. Real do repositório: WhatsApp com mídia
 
-workflow_food_whatsapp_atendimento usa whatsapp_media_resolver e whatsapp_send para sair de um payload de produtos com URLs para um outgoing_message pronto para o canal.
+workflow_food_whatsapp_atendimento usa agent para montar JSON de produtos, function para parsear, merge para consolidar, whatsapp_media_resolver para resolver media_id e whatsapp_send para produzir outgoing_message.
 
-## 16. Explicação 101
+### 17.3. Real do repositório: planejamento estruturado
 
-Tecnicamente, workflow é como uma linha de produção com peças padrão. O YAML descreve a linha. A AST confere se a planta está legível. O validator verifica se a linha faz sentido. O runtime liga a esteira. O thread_id marca qual carrinho está passando por ela. Se alguém interromper a linha para aprovação humana, o sistema usa esse identificador para retomar do mesmo processo, e não de outro inventado depois.
+workflow_food_planejamento_estrategico usa planner, executor e finalize, além de retry_policy e failure_policy.
 
-## 17. Limites e pegadinhas
+### 17.4. Modelável no runtime atual: contas a pagar em background
 
-Não trate a presença de um campo no schema como prova de consumo operacional específico. Alguns campos estão confirmados no contrato, mas não no slice executor lido.
+Arquitetura sugerida baseada no código real:
 
-Não trate continue_execution como novo execute. Ele depende da mesma thread.
+- planner para quebrar o lote de títulos;
+- executor para iterar passos por lote;
+- tool nodes ou agent nodes para consultar ERP e banco;
+- schema_validator para validar o consolidado;
+- sub_workflow para reaproveitar a classificação de divergências;
+- agendamento via background execution com target_type workflow.
 
-Não trate interrupt como simples mensagem. Antes dele é preciso ter checkpointer e identidade estável.
+### 17.5. Modelável no runtime atual: auditoria fiscal recorrente
 
-Não trate edge-first e node-driven como equivalentes de manutenção. Edge-first é mais explícito para auditoria; node-driven é mais compacto para fluxos lineares.
+Arquitetura sugerida baseada no código real:
 
-## 18. Troubleshooting
+- set para preparar contexto fiscal;
+- planner para montar o plano de auditoria;
+- executor para percorrer documentos;
+- router ou if para separar trilha de divergência;
+- merge e function para consolidar payloads;
+- execução como run background recorrente.
 
-### 18.1. Sintoma: selected_workflow rejeitado
+### 17.6. Modelável no runtime atual: repriorização de backlog do ERP
 
-Causa provável: selected_workflow inexistente, desabilitado ou ambiguidade de múltiplos workflows habilitados.
+Arquitetura sugerida baseada no código real:
+
+- set e function para normalizar critérios;
+- planner para agrupar o backlog;
+- executor para aplicar a priorização;
+- sub_workflow para cálculo reutilizável de criticidade;
+- payload final estruturado para fila, canal ou dashboard operacional.
+
+## 18. Explicação 101
+
+Tecnicamente, workflow é uma esteira de produção com regras claras. O YAML descreve a esteira. A AST confere se a descrição é válida. O validator checa se ela faz sentido. O runtime liga a esteira. O thread_id marca qual item está passando por ela. Se houver pausa humana, o sistema retoma o mesmo item, e não outro qualquer.
+
+## 19. Limites e pegadinhas
+
+- Não trate continue_execution como novo execute. Ele depende da mesma thread.
+- Não trate interrupt como simples mensagem. Sem checkpoint e thread estável não existe continuidade real.
+- Não trate presença no schema como consumo garantido pelo executor. Algumas chaves exigem prova no código lido.
+- Não modele workflow background persistido contando com HIL durável hoje, porque o runtime atual interrompe waiting_hil nesse caminho.
+
+## 20. Troubleshooting
+
+### 20.1. Sintoma: selected_workflow rejeitado
+
+Causa provável: selected_workflow inexistente, desabilitado ou ambiguidade entre vários workflows habilitados.
 
 Como confirmar: revisar WorkflowSemanticValidator e WorkflowConfigResolver.
 
-### 18.2. Sintoma: falha antes de compilar o grafo
+### 20.2. Sintoma: falha antes de compilar o grafo
 
-Causa provável: WorkflowIntegrityAnalyzer encontrou node sem prompt obrigatório, destino inexistente ou contrato edge quebrado.
+Causa provável: WorkflowIntegrityAnalyzer encontrou contrato inconsistente.
 
-Como confirmar: inspecionar _workflow_integrity_report e logs de WORKFLOW_INTEGRITY_ERROR.
+Como confirmar: inspecionar relatório de integridade e logs de erro do runtime.
+
+### 20.3. Sintoma: router não encontra rota válida
+
+Causa provável: allowed_labels, go_to_node, fallback_node ou edges.when/default inconsistentes.
+
+Como confirmar: revisar metadata.router_decision e logs de transição.
+
+### 20.4. Sintoma: sub_workflow quebra cedo
+
+Causa provável: workflow_id inexistente ou recursão detectada.
+
+Como confirmar: revisar workflow_stack e catálogo de workflows do documento.
+
+### 20.5. Sintoma: workflow background falha ao pausar para humano
+
+Causa provável: limitação atual do runtime persistido para waiting_hil em workflow.
+
+Como confirmar: revisar erro lançado por AgenticBackgroundExecutionRuntime.
+
+## 21. Diagramas
+
+```mermaid
+flowchart TD
+    A[workflows no YAML] --> B[WorkflowParser]
+    B --> C[WorkflowCompiler]
+    C --> D[WorkflowSemanticValidator]
+    D --> E[WorkflowConfigResolver]
+    E --> F[AgentWorkflow.initialize]
+    F --> G{edges presentes?}
+    G -- sim --> H[EdgeCompiler]
+    G -- nao --> I[Node-driven transitions]
+    H --> J[StateGraph compilado]
+    I --> J
+    J --> K[WorkflowOrchestrator]
+    K --> L[/workflow/execute]
+    K --> M[Background execution runtime]
+    J --> N[interrupt]
+    N --> O[/workflow/continue]
+```
+
+O diagrama resume a execução real: primeiro o contrato é governado, depois o runtime decide o modo de transição, e só então a thread é exposta para API ou background runtime.
+
+## 22. Como colocar para funcionar
+
+### 22.1. Execução direta pela API
+
+1. Montar um YAML com seção workflows válida.
+2. Garantir selected_workflow quando houver mais de um fluxo habilitado.
+3. Chamar /workflow/execute com workflow.execute autorizado.
+4. Se houver HIL, chamar /workflow/continue com a mesma thread.
+
+### 22.2. Execução assíncrona curta pela API
+
+Use execution_mode auto ou direct_async quando a intenção for rodar fora da resposta síncrona do request, mas ainda dentro do modelo efêmero de BackgroundTasks.
+
+### 22.3. Execução background persistida
+
+Use a capacidade agentic de background execution com target_type workflow. Esse é o caminho correto para recorrência, agendamento e histórico durável.
+
+## 23. Exercícios guiados
+
+Exercício 1. Explique por que um modo desconhecido pode ser parseado, mas não pode entrar na compilação canônica.
+
+Exercício 2. Compare direct_async da API com background execution persistido e explique por que os dois existem.
+
+Exercício 3. Modele um sub_workflow de classificação de divergências e explique como evitar recursão.
+
+## 24. Checklist de entendimento
+
+- Entendi o pipeline YAML -> AST -> validação -> runtime.
+- Entendi a diferença entre parser leniente e validator rígido.
+- Entendi a diferença entre node-driven e edge-first.
+- Entendi o catálogo oficial de nodes suportados.
+- Entendi como HIL funciona em foreground.
+- Entendi por que workflow background persistido hoje não aceita waiting_hil durável.
+- Entendi como a API curta e o background persistido se diferenciam.
+
+## 25. Evidências no código
+
+- src/config/agentic_assembly/ast/workflow.py
+  - Motivo da leitura: confirmar gramática canônica, node base, edges e settings.
+  - Símbolos relevantes: WorkflowNodeBaseAST, WorkflowNodeAST, WorkflowSettingsAST.
+  - Comportamento confirmado: catálogo formal de modos e campos compartilhados.
+
+- src/agentic_layer/workflow/agent_workflow.py
+  - Motivo da leitura: confirmar NodeFactory, cache por hash, edge-first, node-driven, thread_id e run.
+  - Símbolo relevante: AgentWorkflow.
+  - Comportamento confirmado: executor real do recurso.
+
+- src/agentic_layer/workflow/nodes/base.py
+  - Motivo da leitura: confirmar reads, writes, execution_trace, human approval e snapshots.
+  - Símbolo relevante: BaseNodeHandler.
+  - Comportamento confirmado: contrato comum entre nodes.
+
+- src/agentic_layer/workflow/execution_policy.py
+  - Motivo da leitura: confirmar retry canônico.
+  - Símbolo relevante: ExecutionPolicyRunner.
+  - Comportamento confirmado: max_attempts, backoff_seconds e breaker_threshold.
+
+- src/agentic_layer/workflow/nodes/sub_workflow_node.py
+  - Motivo da leitura: confirmar modularização e bloqueio de recursão.
+  - Símbolo relevante: SubWorkflowNode.
+  - Comportamento confirmado: workflow_stack e herança controlada de contexto.
+
+- src/api/routers/workflow_router.py
+  - Motivo da leitura: confirmar contratos /workflow/execute e /workflow/continue.
+  - Símbolo relevante: WorkflowRequest, WorkflowContinueRequest, execute_workflow, continue_workflow.
+  - Comportamento confirmado: execução híbrida e retomada HIL.
+
+- src/api/services/workflow_execution_service.py
+  - Motivo da leitura: confirmar diferença entre hidratação, execução sync e agendamento async efêmero.
+  - Símbolo relevante: WorkflowExecutionService.
+  - Comportamento confirmado: direct_async usa BackgroundTasks e progress tracking.
+
+- src/agentic_layer/background_execution/runtime.py
+  - Motivo da leitura: confirmar execução persistida de workflow como alvo background.
+  - Símbolo relevante: AgenticBackgroundExecutionRuntime.
+  - Comportamento confirmado: workflow é target_type suportado e waiting_hil em background é bloqueado explicitamente.
+
+- src/agentic_layer/tools/system_tools/background_execution.py
+  - Motivo da leitura: confirmar a superfície de agendamento do background agentic.
+  - Símbolo relevante: schedule_background_execution_request.
+  - Comportamento confirmado: tool aceita workflow como target_type e agenda runs persistidos.
 
 ### 18.3. Sintoma: router sem destino
 

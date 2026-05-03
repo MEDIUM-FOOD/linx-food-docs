@@ -84,8 +84,8 @@ Esse assunto precisa ser lido pela lógica de decisão, não por jargão.
 - [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md) aprofunda conceito, valor, estratégia e limites do agente workflow.
 - [README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md](./README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md) detalha sintaxe, AST, runtime, nodes, HIL, API e troubleshooting do agente workflow.
 - [README-AGENTIC-BACKGROUND-EXECUTION.md](./README-AGENTIC-BACKGROUND-EXECUTION.md) explica como solicitações agentic executam em background com schedules, runs, worker oficial e APIs administrativas.
-- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) explica o valor de negócio e o modelo mental do agendamento agentic com prompt em linguagem natural, scheduler universal e HIL durável.
-- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) descreve o caminho técnico entre tool de schedule, scheduler universal, worker background e decisão HIL por API ou canal.
+- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) explica o valor de negócio e o modelo mental do agendamento agentic com prompt em linguagem natural, scheduler universal, HIL durável e Generative UI compartilhada.
+- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) descreve o caminho técnico entre tool de schedule, scheduler universal, worker background, decisão HIL por API ou canal e uso da Generative UI agnóstica.
 
 ## 6. Se você quer entender a API e a operação
 
@@ -101,8 +101,8 @@ A ordem mais produtiva costuma ser esta.
 8. [README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md) para entender a arquitetura de logging como capacidade de plataforma, com correlation_id, arquivo local e providers remotos.
 9. [README-TECNICO-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-TECNICO-ARQUITETURA-LOGGING-CORRELATION-ID.md) para seguir middleware, handlers, CloudWatch, providers administrativos e troubleshooting.
 10. [README-TESTS.MD](./README-TESTS.MD) quando a pergunta for validação oficial.
-11. [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) quando a dúvida for o valor e os limites do agendamento agentic com prompt em NL e aprovação humana.
-12. [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) quando a dúvida for o fluxo ponta a ponta entre scheduler, worker, run e HIL.
+11. [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) quando a dúvida for o valor e os limites do agendamento agentic com prompt em NL, aprovação humana e interface generativa compartilhada.
+12. [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md) quando a dúvida for o fluxo ponta a ponta entre scheduler, worker, run, HIL e superfície AG-UI reutilizável.
 
 ## 7. Se você quer entender UI agentic e pausa humana
 
@@ -146,8 +146,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-TECNICO-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-TECNICO-ARQUITETURA-LOGGING-CORRELATION-ID.md): manual técnico e operacional da arquitetura de logging, incluindo arquivo local, CloudWatch e leitura administrativa por provider.
 - [README-TESTS.MD](./README-TESTS.MD): estratégia oficial de validação automatizada.
 - [README-SCHEDULER.md](./README-SCHEDULER.md): processamento agendado, responsabilidades do scheduler e relação com o restante do runtime.
-- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): visão conceitual, executiva, comercial e estratégica do agendamento agentic em background com HIL.
-- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): manual técnico e operacional do fluxo entre scheduler universal, execução background e comunicação HIL.
+- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): visão conceitual, executiva, comercial e estratégica do agendamento agentic em background com HIL e Generative UI compartilhada.
+- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): manual técnico e operacional do fluxo entre scheduler universal, execução background, comunicação HIL e superfície AG-UI agnóstica.
 
 ### 9.2 Produção de acervo, ingestão e ETL
 
@@ -191,12 +191,14 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md): ciclo de vida da configuração até o runtime.
 - [README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md): manual conceitual, executivo, comercial e estratégico sobre o que a plataforma realmente configura por YAML sem programação.
 - [README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md): manual técnico e operacional sobre carga do YAML, assembly AST, seleção de alvos agentic e ETL declarativo.
+- [README-CONCEITUAL-NL2YAML-COMPLETO.md](./README-CONCEITUAL-NL2YAML-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do fluxo NL2YAML governado por AST.
+- [README-TECNICO-NL2YAML-COMPLETO.md](./README-TECNICO-NL2YAML-COMPLETO.md): manual técnico e operacional do fluxo objective-to-yaml, incluindo AST, validação, dry-run, drift e publicação segura.
 - [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md): modelo mental inicial do ecossistema agentic.
 - [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md): AST como fonte tipada de verdade do assembly agentic.
 - [README-AGENTIC-CONTRATO-COMUM.md](./README-AGENTIC-CONTRATO-COMUM.md): contrato compartilhado entre espinhas dorsais agentic.
 - [README-AGENTIC-BACKGROUND-EXECUTION.md](./README-AGENTIC-BACKGROUND-EXECUTION.md): execução agentic em background baseada em solicitação de prompt, com schedules, runs, HIL e APIs administrativas.
-- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para entender o pedido em linguagem natural, a agenda canônica e o valor do HIL em execuções agendadas.
-- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para seguir o fluxo técnico entre tool, scheduler, worker e finalização HIL.
+- [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para entender o pedido em linguagem natural, a agenda canônica, o valor do HIL e o papel da interface generativa compartilhada.
+- [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para seguir o fluxo técnico entre tool, scheduler, worker, finalização HIL e componentes reutilizáveis de AG-UI.
 - [README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do DeepAgent Supervisor completo.
 - [README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual técnico e operacional do DeepAgent Supervisor completo, incluindo AST, runtime, HIL e memória persistente.
 - [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md): workflow determinístico baseado em grafo.
@@ -222,6 +224,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-TECNICO-DYNAMIC-SQL-TOOLS.md](./README-TECNICO-DYNAMIC-SQL-TOOLS.md): manual técnico e operacional do dyn_sql, incluindo catálogo builtin, AST, registro persistido, retry e cache.
 - [README-SCHEMA-BANCO.md](./README-SCHEMA-BANCO.md): organização e papel do schema do banco.
 - [README-SQL-SCHEMA-RAG-TOOL.md](./README-SQL-SCHEMA-RAG-TOOL.md): tool especializada no schema SQL do RAG.
+- [README-CONCEITUAL-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md](./README-CONCEITUAL-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md): manual conceitual, executivo, comercial e estratégico do pipeline de schema metadata como base operacional do NL2SQL.
+- [README-TECNICO-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md](./README-TECNICO-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md): manual técnico e operacional do encadeamento ETL -> exportação -> ingestão -> runtime para schema metadata.
 - [README-GOOGLE-UCP.md](./README-GOOGLE-UCP.md): integração e contrato do fluxo Google UCP.
 - [README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md](./README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md): manual conceitual, executivo, comercial e estratégico do MCP como capability governada e expansível por YAML.
 - [README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md](./README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md): manual técnico e operacional do MCP, incluindo resolução por escopo, proxy stdio em /mcp, autenticação, cache e troubleshooting.

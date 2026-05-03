@@ -1,4 +1,4 @@
-# Manual conceitual, executivo, comercial e estratégico: scheduler, agendamento agentic em background e comunicação HIL
+# Manual conceitual, executivo, comercial e estratégico: scheduler, agendamento agentic em background, comunicação HIL e Generative UI
 
 ## 1. O que é esta capacidade
 
@@ -40,7 +40,7 @@ O benefício percebido pelo cliente é claro: automação com calendário, hist�
 
 ## 5. Visão estratégica
 
-Estrategicamente, essa capacidade fortalece a plataforma em quatro frentes.
+Estrategicamente, essa capacidade fortalece a plataforma em cinco frentes.
 
 A primeira frente é topologia. Scheduler, worker e API continuam separados. Isso evita misturar coordenação temporal com execução pesada e com borda HTTP.
 
@@ -49,6 +49,8 @@ A segunda frente é governança agentic. O runtime deixa de ser apenas reativo. 
 A terceira frente é omnichannel. A pausa humana deixa de depender da interface original. A decisão pode ser tratada por uma rota segura ou por ponte de canal, desde que respeite o contrato HIL.
 
 A quarta frente é sustentabilidade do produto. Ao manter o pedido original, o alvo agentic, a agenda e a decisão humana dentro de contratos tipados, a plataforma cria base para operação recorrente e auditável sem cair em scripts paralelos ou improvisações locais.
+
+A quinta frente é genericidade de superfície. O que foi confirmado no código não é uma experiência presa a um canal único. Scheduler, worker, bridge HIL, painel de revisão e AG-UI foram montados como peças reutilizáveis. Isso permite que a mesma pausa humana seja tratada por API, canal externo ou interface generativa sem reescrever a lógica central de decisão.
 
 ## 6. Conceitos necessários para entender
 
@@ -84,6 +86,14 @@ O momento de execução não é texto livre. Ele é validado por um contrato tip
 
 É o identificador lógico de ponta a ponta. O mesmo correlation_id acompanha criação da solicitação, scheduler, worker, runtime e HIL. Isso é essencial para auditoria e troubleshooting.
 
+### 6.9. Generative UI compartilhada
+
+Generative UI, neste contexto, não é um enfeite visual específico de uma tela. Ela é a camada de interface orientada a eventos que consegue mostrar andamento, mensagens, tools acionadas, estado materializado e interrupções HIL sem acoplar a experiência a um framework único ou a um domínio de negócio fixo.
+
+### 6.10. Superfície agnóstica
+
+Chamar o desenho de agnóstico aqui tem um significado prático: o scheduler não sabe de varejo, cobrança ou qualquer domínio específico; ele só conhece agenda e dispatch. O ledger background não sabe se o alvo é agente ou workflow por capricho visual; ele conhece target_type e target_ref. E a UI compartilhada de HIL não depende de um chat específico; ela recebe um contrato de revisão e devolve uma decisão.
+
 ## 7. Como a capacidade funciona por dentro
 
 O fluxo começa quando um agente em execução usa a tool interna de agendamento background. Essa tool cria uma solicitação com o pedido do usuário, identifica o alvo agentic e monta uma agenda estruturada. O pedido em linguagem natural continua preservado em requested_command.
@@ -97,6 +107,8 @@ O handler específico de background pega a reserva do scheduler, projeta um run 
 Se a execução termina sem pausa humana, o run é fechado como completed ou failed. Se a execução pausa aguardando decisão humana, o run entra em waiting_hil e a plataforma tenta criar uma aprovação assíncrona durável quando o contrato do supervisor permite isso.
 
 Quando a decisão humana chega, ela não recomeça a execução do zero. Ela retoma a mesma thread. Se a decisão vier por rota segura, a plataforma valida token, status, expiração e aprovador. Se vier por canal, a bridge de HIL intercepta a mensagem antes do fluxo normal do canal e envia a decisão ao mesmo caso de uso interno.
+
+Na camada de interface, isso pode aparecer de formas diferentes. Uma tela web tradicional pode receber o envelope HIL e responder por endpoint dedicado. Um canal como WhatsApp pode receber botão interativo e devolver a decisão pela bridge. E uma experiência de Generative UI pode exibir a interrupção no sidecar compartilhado usando o mesmo contrato de revisão humana. O ponto forte aqui é que a governança não nasce na interface. A interface só consome um contrato comum.
 
 ## 8. Divisão em etapas ou submódulos
 
@@ -160,6 +172,18 @@ O que entrega: continuação do agente e sincronização do run background.
 
 Valor para o fluxo completo: fecha o ciclo entre agenda, execução e aprovação humana.
 
+### 8.6. Comunicação com o usuário para HIL
+
+Esta etapa existe para levar a pausa humana até a pessoa certa sem prender a decisão ao mesmo front que iniciou o fluxo.
+
+Ela resolve o problema de execuções longas ou noturnas que precisam de aprovação depois, quando o operador já não está mais na conversa original.
+
+O que recebe: envelope HIL síncrono, pedido HIL durável ou interrupção emitida pela camada de interface generativa.
+
+O que entrega: uma resposta humana estruturada por API, canal ou painel visual compartilhado.
+
+Valor para o fluxo completo: torna a aprovação humana transportável entre superfícies sem duplicar a lógica do runtime.
+
 ## 9. Fluxo principal de ponta a ponta
 
 1. O usuário formula um pedido em linguagem natural e o runtime agentic decide usar a tool de agendamento background.
@@ -172,7 +196,7 @@ Valor para o fluxo completo: fecha o ciclo entre agenda, execução e aprovaçã
 8. O runtime reconstrói o YAML a partir do snapshot, reidrata placeholders de security_keys, escolhe o runtime agentic correto e executa o requested_command.
 9. Se o resultado for final, o run fecha como completed ou failed.
 10. Se o resultado exigir revisão humana, o run muda para waiting_hil e a plataforma tenta abrir um pedido HIL assíncrono durável.
-11. A decisão chega por POST seguro ou por canal interceptado pela bridge HIL.
+11. A decisão chega por POST seguro, por canal interceptado pela bridge HIL ou por uma interface generativa que consome o contrato de revisão compartilhado.
 12. A continuação roda na mesma thread e o finalizador sincroniza o run background com o resultado da decisão.
 
 ## 10. Decisões técnicas e trade-offs
@@ -216,6 +240,14 @@ Ganho: evita runs waiting_hil sem continuação durável confiável.
 Custo: workflows em background ainda não têm o mesmo caminho assíncrono robusto já existente para agentes e deepagents.
 
 Impacto prático: a plataforma prefere erro explícito a pausa invisível.
+
+### 10.6. Usar componentes de UI compartilhados em vez de telas acopladas
+
+Ganho: a mesma lógica visual de revisão humana pode aparecer em AG-UI, webchat e interfaces administrativas sem reimplementar o contrato HIL.
+
+Custo: a interface precisa respeitar o contrato comum e plugar a continuação corretamente em vez de improvisar texto livre.
+
+Impacto prático: a camada visual fica mais reaproveitável e o produto pode trocar de superfície sem reescrever a regra de negócio.
 
 ## 11. O que o sistema agenda de verdade quando o usuário usa NL
 
@@ -273,6 +305,8 @@ O impacto estratégico está em aproximar a plataforma de um sistema operacional
 
 Com agenda canônica, execução background e HIL durável, o produto ganha base para automações mais longas, governadas e distribuídas entre canais.
 
+Ao mesmo tempo, a Generative UI compartilhada reforça a estratégia de agnosticismo: a plataforma não depende de um front único para expor execução, estado e aprovação humana. O mesmo núcleo pode ser usado em telas estáticas, sidecars, webchat e experiências futuras que só precisem falar HTTP e consumir eventos.
+
 ## 18. Exemplos práticos guiados
 
 ### 18.1. Relatório diário pedido em linguagem natural
@@ -299,6 +333,14 @@ O que o código confirma: esse caminho ainda falha fechado. A plataforma não de
 
 Impacto: a limitação fica explícita e observável.
 
+### 18.4. Tela com Generative UI mostrando aprovação pendente
+
+Cenário: uma tela AG-UI ou webchat mostra o andamento da execução e recebe uma interrupção de aprovação.
+
+O que o código confirma: a UI compartilhada consegue renderizar mensagens, tools, estado e um painel HIL reutilizável a partir de um contrato comum de revisão. A decisão visual não precisa ser texto livre.
+
+Impacto: a experiência fica mais clara para o usuário e a aprovação humana deixa de depender de parsing de mensagem ou de tela hardcoded.
+
 ## 19. Explicação 101
 
 Pense nesta capacidade como uma combinação de agenda corporativa com um motor de execução inteligente.
@@ -314,6 +356,8 @@ O sistema não confirmou um parser livre de datas em linguagem natural.
 O sistema não confirmou um endpoint administrativo para criar a solicitação background. No slice lido, a criação nasce da tool interna agentic, enquanto a API administrativa serve para leitura e cancelamento.
 
 O contrato de notificação HIL assíncrona confirma canais declarativos whatsapp e email. A bridge de decisão por canal é mais genérica, mas isso não significa que toda combinação de canal já esteja oficialmente suportada no contrato async_approval.
+
+O slice AG-UI local confirma renderização de interrupções e uso de painel HIL compartilhado, mas não prova por si só uma superfície pública dedicada de continuação HIL inteiramente encapsulada no próprio endpoint AG-UI. A interface visual é genérica; o acoplamento final da decisão ainda depende de quem pluga o callback de continuação.
 
 O runtime atual falha fechado para workflow waiting_hil em background.
 
@@ -377,6 +421,8 @@ O diagrama mostra a separação entre intenção, agenda, dispatch, execução r
 - Entendi por que o scheduler não executa o runtime agentic diretamente.
 - Entendi que o worker oficial continua sendo obrigatório.
 - Entendi como o HIL assíncrono entra no ciclo de background.
+- Entendi como API, canal e Generative UI podem servir como superfícies de comunicação da mesma pausa HIL.
+- Entendi em que sentido o desenho é genérico e agnóstico.
 - Entendi que workflow waiting_hil em background ainda falha fechado.
 - Entendi os limites atuais do contrato de canais para async_approval.
 
