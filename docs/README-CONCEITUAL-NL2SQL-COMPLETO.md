@@ -85,23 +85,31 @@ Se algo falhar, o retorno nao vira excecao opaca apenas. O slice adiciona diagno
 
 ## 8. Divisao em etapas ou submodulos
 
-### 8.1. Endpoint dedicado
+Detalhamento aprofundado por etapa:
+
+1. [Endpoint dedicado](README-CONCEITUAL-NL2SQL-COMPLETO-ENDPOINT-DEDICADO.md)
+2. [Servico dedicado](README-CONCEITUAL-NL2SQL-COMPLETO-SERVICO-DEDICADO.md)
+3. [Engine schema rag sql](README-CONCEITUAL-NL2SQL-COMPLETO-ENGINE-SCHEMA-RAG-SQL.md)
+4. [Catalogo de schema metadata](README-CONCEITUAL-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md)
+5. [Guardrail central](README-CONCEITUAL-NL2SQL-COMPLETO-GUARDRAIL-CENTRAL.md)
+
+### 8.1. [Endpoint dedicado](README-CONCEITUAL-NL2SQL-COMPLETO-ENDPOINT-DEDICADO.md)
 
 E a borda HTTP que recebe o pedido. Ela existe para manter NL2SQL como slice proprio, separado de fluxos legados de agente e separado de dyn_sql.
 
-### 8.2. Servico dedicado
+### 8.2. [Servico dedicado](README-CONCEITUAL-NL2SQL-COMPLETO-SERVICO-DEDICADO.md)
 
 E a camada que organiza validacao de entrada, injecao de contexto, chamada da engine schema_rag_sql e montagem da resposta estruturada. Ela existe para transformar uma engine interna em contrato administrativo estavel.
 
-### 8.3. Engine schema_rag_sql
+### 8.3. [Engine schema_rag_sql](README-CONCEITUAL-NL2SQL-COMPLETO-ENGINE-SCHEMA-RAG-SQL.md)
 
 E a camada que faz o trabalho realmente importante para bases gigantes: busca semantica no acervo de schema, formatacao do contexto e chamada do LLM. Ela existe para nao depender do schema inteiro nem de nomes tecnicos perfeitos.
 
-### 8.4. Catalogo de schema metadata
+### 8.4. [Catalogo de schema metadata](README-CONCEITUAL-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md)
 
 E a camada que prepara e persiste o conhecimento estrutural da base. Ela existe para que NL2SQL nao fique refem de introspecao ad hoc a cada pergunta.
 
-### 8.5. Guardrail central
+### 8.5. [Guardrail central](README-CONCEITUAL-NL2SQL-COMPLETO-GUARDRAIL-CENTRAL.md)
 
 E a camada que decide se a SQL proposta e aceitavel como somente leitura. Ela existe para impedir que o slice vire um canal de mutacao por linguagem natural.
 

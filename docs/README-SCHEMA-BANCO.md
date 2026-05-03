@@ -1700,11 +1700,11 @@ Em linguagem simples: pense nesse schema como uma prateleira oficial de integrac
 
 ## Leituras relacionadas
 
-- [README-ARQUITETURA.md](./README-ARQUITETURA.md): mostra como esse estado persistido sustenta API, worker e scheduler.
-- [README-INGESTAO.md](./README-INGESTAO.md): aprofunda o lado operacional do acervo que este schema materializa.
-- [README-RAG.md](./README-RAG.md): explica como o acervo persistido vira retrieval e resposta.
-- [README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md): detalha a superfície que consome tabelas de identidade.
-- [README-INTEGRACOES-GOVERNADAS.md](./README-INTEGRACOES-GOVERNADAS.md): explica a governança funcional das tabelas do schema `integrations`.
+- [README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md](./README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md): mostra como esse estado persistido sustenta API, worker e scheduler.
+- [README-INGESTAO-INDICE.md](./README-INGESTAO-INDICE.md): aprofunda o lado operacional do acervo que este schema materializa.
+- [README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md](./README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md): explica como o acervo persistido vira retrieval e resposta.
+- [README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md](./README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md): detalha a superfície que consome tabelas de identidade.
+- [README-CONCEITUAL-DYNAMIC-API-TOOLS.md](./README-CONCEITUAL-DYNAMIC-API-TOOLS.md): explica a governança funcional das tabelas do schema `integrations`.
 
 ## Troubleshooting
 

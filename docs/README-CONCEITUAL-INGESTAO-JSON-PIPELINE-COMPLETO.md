@@ -355,37 +355,37 @@ O valor está em não pular direto da leitura do arquivo para a indexação cega
 
 ## 23. Evidências no código
 
-- [src/ingestion_layer/processors/json_processor.py](src/ingestion_layer/processors/json_processor.py)
+- [src/ingestion_layer/processors/json_processor.py](../src/ingestion_layer/processors/json_processor.py)
   - Motivo da leitura: processor principal do slice JSON.
   - Símbolo relevante: JsonContentProcessor.
   - Comportamento confirmado: perfis de processamento, metadata estrutural, chunking por objeto e array, plugins de domínio e fallback controlado.
 
-- [src/ingestion_layer/processors/json_metadata_builder.py](src/ingestion_layer/processors/json_metadata_builder.py)
+- [src/ingestion_layer/processors/json_metadata_builder.py](../src/ingestion_layer/processors/json_metadata_builder.py)
   - Motivo da leitura: materialização do documento JSON e enriquecimento estrutural.
   - Símbolo relevante: JsonMetadataBuilder.
   - Comportamento confirmado: decode estrito, parse obrigatório, schema summary, numeric stats, quality flags, sombras normalizadas e detecção de coleções de catálogo/cupom.
 
-- [src/utils/json_config_resolver.py](src/utils/json_config_resolver.py)
+- [src/utils/json_config_resolver.py](../src/utils/json_config_resolver.py)
   - Motivo da leitura: contrato YAML do slice JSON.
   - Símbolo relevante: resolve_json_ingestion_config e validate_json_yaml_contract.
   - Comportamento confirmado: apenas ingestion.content_profiles.type_specific.json é aceito como caminho canônico.
 
-- [src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py](src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py)
+- [src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py](../src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py)
   - Motivo da leitura: enriquecimento de domínio para catálogo.
   - Símbolo relevante: ProductCatalogDomainProcessor.
   - Comportamento confirmado: extrai campos estruturados de produto e adiciona metadados específicos aos chunks.
 
-- [src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py](src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py)
+- [src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py](../src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py)
   - Motivo da leitura: enriquecimento de domínio para cupons.
   - Símbolo relevante: SalesCouponDomainProcessor.
   - Comportamento confirmado: extrai código, descrição, validade, restrições e outros metadados de cupom.
 
-- [src/ingestion_layer/file_pipeline_services.py](src/ingestion_layer/file_pipeline_services.py)
+- [src/ingestion_layer/file_pipeline_services.py](../src/ingestion_layer/file_pipeline_services.py)
   - Motivo da leitura: encaixe do JSON na esteira comum de processamento e indexação.
   - Símbolo relevante: DocumentProcessorExecutor e DocumentIndexingExecutor.
   - Comportamento confirmado: o processor dedicado roda dentro da pipeline canônica e depois devolve chunks para indexação comum.
 
-- [app/yaml/system/rag-config-modelo.yaml](app/yaml/system/rag-config-modelo.yaml)
+- [app/yaml/system/rag-config-modelo.yaml](../app/yaml/system/rag-config-modelo.yaml)
   - Motivo da leitura: configuração de referência do runtime.
   - Símbolo relevante: bloco json dentro de ingestion.content_profiles.type_specific.
   - Comportamento confirmado: expõe chunking, estrutura, processamento de cupom e catálogo, além de metadata.

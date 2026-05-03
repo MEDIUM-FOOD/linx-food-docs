@@ -114,33 +114,42 @@ Só quando todas essas etapas fecham o sistema devolve success=true, final_yaml,
 
 ## 8. Divisão em etapas ou submódulos
 
-### 8.1. Resolução de intenção
+Detalhamento aprofundado por etapa:
+
+1. [Resolucao de intencao](README-CONCEITUAL-NL2YAML-COMPLETO-RESOLUCAO-DE-INTENCAO.md)
+2. [Prontidao operacional](README-CONCEITUAL-NL2YAML-COMPLETO-PRONTIDAO-OPERACIONAL.md)
+3. [Draft assistido](README-CONCEITUAL-NL2YAML-COMPLETO-DRAFT-ASSISTIDO.md)
+4. [Validacao semantica](README-CONCEITUAL-NL2YAML-COMPLETO-VALIDACAO-SEMANTICA.md)
+5. [Consolidacao e preview final](README-CONCEITUAL-NL2YAML-COMPLETO-CONSOLIDACAO-E-PREVIEW-FINAL.md)
+6. [Publicacao segura](README-CONCEITUAL-NL2YAML-COMPLETO-PUBLICACAO-SEGURA.md)
+
+### 8.1. [Resolucao de intencao](README-CONCEITUAL-NL2YAML-COMPLETO-RESOLUCAO-DE-INTENCAO.md)
 
 É a etapa que pega o briefing e decide qual contrato agentic faz sentido. Ela existe porque workflow, supervisor e deepagent não são o mesmo tipo de artefato. Sem essa separação, a plataforma misturaria contratos incompatíveis.
 
 Ela recebe prompt, target solicitado e YAML base. Entrega target resolvido e o começo do rastro de decisão. O valor entregue aqui é enquadramento correto do problema.
 
-### 8.2. Prontidão operacional
+### 8.2. [Prontidao operacional](README-CONCEITUAL-NL2YAML-COMPLETO-PRONTIDAO-OPERACIONAL.md)
 
 É a etapa de preflight. Ela existe para evitar gerar preview ou YAML final quando o ambiente ainda não suporta o fluxo com segurança. Ela não produz o YAML em si; produz condições operacionais para seguir.
 
 Ela recebe target, modo de geração, YAML base e contexto do usuário. Entrega checks, diagnostics, llm_provider, suporte a structured output e status ready ou blocked.
 
-### 8.3. Draft assistido
+### 8.3. [Draft assistido](README-CONCEITUAL-NL2YAML-COMPLETO-DRAFT-ASSISTIDO.md)
 
 É a primeira tradução do objetivo para AST. Aqui o sistema tenta montar a estrutura inicial do documento. O valor dessa etapa é gerar um ponto de partida utilizável, e não fingir completude quando ainda faltam decisões.
 
 Ela pode devolver perguntas obrigatórias quando a intenção ainda está ambígua. Esse comportamento é importante porque evita YAML "meio certo" ser tratado como pronto.
 
-### 8.4. Validação semântica
+### 8.4. [Validacao semantica](README-CONCEITUAL-NL2YAML-COMPLETO-VALIDACAO-SEMANTICA.md)
 
 Essa etapa garante que o documento AST faz sentido para o alvo. Ela existe porque um YAML sintaticamente válido ainda pode ser semanticamente errado. O validador escolhe a lógica certa para workflow, supervisor ou deepagent, e também valida tools declaradas.
 
-### 8.5. Consolidação e preview final
+### 8.5. [Consolidacao e preview final](README-CONCEITUAL-NL2YAML-COMPLETO-CONSOLIDACAO-E-PREVIEW-FINAL.md)
 
 Aqui o sistema compila o fragmento governado, faz merge no YAML base sem reescrever tudo, estampa fingerprint do bloco governado e gera diff preview. Essa etapa transforma o draft validado em um artefato final revisável.
 
-### 8.6. Publicação segura
+### 8.6. [Publicacao segura](README-CONCEITUAL-NL2YAML-COMPLETO-PUBLICACAO-SEGURA.md)
 
 A publicação só acontece quando apply=true. Mesmo assim, ela não aceita caminho arbitrário. O output_path precisa ser um arquivo YAML dentro de app/yaml. Isso existe para impedir gravação fora do perímetro governado.
 

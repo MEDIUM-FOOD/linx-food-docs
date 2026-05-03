@@ -6,6 +6,15 @@ O slice técnico de NL2YAML é o fluxo HTTP e de serviço que recebe um briefing
 
 Esse fluxo não grava arquivo por padrão. Ele gera um resultado governado com AST, relatório de validação, diff preview, rastro de decisão, tools escolhidas e, quando ainda faltam decisões, questions para consolidação posterior.
 
+Detalhamento técnico por etapa:
+
+1. [Resolução de intenção](README-TECNICO-NL2YAML-COMPLETO-RESOLUCAO-DE-INTENCAO.md)
+2. [Prontidão operacional](README-TECNICO-NL2YAML-COMPLETO-PRONTIDAO-OPERACIONAL.md)
+3. [Draft assistido](README-TECNICO-NL2YAML-COMPLETO-DRAFT-ASSISTIDO.md)
+4. [Validação semântica](README-TECNICO-NL2YAML-COMPLETO-VALIDACAO-SEMANTICA.md)
+5. [Consolidação e preview final](README-TECNICO-NL2YAML-COMPLETO-CONSOLIDACAO-E-PREVIEW-FINAL.md)
+6. [Publicação segura](README-TECNICO-NL2YAML-COMPLETO-PUBLICACAO-SEGURA.md)
+
 ## 2. Conceitos técnicos necessários
 
 ### 2.1. AssemblyTarget

@@ -728,8 +728,8 @@ npm install axios
 
 ## Leitura relacionada
 
-- 🔐 **[README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md)** - Sistema de autenticação
-- ⚙️ **[README-SERVICE-API.md](./README-SERVICE-API.md)** - Documentação da API
+- 🔐 **[README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md](./README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md)** - Sistema de autenticação
+- ⚙️ **[API-ENDPOINTS-SWAGGER.md](./API-ENDPOINTS-SWAGGER.md)** - Documentação da API
 - 🔧 **[README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md)** - Estrutura do YAML
 - 🔗 **[API-ENDPOINTS-SWAGGER.md](./API-ENDPOINTS-SWAGGER.md)** - Inventário atual das rotas públicas
 

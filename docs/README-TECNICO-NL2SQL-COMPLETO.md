@@ -6,6 +6,14 @@ O slice executavel de NL2SQL deste projeto e um boundary administrativo proprio,
 
 O ponto tecnico mais importante e este: NL2SQL nao foi implementado como dyn_sql nem como /agent/execute com prompt livre. Ele e um slice separado, com objetivo especifico de gerar SQL revisavel sob governanca.
 
+Detalhamento técnico por etapa:
+
+1. [Endpoint dedicado](README-TECNICO-NL2SQL-COMPLETO-ENDPOINT-DEDICADO.md)
+2. [Serviço dedicado](README-TECNICO-NL2SQL-COMPLETO-SERVICO-DEDICADO.md)
+3. [Engine schema rag sql](README-TECNICO-NL2SQL-COMPLETO-ENGINE-SCHEMA-RAG-SQL.md)
+4. [Pré-requisito de schema metadata](README-TECNICO-SCHEMA-METADATA-PRE-REQUISITO-NL2SQL.md)
+5. [Guardrail central](README-TECNICO-NL2SQL-COMPLETO-GUARDRAIL-CENTRAL.md)
+
 ## 2. Contrato HTTP de entrada
 
 O contrato tipado esta em src/api/schemas/nl2sql_models.py. Os campos confirmados sao estes.
@@ -243,7 +251,7 @@ Para outro ERP, o padrao correto e manter nomes semanticamente estaveis, por exe
 
 ### 15.2. Passo 2: crie o ETL de schema metadata
 
-O jeito mais direto e copiar o molde de [app/yaml/rag-config-pdv-schema-metadata-etl.yaml](app/yaml/rag-config-pdv-schema-metadata-etl.yaml) e trocar somente os campos de identidade e conexao.
+O jeito mais direto e copiar o molde de [app/yaml/rag-config-pdv-schema-metadata-etl.yaml](../app/yaml/rag-config-pdv-schema-metadata-etl.yaml) e trocar somente os campos de identidade e conexao.
 
 Trecho minimo que realmente importa:
 
@@ -281,7 +289,7 @@ Se voce quer o caminho mais seguro para ERP, mantenha include_sample_rows=false 
 
 ### 15.3. Passo 3: materialize e indexe o schema no vector store
 
-Depois do ETL estrutural, copie o molde de [app/yaml/rag-config-pdv-schema-metadata-ingest.yaml](app/yaml/rag-config-pdv-schema-metadata-ingest.yaml) e aponte para o mesmo database_code.
+Depois do ETL estrutural, copie o molde de [app/yaml/rag-config-pdv-schema-metadata-ingest.yaml](../app/yaml/rag-config-pdv-schema-metadata-ingest.yaml) e aponte para o mesmo database_code.
 
 Trecho minimo:
 
@@ -307,7 +315,7 @@ O detalhe que nao pode quebrar e este: database_code do exportador e vectorstore
 
 ### 15.4. Passo 4: crie o runtime de NL2SQL
 
-Agora copie o molde de [app/yaml/rag-config-pdv-nl2sql.yaml](app/yaml/rag-config-pdv-nl2sql.yaml) e troque o bloco schema_metadata e o vector_store correspondente.
+Agora copie o molde de [app/yaml/rag-config-pdv-nl2sql.yaml](../app/yaml/rag-config-pdv-nl2sql.yaml) e troque o bloco schema_metadata e o vector_store correspondente.
 
 Trecho minimo:
 
@@ -329,7 +337,7 @@ Se este YAML estiver correto, o endpoint dedicado de NL2SQL ja consegue trabalha
 
 ### 15.5. Passo 5: pergunte em linguagem natural pelo endpoint dedicado
 
-O contrato mais simples para smoke test do onboarding e o endpoint [src/api/routers/config_nl2sql_router.py](src/api/routers/config_nl2sql_router.py).
+O contrato mais simples para smoke test do onboarding e o endpoint [src/api/routers/config_nl2sql_router.py](../src/api/routers/config_nl2sql_router.py).
 
 Exemplo de payload:
 
@@ -378,7 +386,7 @@ O ganho aqui e importante: o mesmo acervo de schema metadata serve tanto para o 
 
 ### 15.7. O caminho mais facil de validacao antes de indexar tudo
 
-Para reduzir erro de onboarding, existe uma rota mais simples para o primeiro passo estrutural: [src/api/routers/schema_metadata_router.py](src/api/routers/schema_metadata_router.py).
+Para reduzir erro de onboarding, existe uma rota mais simples para o primeiro passo estrutural: [src/api/routers/schema_metadata_router.py](../src/api/routers/schema_metadata_router.py).
 
 Ela expoe pelo menos estas operacoes uteis.
 

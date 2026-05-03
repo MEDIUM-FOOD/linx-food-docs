@@ -15,7 +15,7 @@ Voce vai ver:
 7. como responder publicamente a comentario;
 8. quais limites existem no modo `agent` e no modo `ask`.
 
-Este documento complementa [docs/README-INSTAGRAM-PROVISIONING.md](docs/README-INSTAGRAM-PROVISIONING.md), que continua sendo o dono do onboarding basico da conta. Aqui o foco e o canal conversacional com agente.
+Este documento complementa [README-CONCEITUAL-INSTAGRAM-AGENTE-COMENTARIOS-DM.md](./README-CONCEITUAL-INSTAGRAM-AGENTE-COMENTARIOS-DM.md), que apresenta a visao funcional e de negocio da feature. Aqui o foco e o canal conversacional com agente.
 
 ## 2. Entry points reais
 
@@ -79,7 +79,7 @@ O ponto central desse diagrama e este: comentario, mencao e DM entram pelo mesmo
 
 ### 4.1. Caminho administrativo por UI
 
-Existe uma UI administrativa confirmada em [app/ui/static/ui-admin-gov-provisionamento-instagram.html](app/ui/static/ui-admin-gov-provisionamento-instagram.html). Ela coleta os campos obrigatorios e faz `POST /api/instagram/provision/start` com `X-API-Key`.
+Existe uma UI administrativa confirmada em [app/ui/static/ui-admin-gov-provisionamento-instagram.html](../app/ui/static/ui-admin-gov-provisionamento-instagram.html). Ela coleta os campos obrigatorios e faz `POST /api/instagram/provision/start` com `X-API-Key`.
 
 No fluxo visivel da tela, os campos exigidos sao:
 

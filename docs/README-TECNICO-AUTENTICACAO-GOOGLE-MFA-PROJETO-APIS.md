@@ -35,7 +35,7 @@ Os caminhos autenticados confirmados no mesmo router são estes.
 8. GET /api/auth/admin/memberships/{tenant_user_id}/governance
 9. PUT /api/auth/admin/memberships/{tenant_user_id}/governance
 
-O enforcement de navegação HTML protegida não acontece nesse router. Ele acontece no middleware [src/api/middleware/federated_session.py](src/api/middleware/federated_session.py), que intercepta requisições HTTP, tenta carregar a sessão do cookie e só redireciona páginas HTML relevantes para /ui/auth-gateway.html.
+O enforcement de navegação HTML protegida não acontece nesse router. Ele acontece no middleware [src/api/middleware/federated_session.py](../src/api/middleware/federated_session.py), que intercepta requisições HTTP, tenta carregar a sessão do cookie e só redireciona páginas HTML relevantes para /ui/auth-gateway.html.
 
 ## 3. Arquitetura resumida
 
@@ -78,7 +78,7 @@ O ponto importante do diagrama é que a sessão já existe no backend antes da c
 
 ### 4.1. Configuração da autenticação web
 
-Em [src/config/settings.py](src/config/settings.py), a classe WebFederatedAuthSettings controla o runtime web.
+Em [src/config/settings.py](../src/config/settings.py), a classe WebFederatedAuthSettings controla o runtime web.
 
 Os campos com impacto operacional direto confirmados no código lido são estes.
 
@@ -105,11 +105,11 @@ O método is_ready exige pelo menos enabled e client_id para considerar o proved
 
 ### 4.3. Política global de MFA
 
-Em [src/api/security/federated_mfa_policy.py](src/api/security/federated_mfa_policy.py), a função is_federated_mfa_required lê a variável FEDERATED_MFA_REQUIRED via system_config e normaliza valores típicos como true, false, 1, 0, yes, no, on e off.
+Em [src/api/security/federated_mfa_policy.py](../src/api/security/federated_mfa_policy.py), a função is_federated_mfa_required lê a variável FEDERATED_MFA_REQUIRED via system_config e normaliza valores típicos como true, false, 1, 0, yes, no, on e off.
 
 ### 4.4. Rate limit do TOTP
 
-Em [src/config/settings.py](src/config/settings.py), o serviço TOTP consome três parâmetros globais.
+Em [src/config/settings.py](../src/config/settings.py), o serviço TOTP consome três parâmetros globais.
 
 1. totp_attempt_window_seconds
 2. totp_attempt_max_attempts
@@ -215,13 +215,13 @@ Login local confirmado em LocalLoginRequest.
 
 ### 6.1. Frontend obtém a credencial
 
-Em [app/ui/static/js/auth-gateway.js](app/ui/static/js/auth-gateway.js), o gateway carrega a biblioteca oficial do Google Identity Services, inicializa o provedor com o client_id exposto à página e usa ux_mode popup. Se o prompt automático falhar, a UI renderiza um botão fallback do próprio GIS. O bootstrap do client_id também é redundante por design: ele aceita tanto window.PROMETEU_GOOGLE_CLIENT_ID quanto a meta tag da página via [app/ui/static/js/auth-gateway-bootstrap.js](app/ui/static/js/auth-gateway-bootstrap.js).
+Em [app/ui/static/js/auth-gateway.js](../app/ui/static/js/auth-gateway.js), o gateway carrega a biblioteca oficial do Google Identity Services, inicializa o provedor com o client_id exposto à página e usa ux_mode popup. Se o prompt automático falhar, a UI renderiza um botão fallback do próprio GIS. O bootstrap do client_id também é redundante por design: ele aceita tanto window.PROMETEU_GOOGLE_CLIENT_ID quanto a meta tag da página via [app/ui/static/js/auth-gateway-bootstrap.js](../app/ui/static/js/auth-gateway-bootstrap.js).
 
 Quando o Google devolve a credencial, o frontend envia provider_id igual a google e o id_token recebido para o backend. O redirecionamento final também é saneado na UI para permanecer no mesmo origin, evitando que o parâmetro next vire desvio aberto de navegação.
 
 ### 6.2. Backend valida o token
 
-Em [src/api/security/federated_auth.py](src/api/security/federated_auth.py), o provider Google usa as bibliotecas oficiais google.auth.transport.requests e google.oauth2.id_token.
+Em [src/api/security/federated_auth.py](../src/api/security/federated_auth.py), o provider Google usa as bibliotecas oficiais google.auth.transport.requests e google.oauth2.id_token.
 
 As validações confirmadas no código são estas.
 
@@ -241,7 +241,7 @@ Se qualquer uma dessas etapas falhar, o manager levanta FederatedAuthError e o e
 
 ### 6.3. Backend emite a sessão interna
 
-Em [src/api/routers/auth_router.py](src/api/routers/auth_router.py), create_federated_session monta correlation_id, instancia FederatedAuthManager, autentica o token, reforça a identidade interna, resolve YAML e contexto organizacional e delega a emissão da resposta autenticada para a rotina interna que consolida a sessão.
+Em [src/api/routers/auth_router.py](../src/api/routers/auth_router.py), create_federated_session monta correlation_id, instancia FederatedAuthManager, autentica o token, reforça a identidade interna, resolve YAML e contexto organizacional e delega a emissão da resposta autenticada para a rotina interna que consolida a sessão.
 
 Essa função emite o registro via FederatedSessionRepository.issue, persistindo dados como email, subject, provider_id, tenant_id, tenant_user_id, membership_role, effective_permissions e timestamps relevantes.
 
@@ -258,7 +258,7 @@ O código lido mostra uso de Argon2 para hash e verificação da senha. Depois d
 
 ### 8.1. Repositório da sessão
 
-Em [src/api/security/federated_session_store.py](src/api/security/federated_session_store.py), FederatedSessionRepository persiste a sessão no cache criado por SessionCacheFactory. O cookie não guarda tudo; ele referencia um session_id, e o registro completo fica serializado no cache central.
+Em [src/api/security/federated_session_store.py](../src/api/security/federated_session_store.py), FederatedSessionRepository persiste a sessão no cache criado por SessionCacheFactory. O cookie não guarda tudo; ele referencia um session_id, e o registro completo fica serializado no cache central.
 
 Campos importantes do snapshot persistido.
 
@@ -331,7 +331,7 @@ Se o teto é excedido, o endpoint responde 429 com Retry-After.
 
 ## 10. Persistência e auditoria do TOTP
 
-Em [src/api/security/federated_login_audit.py](src/api/security/federated_login_audit.py), a tabela de auditoria persistida em PostgreSQL guarda não apenas dados do login federado, mas também o estado TOTP.
+Em [src/api/security/federated_login_audit.py](../src/api/security/federated_login_audit.py), a tabela de auditoria persistida em PostgreSQL guarda não apenas dados do login federado, mas também o estado TOTP.
 
 Colunas confirmadas no schema inicial.
 
@@ -355,7 +355,7 @@ As operações SQL usam retry com tenacity, até cinco tentativas por padrão, c
 
 ## 11. Integração da UI com o backend
 
-O gateway da UI lido em [app/ui/static/js/auth-gateway.js](app/ui/static/js/auth-gateway.js) confirma estes comportamentos.
+O gateway da UI lido em [app/ui/static/js/auth-gateway.js](../app/ui/static/js/auth-gateway.js) confirma estes comportamentos.
 
 1. Carrega o SDK do Google sob demanda.
 2. Exige client_id configurado no frontend.

@@ -1,6 +1,6 @@
 # Manual conceitual, executivo, comercial e estrategico: telemetria de interacoes do agente
 
-> Navegacao rapida: volte ao [README principal](../README.md) para o catalogo mestre, use [README-INDICE.MD](./README-INDICE.MD) para navegar por intencao, leia [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md) para o contexto do runtime agentic, complemente com [README-LOGGING.md](./README-LOGGING.md) para correlation_id e observabilidade, e siga para [README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md](./README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md) quando a necessidade for operacao e troubleshooting.
+> Navegacao rapida: volte ao [README principal](../README.md) para o catalogo mestre, use [README-INDICE.MD](./README-INDICE.MD) para navegar por intencao, leia [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md) para o contexto do runtime agentic, complemente com [README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md) para correlation_id e observabilidade, e siga para [README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md](./README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md) quando a necessidade for operacao e troubleshooting.
 
 ## 1. O que e esta feature
 

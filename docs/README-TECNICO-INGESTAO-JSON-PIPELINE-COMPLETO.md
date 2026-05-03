@@ -623,57 +623,57 @@ O diagrama mostra a separação central do slice: o builder cuida de integridade
 
 ## 24. Evidências no código
 
-- [src/utils/json_config_resolver.py](src/utils/json_config_resolver.py)
+- [src/utils/json_config_resolver.py](../src/utils/json_config_resolver.py)
   - Motivo da leitura: contrato YAML e defaults do slice JSON.
   - Símbolo relevante: validate_json_yaml_contract e resolve_json_ingestion_config.
   - Comportamento confirmado: rejeita caminhos legados e resolve defaults de encoding, schema, qualidade, metadata e normalização.
 
-- [src/ingestion_layer/processors/json_metadata_builder.py](src/ingestion_layer/processors/json_metadata_builder.py)
+- [src/ingestion_layer/processors/json_metadata_builder.py](../src/ingestion_layer/processors/json_metadata_builder.py)
   - Motivo da leitura: materialização do documento e enriquecimento estrutural.
   - Símbolo relevante: build_from_storage e build_document.
   - Comportamento confirmado: valida tamanho, exige raw_bytes, tenta decode/parse, calcula schema, stats, quality flags, amostras e sombra normalizada.
 
-- [src/ingestion_layer/processors/json_processor.py](src/ingestion_layer/processors/json_processor.py)
+- [src/ingestion_layer/processors/json_processor.py](../src/ingestion_layer/processors/json_processor.py)
   - Motivo da leitura: seleção de perfil e chunking JSON-aware.
   - Símbolo relevante: resolução de perfil e rotinas de chunking estrutural por objeto e array.
   - Comportamento confirmado: perfis `standard` e `schema_metadata`, chunking estrutural, fallback controlado e metadata de chunk.
 
-- [src/ingestion_layer/clients/json_client.py](src/ingestion_layer/clients/json_client.py)
+- [src/ingestion_layer/clients/json_client.py](../src/ingestion_layer/clients/json_client.py)
   - Motivo da leitura: boundary fino do client local de JSON.
   - Símbolo relevante: JsonFileClient.
   - Comportamento confirmado: aceita somente local file, delega ao builder e ao processor.
 
-- [src/ingestion_layer/processors/domain_plugins/domain_processing_resolver.py](src/ingestion_layer/processors/domain_plugins/domain_processing_resolver.py)
+- [src/ingestion_layer/processors/domain_plugins/domain_processing_resolver.py](../src/ingestion_layer/processors/domain_plugins/domain_processing_resolver.py)
   - Motivo da leitura: coordenação dos plugins de domínio.
   - Símbolo relevante: apply_processing.
   - Comportamento confirmado: aplica cadeia de processadores habilitados apenas quando o recurso está ativo.
 
-- [src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py](src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py)
+- [src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py](../src/ingestion_layer/processors/domain_plugins/product_catalog_domain_processor.py)
   - Motivo da leitura: enriquecimento de catálogo.
   - Símbolo relevante: ProductCatalogDomainProcessor.
   - Comportamento confirmado: detecta catálogo e injeta metadados estruturados por produto.
 
-- [src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py](src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py)
+- [src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py](../src/ingestion_layer/processors/domain_plugins/sales_coupon_domain_processor.py)
   - Motivo da leitura: enriquecimento de cupons.
   - Símbolo relevante: SalesCouponDomainProcessor.
   - Comportamento confirmado: detecta cupons e injeta metadados comerciais estruturados.
 
-- [src/ingestion_layer/file_pipeline_services.py](src/ingestion_layer/file_pipeline_services.py)
+- [src/ingestion_layer/file_pipeline_services.py](../src/ingestion_layer/file_pipeline_services.py)
   - Motivo da leitura: boundary comum da pipeline.
   - Símbolo relevante: run_processor_for_document, build_chunks e finalize.
   - Comportamento confirmado: o JSON roda dentro da mesma esteira oficial de processamento, indexação e persistência.
 
-- [src/ingestion_layer/core/data_models.py](src/ingestion_layer/core/data_models.py)
+- [src/ingestion_layer/core/data_models.py](../src/ingestion_layer/core/data_models.py)
   - Motivo da leitura: contrato de extensão suportada.
   - Símbolo relevante: SUPPORTED_JSON_FILE_EXTENSIONS.
   - Comportamento confirmado: somente `.json` é extensão canônica deste slice.
 
-- [tests/unit/ingestion_layer/processors/test_json_processor_schema_profile.py](tests/unit/ingestion_layer/processors/test_json_processor_schema_profile.py)
+- [tests/unit/ingestion_layer/processors/test_json_processor_schema_profile.py](../tests/unit/ingestion_layer/processors/test_json_processor_schema_profile.py)
   - Motivo da leitura: evidência de contrato protegido para perfil restrito.
   - Símbolo relevante: testes do perfil schema_metadata.
   - Comportamento confirmado: chunk único, sem metadados estruturais pesados e sem fallback permissivo.
 
-- [tests/unit/test_utils_json_config_resolver.py](tests/unit/test_utils_json_config_resolver.py)
+- [tests/unit/test_utils_json_config_resolver.py](../tests/unit/test_utils_json_config_resolver.py)
   - Motivo da leitura: evidência do contrato YAML canônico.
   - Símbolo relevante: testes do resolvedor JSON.
   - Comportamento confirmado: caminhos legados são rejeitados explicitamente.

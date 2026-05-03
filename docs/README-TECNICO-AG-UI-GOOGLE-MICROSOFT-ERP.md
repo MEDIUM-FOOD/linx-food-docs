@@ -21,6 +21,16 @@ O recorte executavel confirmado do lado web inclui estas superficies de reuso.
 6. app/ui/static/js/shared/ag-ui-dashboard-validator.js.
 7. app/ui/static/js/shared/ag-ui-retail-demo-page.js.
 
+Detalhamento técnico por etapa:
+
+1. [Fronteira de protocolo](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-FRONTEIRA-DE-PROTOCOLO.md)
+2. [Borda HTTP dedicada](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-BORDA-HTTP-DEDICADA.md)
+3. [Orquestração do lifecycle](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-ORQUESTRACAO-DO-LIFECYCLE.md)
+4. [Registry e adapters](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-REGISTRY-E-ADAPTERS.md)
+5. [Domínio varejo demo](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-DOMINIO-VAREJO-DEMO.md)
+6. [Runtime compartilhado do frontend](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-RUNTIME-COMPARTILHADO-DO-FRONTEND.md)
+7. [Replay e auditoria](README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP-REPLAY-E-AUDITORIA.md)
+
 ## 2. Endpoints publicos
 
 ### 2.1. GET /ag-ui/capabilities
@@ -34,7 +44,7 @@ Caracteristicas confirmadas.
 3. Falha com 404 para executionKind desconhecido.
 4. Nao expõe SQL cru, DSN ou segredo.
 
-No estado atual, o discovery inclui executionKind agent, deepagent, workflow e retail_demo. No caso de retail_demo, o catalogo devolve capabilities fechadas com descricao, parametros e ui_specs quando aplicavel.
+No estado atual, o discovery inclui executionKind agent, deepagent, workflow, retail_demo e erp_backoffice_demo. O payload agora e versionado e explicita `contractVersion`, `eventContractVersion`, `supportsInterrupt`, `supportsHil`, `supportsResume`, `resumeSchema`, `domain`, `requiredPermissions`, `examples`, `uiSpecs` estruturado e `uiSpecNames` como ponte de compatibilidade. Os dominios governados agora saem de um registry comum de capability packs, o que evita hardcode duplicado no discovery e no runtime.
 
 ### 2.2. POST /ag-ui/runs
 
@@ -280,13 +290,19 @@ O adapter deepagent usa DeepAgentSupervisor e publica stream AG-UI equivalente a
 
 ### 7.3. workflow
 
-O adapter workflow usa WorkflowOrchestrator e publica stream AG-UI minimo no caminho feliz. Falhas normalizadas viram RUN_ERROR. Resume AG-UI ainda nao e suportado neste adapter. O erro explicito confirma essa lacuna em vez de mascarar o problema.
+O adapter workflow usa WorkflowOrchestrator e publica stream AG-UI minimo no caminho feliz. Falhas normalizadas viram RUN_ERROR. O resume AG-UI ja e suportado neste adapter por um executor de continuidade dedicado, que valida `interruptId`, traduz `decisions` para o contrato oficial de workflow e chama o service canônico de continuação antes de reemitir eventos AG-UI normalizados.
 
 ### 7.4. retail_demo
 
-Esse adapter e o mais rico em termos de dominio visual pronto. Ele suporta query governada e dashboard dinamico.
+Esse adapter continua sendo o mais rico em termos de dominio visual pronto. Agora ele e entregue como capability pack governado, consumido pelo registry AG-UI comum, e continua suportando query governada e dashboard dinamico.
 
-## 8. retail_demo: capabilities e seguranca
+### 7.5. erp_backoffice_demo
+
+Esse dominio foi adicionado como segundo capability pack governado. Ele publica a capability `fechar_caixa`, baseada no contrato de procedimento `prc_fechar_caixa` ja documentado no repositório, mas executada como fixture segura de preview para nao depender de DSN nem inventar schema de banco fora do contrato lido.
+
+## 8. Capability packs governados
+
+### 8.1. retail_demo
 
 O catalogo de capabilities fechadas do retail_demo inclui estas entradas.
 
@@ -306,6 +322,29 @@ As protecoes tecnicas confirmadas nesse adapter sao essenciais.
 
 Isso significa que o browser nunca escolhe conexao, nunca injeta DSN e nunca manda SQL livre para execucao.
 
+### 8.2. erp_backoffice_demo
+
+O catalogo inicial do pack ERP/backoffice inclui uma capability governada.
+
+1. fechar_caixa.
+
+As protecoes tecnicas confirmadas nesse pack sao estas.
+
+1. Chaves como sql, raw_sql, sql_query e statement sao bloqueadas recursivamente.
+2. O discovery publica apenas o contrato do procedimento, sem expor `CALL`, segredo ou DSN.
+3. O resultado atual e uma fixture governada de preview baseada no contrato `prc_fechar_caixa` lido no repositório.
+4. Os parametros `p1` e `p2` continuam obrigatorios e escalares.
+
+### 8.3. Como uma software house cria um pack seguro
+
+O caminho seguro agora e este.
+
+1. Definir um `execution_kind` exclusivo para o dominio.
+2. Publicar capabilities com `inputSchema`, `examples`, `requiredPermissions` e `uiSpecs` sem vazar SQL, DSN ou segredos.
+3. Bloquear SQL livre logo na entrada do payload AG-UI, antes de qualquer executor.
+4. Executar apenas query, procedure ou fixture previamente aprovada no codigo ou em contrato real do repositório.
+5. Registrar o pack no registry comum. Discovery e runtime passam a enxergar o novo dominio pelo mesmo ponto de registro.
+
 ## 9. Dashboard dinamico
 
 ### 9.1. Rota especial do retail_demo
@@ -314,7 +353,7 @@ Quando capability = dashboard_dynamic, o adapter nao segue o fluxo padrao de dyn
 
 ### 9.2. Eventos customizados emitidos
 
-Os eventos customizados confirmados no codigo sao estes.
+Os eventos customizados agora seguem o `eventPrefix` do `uiNamespace`. Quando o dashboard usa o namespace default de compatibilidade, os eventos continuam exatamente estes.
 
 1. retail.dashboard.spec.started.
 2. retail.dashboard.spec.validated.
@@ -325,7 +364,7 @@ Os eventos customizados confirmados no codigo sao estes.
 
 ### 9.3. Estado inicial e estado final
 
-O service sempre comeca com um STATE_SNAPSHOT de retailDashboard contendo status materializing. Em caso de sucesso, o estado termina com status ready. Em caso de falha de validacao, termina com validation_failed e errors estruturados.
+O service sempre comeca com um `STATE_SNAPSHOT` na chave definida por `uiNamespace.stateKey`. No default compatível, essa chave continua sendo `retailDashboard`. Em caso de sucesso, o estado termina com `status=ready`. Em caso de falha de validacao, termina com `validation_failed` e `errors` estruturados.
 
 ### 9.4. Contrato da DashboardSpec
 
@@ -338,6 +377,7 @@ Os blocos estruturais confirmados sao estes.
 5. narrative.
 6. refreshPolicy.
 7. safety com cinco flags obrigatoriamente false.
+8. uiNamespace com `specType`, `stateKey`, `eventPrefix` e `version`.
 
 ### 9.5. Tipos de widget confirmados
 
@@ -410,8 +450,6 @@ Isso mostra que o frontend das demos ja foi desenhado como padrao de integracao,
 
 ## 12. Replay e event store
 
-O event store atual e InMemoryAgUiEventStore. Isso significa duas coisas ao mesmo tempo.
-
 O event store AG-UI agora funciona por provider canônico.
 
 1. Em development e teste, sem configuracao explicita, o replay usa InMemoryAgUiEventStore.
@@ -478,11 +516,77 @@ O helper central fica em src/api/services/ag_ui_runtime_adapter_support.py. Ele 
 
 No fluxo de resume, agent e deepagent reaproveitam AgentHilContinuationService pelo helper execute_agentic_resume(). O sidecar monta payload de resume usando HilContract.buildResumePayload() e envia tudo ao mesmo POST /ag-ui/runs.
 
-Workflow fica explicitamente de fora dessa continuidade. O adapter falha fechado com erro de resume unsupported.
+Workflow segue a mesma ideia de continuidade, mas com executor proprio. O adapter valida o `interruptId` no event store, traduz a decisao AG-UI para `human_response` no formato esperado pelo runtime de workflow e chama `WorkflowExecutionService.continue_sync(...)` antes de publicar o stream de continuidade.
 
 ## 14. Contratos de discovery e uso por terceiros
 
-Do ponto de vista de integracao, o discovery e a principal porta de entrada para explicar o que a UI pode pedir. Em retail_demo, o discovery devolve cinco capabilities e seus parametros, mas nao vaza SQL ou DSN. Em agent, deepagent e workflow, o discovery devolve uma capability generica de execute associada ao runtime.
+Do ponto de vista de integracao, o discovery e a principal porta de entrada para explicar o que a UI pode pedir. Em retail_demo, o discovery devolve cinco capabilities e seus parametros sem vazar SQL ou DSN. Em erp_backoffice_demo, ele devolve o contrato governado de `fechar_caixa` sem expor `CALL` nem segredo. Em agent, deepagent e workflow, o discovery continua expondo a capability `execute`, so que agora com metadata suficiente para terceiros entenderem o contrato sem adivinhar comportamento interno.
+
+Os campos novos mais importantes para integracao sao estes.
+
+1. `contractVersion`: versao do contrato publico da capability.
+2. `eventContractVersion`: versao do contrato de eventos esperados no stream.
+3. `supportsInterrupt` e `supportsResume`: diferenciam pausa HIL de retomada suportada.
+4. `resumeSchema`: mostra o shape esperado do payload de resume quando ele existe.
+5. `domain`: identifica o dominio funcional da capability.
+6. `requiredPermissions`: deixa explicita a permissao exigida no boundary.
+7. `examples`: traz exemplos minimos de input para acelerar integracao.
+8. `uiSpecs` e `uiSpecNames`: informam o contrato visual estruturado e a ponte de compatibilidade para clientes legados.
+
+### 14.1. Pacote @prometeu/ag-ui-runtime
+
+O pacote interno `packages/ag-ui-runtime` agora funciona como a fachada publica do runtime para consumidores HTML e JavaScript puro.
+
+1. A entrada publica fica em `packages/ag-ui-runtime/index.js`.
+2. A API minima documentada cobre cliente SSE, store, sidecar, renderer de dashboard, validador e contrato HIL.
+3. O exemplo oficial minimo fica em `examples/ag-ui-runtime-minimal.html`.
+4. O pacote ainda permanece `private: true`, o que significa que a API esta organizada e protegida, mas ainda nao foi aberta como pacote externo publicado.
+
+### 14.2. Suite de conformidade AG-UI
+
+O repositório agora possui um fixture canônico do protocolo em `tests/fixtures/ag_ui_conformance_events.json`.
+
+Na prática, isso significa o seguinte:
+
+1. Backend e frontend validam o mesmo conjunto de eventos públicos, replay sanitizado, interrupção HIL e payload de resume.
+2. O fixture serve como contrato executável para integradores, sem depender de infraestrutura externa.
+3. O exemplo de falha esperada para `resume` inválido também fica centralizado nesse mesmo arquivo.
+
+Comandos mínimos para rodar a conformidade:
+
+```bash
+source .venv/bin/activate && ./scripts/suite_de_testes_padrao.sh --focus-paths tests/unit/test_ag_ui_protocol_contract.py,tests/unit/test_ag_ui_router.py --unit-granular
+npm test -- tests/js/ag_ui_runtime.test.js tests/js/ag_ui_sidecar_chat.test.js
+```
+
+Esses comandos validam quatro pontos que importam para terceiros:
+
+1. Os eventos públicos continuam em camelCase oficial.
+2. O replay segue sanitizado sem expor segredo persistido.
+3. O runtime JS continua aplicando o mesmo fixture no store e no renderer.
+4. O sidecar continua montando `resume` a partir da interrupção oficial.
+
+### 14.3. Demos backoffice nao-PDV
+
+O slice AG-UI agora possui um hub dedicado para cenarios administrativos fora do PDV.
+
+1. `app/ui/static/ui-admin-plataforma-ag-ui-backoffice-demo.html`.
+2. `app/ui/static/ui-admin-plataforma-ag-ui-erp-fechamento-financeiro.html`.
+3. `app/ui/static/ui-admin-plataforma-ag-ui-erp-turno-caixa.html`.
+
+Essas telas reutilizam o mesmo core do varejo.
+
+1. Mesmo endpoint `/ag-ui/runs`.
+2. Mesmo sidecar compartilhado.
+3. Mesmo controller governado de página.
+4. Mesma capability segura `erp_backoffice_demo/fechar_caixa`.
+
+O ponto importante aqui e de arquitetura, nao de marketing: o runtime nao foi duplicado para parecer que existem novos dominios. O que mudou foi a configuracao da superficie HTML e do payload governado, preservando o mesmo trilho AG-UI.
+
+Limite atual explicito.
+
+1. O slice de backoffice ainda reutiliza uma unica capability governada, `fechar_caixa`, em duas superfícies diferentes.
+2. Isso prova reaproveitamento do core e navegabilidade nao-PDV, mas ainda nao substitui a expansao futura do catalogo backoffice para financeiro, estoque, compras e atendimento.
 
 Isso significa que um terceiro pode seguir esta estrategia.
 
@@ -512,17 +616,17 @@ Isso significa que um terceiro pode seguir esta estrategia.
 ### 15.2. dashboard dinamico
 
 1. RUN_STARTED.
-2. CUSTOM retail.dashboard.spec.started.
+2. CUSTOM `<eventPrefix>.spec.started`.
 3. STATE_SNAPSHOT inicial.
 4. CUSTOM de validacao.
 5. STATE_DELTA da spec.
 6. CUSTOM e STATE_DELTA de data source.
 7. CUSTOM e STATE_DELTA de widgets.
-8. CUSTOM retail.dashboard.render.ready.
+8. CUSTOM `<eventPrefix>.render.ready`.
 9. STATE_DELTA final com status ready.
 10. RUN_FINISHED.
 
-### 15.3. agent ou deepagent com HIL
+### 15.3. agent, deepagent ou workflow com HIL
 
 1. RUN_STARTED.
 2. Eventos de step, state e texto.
@@ -588,7 +692,7 @@ Sintoma: a UI recebe validation_failed e nao recebe render.ready.
 
 Causa provavel: DashboardSpec insegura ou semanticamente invalida.
 
-Confirmacao: custom event retail.dashboard.validation.failed com errors estruturados.
+Confirmacao: custom event `<eventPrefix>.validation.failed` com errors estruturados. No namespace default de compatibilidade, ele continua aparecendo como `retail.dashboard.validation.failed`.
 
 ## 17. Observabilidade
 
@@ -624,8 +728,8 @@ O erro mais comum a evitar e tratar o AG-UI como se fosse apenas streaming de te
 
 Esta secao resume o que ainda nao deve ser exagerado em documentacao ou venda.
 
-1. Event store ainda e em memoria, nao duravel.
-2. Workflow resume continua explicitamente indisponivel.
+1. Event store nao e mais apenas memoria: em development/test ele pode usar `InMemoryAgUiEventStore`, mas fora disso depende de provider canônico configurado e hoje o provider duravel suportado e postgres.
+2. O discovery ja foi generalizado para capability packs governados e hoje cobre pelo menos `retail_demo` e `erp_backoffice_demo`, mas o dominio visual mais maduro continua sendo o demo de varejo porque so ele traz dashboard dinamico pronto.
 3. O dominio mais bem servido visualmente e o varejo demo.
 4. O pacote de runtime e interno e privado.
 5. O controller compartilhado das demos depende do contexto mestre da plataforma para API key, YAML e user_email.
@@ -683,9 +787,19 @@ Ele e um jeito padronizado de a tela conversar com o runtime de IA sem ficar ceg
   - Comportamento confirmado: reutilizacao do fluxo agentic canônico para agent e deepagent.
 
 - src/api/services/ag_ui_retail_demo_adapter.py
-  - Motivo da leitura: confirmar capabilities e guardrails do dominio visual pronto.
-  - Simbolo relevante: RetailDemoQueryCatalog, RetailDemoAgUiAdapter.
-  - Comportamento confirmado: capabilities fechadas, SQL read-only e dashboard_dynamic.
+  - Motivo da leitura: confirmar capabilities e guardrails do pack PDV.
+  - Simbolo relevante: RetailDemoCapabilityPack, RetailDemoQueryCatalog, RetailDemoAgUiAdapter.
+  - Comportamento confirmado: pack governado, SQL read-only e dashboard_dynamic.
+
+- src/api/services/ag_ui_capability_pack.py
+  - Motivo da leitura: confirmar o contrato comum dos dominios governados.
+  - Simbolo relevante: AgUiCapabilityPack, AgUiCapabilityPackRegistry.
+  - Comportamento confirmado: discovery e runtime consomem o mesmo registry de packs sem fallback implícito.
+
+- src/api/services/ag_ui_erp_backoffice_demo_pack.py
+  - Motivo da leitura: confirmar o segundo dominio governado alem do varejo.
+  - Simbolo relevante: ErpBackofficeDemoCapabilityPack.
+  - Comportamento confirmado: capability `fechar_caixa` publicada sem SQL/DSN e executada como fixture segura baseada em contrato real do repositório.
 
 - src/api/schemas/ag_ui_dashboard_models.py
   - Motivo da leitura: confirmar o contrato seguro do canvas dinamico.
@@ -706,3 +820,18 @@ Ele e um jeito padronizado de a tela conversar com o runtime de IA sem ficar ceg
   - Motivo da leitura: entender reuso visual e HIL.
   - Simbolo relevante: createAgUiSidecarChat.
   - Comportamento confirmado: sidecar reutilizavel, painel HIL compartilhado e resume no mesmo endpoint.
+
+- packages/ag-ui-runtime/index.js
+  - Motivo da leitura: confirmar a fachada publica do SDK interno.
+  - Simbolo relevante: createAgUiSseClient, createAgUiStateStore, createAgUiSidecarChat, getHilContract.
+  - Comportamento confirmado: API publica minima documentada sem exigir import direto de caminhos internos do app.
+
+- tests/fixtures/ag_ui_conformance_events.json
+  - Motivo da leitura: centralizar o contrato executavel de conformance AG-UI.
+  - Simbolo relevante: successfulRunEvents, interruptRunEvents, sanitizedReplayResponse, resumePayload.
+  - Comportamento confirmado: backend e frontend validam o mesmo fixture canônico sem infraestrutura externa.
+
+- app/ui/static/ui-admin-plataforma-ag-ui-backoffice-demo.html
+  - Motivo da leitura: confirmar hub nao-PDV navegavel reutilizando o mesmo endpoint AG-UI.
+  - Simbolo relevante: links para fechamento financeiro e conferencia de turno.
+  - Comportamento confirmado: duas superficies administrativas nao-PDV convivem com o hub de varejo sem duplicar runtime.
