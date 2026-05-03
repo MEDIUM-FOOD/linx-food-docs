@@ -121,7 +121,9 @@ O ponto importante é que o pipeline não é monolítico. O código separa clara
 - limpeza e normalização textual;
 - decisão de OCR complementar;
 - decisão multimodal;
+- overrides de domínio aplicados sobre a configuração PDF quando um domínio ativo assim determina;
 - chunking por Strategy Pattern;
+- enriquecimento de chunks por cadeia de processadores de domínio;
 - checkpoint e manifesto operacional;
 - reentrada na esteira comum de indexação e persistência.
 
@@ -135,7 +137,17 @@ Essa separação tem valor prático. Ela permite responder perguntas diferentes 
 
 ## 8. Divisão em etapas ou submódulos
 
-### 8.1. Bootstrap do runtime PDF
+Detalhamento aprofundado por etapa:
+
+1. [Bootstrap do runtime PDF](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-BOOTSTRAP-DO-RUNTIME-PDF.md)
+2. [Extracao documental principal](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-EXTRACAO-DOCUMENTAL-PRINCIPAL.md)
+3. [Pos-processamento textual](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-POS-PROCESSAMENTO-TEXTUAL.md)
+4. [OCR complementar](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-OCR-COMPLEMENTAR.md)
+5. [Trilha multimodal](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-TRILHA-MULTIMODAL.md)
+6. [Chunking orientado por estrategia](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-CHUNKING-ORIENTADO-POR-ESTRATEGIA.md)
+7. [Persistencia operacional e indexacao](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-PERSISTENCIA-OPERACIONAL-E-INDEXACAO.md)
+
+### 8.1. [Bootstrap do runtime PDF](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-BOOTSTRAP-DO-RUNTIME-PDF.md)
 
 Esta etapa existe para consolidar tudo o que o processor precisa saber antes de tocar no documento. Ela resolve o contrato YAML, inicializa parâmetros de OCR, tabelas, filtros de qualidade, metadata, multimodalidade e só então instancia os serviços de suporte.
 
@@ -147,7 +159,7 @@ O que entrega: coordinator, builder, pipelines, flags de multimodalidade e bundl
 
 Por que isso importa: evita que cada documento tenha de descobrir sua configuração em vários lugares diferentes.
 
-### 8.2. Extração documental principal
+### 8.2. [Extracao documental principal](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-EXTRACAO-DOCUMENTAL-PRINCIPAL.md)
 
 Esta etapa existe para transformar bytes de PDF em um resultado estruturado de parsing. Ela valida bytes, pode aplicar OCR documental antes do parsing, executa a engine resolvida e prepara o payload final com texto, tabelas, imagens, anexos e metadata derivada.
 
@@ -159,7 +171,7 @@ O que entrega: texto extraído, resumo de OCR documental, metadata e artefato de
 
 Por que isso importa: é a etapa que define se o sistema está trabalhando sobre um PDF real e legível ou sobre uma ilusão de conteúdo.
 
-### 8.3. Pós-processamento textual
+### 8.3. [Pos-processamento textual](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-POS-PROCESSAMENTO-TEXTUAL.md)
 
 Esta etapa existe para limpar sem destruir. Ela preserva a estrutura do PDF, remove artefatos básicos e corrige alguns ruídos simples de OCR.
 
@@ -171,7 +183,7 @@ O que entrega: texto processado e checkpoint do pipeline textual.
 
 Por que isso importa: texto bruto de PDF costuma ser tecnicamente extraído, mas semanticamente ruim para chunking e recuperação.
 
-### 8.4. OCR complementar
+### 8.4. [OCR complementar](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-OCR-COMPLEMENTAR.md)
 
 Esta etapa existe para evitar dois extremos ruins.
 
@@ -186,7 +198,7 @@ O que entrega: texto complementado ou a confirmação de que o parsing inicial e
 
 Por que isso importa: reduz custo e reduz risco de degradar PDFs já bons.
 
-### 8.5. Trilha multimodal
+### 8.5. [Trilha multimodal](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-TRILHA-MULTIMODAL.md)
 
 Esta etapa existe para quando o PDF é visual o suficiente para merecer leitura por imagem. Ela tenta extrair imagens relevantes, processá-las e transformar esse material em enriquecimento do texto e dos chunks.
 
@@ -198,19 +210,19 @@ O que entrega: texto enriquecido, relatórios por etapa, artefatos de execução
 
 Por que isso importa: alguns PDFs falham não porque não têm texto, mas porque a evidência relevante está em imagem, figura, diagrama ou bloco visual.
 
-### 8.6. Chunking orientado por estratégia
+### 8.6. [Chunking orientado por estrategia](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-CHUNKING-ORIENTADO-POR-ESTRATEGIA.md)
 
-Esta etapa existe para não cortar todo PDF do mesmo jeito. O serviço avalia o tipo de conteúdo, informações de página e a ordem de estratégias disponíveis para decidir como quebrar o documento.
+Esta etapa existe para não cortar todo PDF do mesmo jeito. O serviço avalia o tipo de conteúdo, informações de página e a ordem de estratégias disponíveis para decidir como quebrar o documento. Quando uma estratégia finalmente produz chunks válidos, o fluxo ainda não terminou: o processor pode passar esses chunks pela capability de domain processing para acrescentar metadata especializada de negócio.
 
 O que recebe: texto final processado e metadata do documento.
 
-O que faz: tenta estratégias ordenadas e cai em chunking simples se nenhuma gerar resultado.
+O que faz: tenta estratégias ordenadas, cai em chunking simples se nenhuma gerar resultado e, quando `domain_specific_processing` está ativo, aplica a cadeia de plugins configurados por prioridade.
 
-O que entrega: `ContentChunk` com metadata de página, estratégia e seção quando disponível.
+O que entrega: `ContentChunk` com metadata de página, estratégia, seção e, quando aplicável, sinais de domínio enriquecidos para retrieval posterior.
 
-Por que isso importa: chunk errado compromete recuperação mesmo quando a extração textual foi boa.
+Por que isso importa: chunk errado compromete recuperação mesmo quando a extração textual foi boa. E chunk sem metadata de domínio pode continuar "legível", mas perder muito valor em cenários como food service, ERP, catálogos, cupons ou outros domínios suportados.
 
-### 8.7. Persistência operacional e indexação
+### 8.7. [Persistencia operacional e indexacao](README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO-PERSISTENCIA-OPERACIONAL-E-INDEXACAO.md)
 
 Esta etapa existe para ligar o PDF processado à esteira comum da ingestão. Depois que o processor devolve chunks, o executor genérico completa metadata canônica, indexa no vector store e persiste o documento processado.
 

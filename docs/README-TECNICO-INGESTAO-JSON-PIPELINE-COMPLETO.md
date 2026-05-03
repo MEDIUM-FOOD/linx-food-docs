@@ -322,7 +322,30 @@ Quando o conteúdo é inválido em `create_chunks`:
 
 ### 12.1. Resolver central
 
-`DomainProcessingResolver` carrega a configuração de domínios, inicializa o registry de processadores e aplica a cadeia de enriquecimento apenas quando o recurso está habilitado.
+`DomainProcessingResolver` é o ponto canônico do recurso. Ele lê `domain_specific_processing`, resolve a configuração efetiva de domínios, instancia `MetadataSchemaRegistry`, cria `DomainProcessorFactory` e só mantém o recurso ativo quando `is_enabled()` retorna verdadeiro.
+
+O fluxo técnico confirmado no código é este:
+
+1. o processor JSON cria o resolver durante `_setup_domain_processing`;
+2. o perfil do documento é selecionado por `_resolve_profile`;
+3. só o perfil `standard` permite domínio;
+4. depois que os chunks são gerados, `apply_processing(document, chunks)` executa a cadeia;
+5. o retorno vem como `DomainProcessingOutcome`, com `chunks` enriquecidos e `applied_domains` para log e diagnóstico.
+
+O detalhe mais importante é que o resolver não escolhe um único plugin "vencedor" no escuro. A `DomainProcessorFactory` cria todos os processadores habilitados, ordena a lista por `get_processing_priority()` e a cadeia é executada nessa ordem. Isso permite compor enriquecimentos sem duplicar o processor JSON principal.
+
+Os domínios built-in confirmados no registry atual são:
+
+- `dnit`
+- `product_catalog`
+- `sales_coupon`
+- `software_pdv`
+- `software_management`
+- `human_resources`
+- `food_service`
+- `hospitality`
+
+Na base comum dos plugins, `BaseDomainProcessor.process_chunks` valida a metadata extraída contra o schema do domínio. Quando a validação falha, o código registra warning e aplica fallback de metadata reduzida para preservar a ingestão sem mascarar que houve perda de qualidade semântica.
 
 ### 12.2. ProductCatalogDomainProcessor
 
@@ -356,6 +379,7 @@ Os plugins são ignorados quando:
 
 - o processamento de domínio está desabilitado;
 - o perfil não permite domínio;
+- o perfil ativo é `schema_metadata`, que desliga explicitamente esse enriquecimento;
 - o documento não parece pertencer ao domínio;
 - o chunk não consegue ser interpretado como JSON válido pelo plugin.
 

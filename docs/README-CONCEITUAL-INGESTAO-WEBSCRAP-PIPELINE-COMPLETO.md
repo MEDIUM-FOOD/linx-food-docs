@@ -160,6 +160,8 @@ O que recebe: documento prefetched já preparado.
 
 O que faz: materializa HTML, extrai texto limpo, atualiza `pages_info`, calcula chunking adaptativo e aplica processamento por domínio quando configurado.
 
+O ponto arquitetural relevante é a ordem. No código lido, o client remoto prepara o documento com `pipeline_ready=True`, justamente para não misturar aquisição de rede com enriquecimento documental pesado. O domain processing entra depois, no `WebContentProcessor`, quando a página já virou documento canônico e os chunks já existem. Isso mantém a camada remota responsável por capturar a página e a camada documental responsável por enriquecer o conteúdo.
+
 O que entrega: chunks persistíveis no vector store e metadata operacional reutilizável depois pelo RAG.
 
 O que pode dar errado: HTML pouco útil, conteúdo limpo pobre ou chunking sem sinal de valor.
@@ -195,6 +197,8 @@ Ganho: cada camada resolve o problema certo. A camada remota lida com rede, aute
 Custo: o fluxo fica mais longo e exige ponte explícita via `prefetched_documents`.
 
 Impacto prático: mais previsibilidade, menos duplicação de responsabilidade.
+
+Esse mesmo trade-off vale para domain processing. O projeto evita enriquecer domínio ainda na camada de rede e empurra essa inteligência para a etapa documental. Isso reduz risco de uma heurística de domínio depender de resposta HTTP transitória ou de HTML ainda bruto demais.
 
 ### Tornar o prefetch obrigatório
 

@@ -111,31 +111,45 @@ Por fim, a esteira comum de ingestão indexa e persiste os chunks junto com o re
 
 ## 8. Divisão em etapas ou submódulos
 
-### 8.1. Resolução de contrato YAML
+Detalhamento aprofundado por etapa:
+
+1. [Resolucao de contrato YAML](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-RESOLUCAO-DE-CONTRATO-YAML.md)
+2. [Validacao fisica do arquivo](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-VALIDACAO-FISICA-DO-ARQUIVO.md)
+3. [Parse e leitura estrutural](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-PARSE-E-LEITURA-ESTRUTURAL.md)
+4. [Enriquecimento de dominio e qualidade](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-ENRIQUECIMENTO-DE-DOMINIO-E-QUALIDADE.md)
+5. [Perfis de processamento](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-PERFIS-DE-PROCESSAMENTO.md)
+6. [Chunking estrutural](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-CHUNKING-ESTRUTURAL.md)
+7. [Indexacao e persistencia comuns](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-INDEXACAO-E-PERSISTENCIA-COMUNS.md)
+
+### 8.1. [Resolucao de contrato YAML](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-RESOLUCAO-DE-CONTRATO-YAML.md)
 
 Esta etapa existe para garantir que JSON use um caminho de configuração canônico. Ela evita que o runtime continue aceitando chaves legadas espalhadas.
 
-### 8.2. Validação física do arquivo
+### 8.2. [Validacao fisica do arquivo](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-VALIDACAO-FISICA-DO-ARQUIVO.md)
 
 Esta etapa existe para impedir ingestão “melhor esforço” sobre bytes inválidos. O builder exige bytes brutos, aplica limite de tamanho e tenta decodificar com a lista ordenada de encodings permitidos.
 
-### 8.3. Parse e leitura estrutural
+### 8.3. [Parse e leitura estrutural](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-PARSE-E-LEITURA-ESTRUTURAL.md)
 
 Esta etapa existe para confirmar que o conteúdo é JSON de verdade. Sem ela, a esteira correria o risco de indexar lixo textual como se fosse dado semi-estruturado.
 
-### 8.4. Enriquecimento de domínio e qualidade
+### 8.4. [Enriquecimento de dominio e qualidade](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-ENRIQUECIMENTO-DE-DOMINIO-E-QUALIDADE.md)
 
-Esta etapa existe para transformar um JSON válido em algo útil para negócio. O builder procura sinais de catálogo e cupom, calcula estatísticas e marca flags de qualidade.
+Esta etapa existe para transformar um JSON válido em algo útil para negócio. O builder procura sinais de catálogo e cupom, calcula estatísticas e marca flags de qualidade, mas o enriquecimento não para aí.
 
-### 8.5. Perfis de processamento
+Depois do profiling estrutural, o processor pode ativar a capability transversal de domain processing. No código, isso acontece por um resolvedor central que lê `domain_specific_processing`, monta uma factory de plugins, ordena os processadores habilitados por prioridade e aplica a cadeia sobre os chunks. Isso permite que o mesmo pipeline reconheça catálogos, cupons, software de PDV, software de gestão, food service, hospitalidade, recursos humanos, DNIT e outros domínios suportados, sem criar um processor JSON separado para cada segmento.
+
+Há um detalhe importante de governança: o perfil padrão aceita domain processing, mas o perfil `schema_metadata` o desliga explicitamente. Isso evita misturar enriquecimento de negócio com um documento cujo objetivo é ser um artefato técnico controlado e previsível.
+
+### 8.5. [Perfis de processamento](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-PERFIS-DE-PROCESSAMENTO.md)
 
 Esta etapa existe para ajustar comportamento conforme a natureza do documento. O perfil padrão prioriza metadata e plugins de domínio. O perfil de schema metadata desliga partes pesadas para privilegiar um único chunk controlado.
 
-### 8.6. Chunking estrutural
+### 8.6. [Chunking estrutural](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-CHUNKING-ESTRUTURAL.md)
 
 Esta etapa existe para preservar sentido estrutural no acervo. Objeto, array e valor primitivo não recebem a mesma estratégia de chunking.
 
-### 8.7. Indexação e persistência comuns
+### 8.7. [Indexacao e persistencia comuns](README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO-INDEXACAO-E-PERSISTENCIA-COMUNS.md)
 
 Esta etapa existe para manter o slice JSON dentro da esteira oficial do produto. O formato é especializado no processamento, mas converge de volta para o mesmo fechamento operacional da ingestão.
 
@@ -188,11 +202,11 @@ Impacto: melhora rastreabilidade e flexibilidade.
 
 ### 10.4. Usar heurísticas de domínio em vez de hardcode por arquivo
 
-Ganho: o pipeline detecta padrões de negócio sem depender de um nome exato de arquivo.
+Ganho: o pipeline detecta padrões de negócio sem depender de um nome exato de arquivo e sem criar um fluxo rígido por tipo de exportação.
 
-Custo: toda heurística tem risco de falso positivo ou falso negativo.
+Custo: toda heurística tem risco de falso positivo ou falso negativo, e a cadeia de plugins exige manutenção disciplinada de prioridade e schema de metadata.
 
-Impacto: o acervo fica mais rico para casos de catálogo e cupom sem exigir pipelines separados.
+Impacto: o acervo fica mais rico para casos de catálogo, cupom e outros domínios configurados sem exigir pipelines separados. Também fica mais fácil evoluir o sistema, porque a inteligência de domínio mora em plugins governados pelo resolvedor central, e não em ifs espalhados pelo chunking.
 
 ### 10.5. Distinguir perfil padrão e perfil restrito de schema metadata
 

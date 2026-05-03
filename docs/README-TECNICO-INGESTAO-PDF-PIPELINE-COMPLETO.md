@@ -75,6 +75,8 @@ O bootstrap é centralizado por `PdfRuntimeCoordinator.initialize_runtime`. A or
 
 Em outras palavras, antes de tocar num PDF específico, o processor já resolveu qual mundo operacional será usado.
 
+O detalhe pouco visível, mas importante, é que esse bootstrap conversa com o mesmo sistema central de domain processing usado por outros tipos de conteúdo. Primeiro `_setup_domain_processing` cria `DomainProcessingResolver`. Depois `_apply_domain_overrides` percorre os domínios habilitados e faz merge de `pdf_overrides` quando `apply_globally=true`. Na prática, o domínio não serve apenas para enriquecer chunks no fim; ele também pode ajustar o runtime PDF antes da extração, desde que o YAML mande isso explicitamente.
+
 ## 5. Builder do runtime de parsing
 
 `PdfParsingRuntimeBuilder.build` monta o bundle principal do parsing PDF.
@@ -393,6 +395,15 @@ Depois da estratégia vencedora, o processor:
 - registra resumo operacional do PDF;
 - calcula métricas de chunk e OCR.
 
+Tecnicamente, `_apply_domain_processing` segue um contrato bem definido.
+
+- se `domain_processing_enabled=false`, devolve os chunks originais sem desvio escondido;
+- se o resolver não existe, registra warning e devolve os chunks originais;
+- se o resolver existe, chama `apply_processing(document, chunks)` e usa `outcome.applied_domains` para contar o que realmente foi aplicado;
+- se houver exceção estrutural durante esse enriquecimento, o código registra `exception` e relança o erro em vez de fingir sucesso parcial.
+
+Esse comportamento é importante porque diferencia duas situações que costumam se confundir em troubleshooting: domínio simplesmente não aplicável e falha real do mecanismo de enriquecimento.
+
 ### 15.6. Fallback simples
 
 Se nenhuma estratégia gerar chunks válidos, o serviço usa `_create_fallback_chunks` e registra `strategy_used=fallback`.
@@ -438,6 +449,8 @@ O slice lido confirma vários grupos de metadados importantes.
 - `ocr_basic_metrics`
 - `strategy_used`
 - `library_used`
+- `domain_processing_enabled`
+- `enabled_domain_processors`
 
 ## 17. Integração com a esteira comum de ingestão
 

@@ -58,6 +58,7 @@ O client lê a configuração de `web_scraping` e extrai blocos que controlam co
 - `anti_bot`: user agent, browser fingerprint, CAPTCHA, Cloudflare e rate limiting.
 - `proxy_rotation`: auto-rotação, tentativas em bloqueio, Bright Data, domínios que exigem proxy premium e integração com ScrapeOps.
 - `security`: verificação SSL, redirects, domínios bloqueados e esquemas permitidos.
+- `domain_specific_processing`: capability transversal consumida mais adiante pelo `WebContentProcessor`, depois da materialização HTML.
 - `quality_filters` e `content_filters`: filtros de qualidade e de conteúdo usados durante a preparação da página.
 - `javascript_rendering`: gate da estratégia avançada baseada em renderização.
 - `smart_detection`: domínios avançados, quick detection de SPA e threshold de indicadores.
@@ -113,6 +114,8 @@ Na sequência, a família remota instancia `WebScrapingDatasourceMultimodalAdapt
 O client executa `get_documents_for_pipeline`. Para cada URL, ele usa `_create_document_bundle_for_pipeline`, que chama `_fetch_document_data` e `_transform_to_document_async` com `pipeline_ready=True`.
 
 Essa flag muda comportamento. Com `pipeline_ready=True`, o client devolve o documento base pronto para a esteira comum e não roda o enriquecimento multimodal nem o processamento de domínio dentro do próprio client. Isso evita duplicação com a etapa seguinte do pipeline.
+
+Em termos práticos, isso significa que domain processing existe no slice Web, mas não na fronteira de aquisição remota. O enriquecimento é adiado para a camada documental, quando a página já foi transformada em documento canônico e o chunking HTML já tem contexto suficiente para receber metadata de domínio útil.
 
 ### 4.5. Escolha de estratégia de scraping
 
@@ -191,6 +194,16 @@ O `WebContentProcessor` herda de `HtmlContentProcessor`, mas especializa a mater
 `build_from_storage` extrai HTML bruto de `raw_bytes` ou `content`, converte para texto limpo, monta `pages_info` com URL e status HTTP, chama a limpeza base e preserva metadata importante da página.
 
 Na hora de gerar chunks, `_split_into_chunks` atualiza `pages_info` com o texto limpo final, calcula parâmetros adaptativos e registra telemetria de chunking. Se o processamento por domínio estiver habilitado, ele é aplicado depois que os chunks já existem.
+
+O comportamento confirmado no código é este:
+
+1. `_setup_domain_processing` cria `DomainProcessingResolver` e registra os domínios ativos;
+2. `_split_into_chunks` delega primeiro ao chunking HTML base;
+3. `_apply_domain_processing` chama `apply_processing(document, chunks)`;
+4. o retorno `DomainProcessingOutcome` informa tanto os chunks enriquecidos quanto `applied_domains`;
+5. quando nenhum plugin se aplica, o processor registra isso como caso observável, sem forçar erro.
+
+Isso mantém coerência com PDF e JSON: o mesmo resolvedor central é reutilizado, e a diferença fica no momento do pipeline em que ele entra.
 
 ## 5. Contratos de entrada e saída
 
@@ -282,6 +295,8 @@ O slice lido já tem logs úteis nos pontos decisivos.
 - sucesso do fetch básico ou avançado;
 - preparação dos documentos para o pipeline padrão;
 - reuso do prefetch;
+- inicialização do processamento por domínio Web;
+- aplicação efetiva ou ausência de domínio aplicável nos chunks web;
 - chunking web com parâmetros adaptativos.
 
 ### 8.2. Como diferenciar falha de aquisição de falha de chunking

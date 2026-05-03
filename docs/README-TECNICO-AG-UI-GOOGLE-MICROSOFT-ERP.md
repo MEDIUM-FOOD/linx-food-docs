@@ -2,7 +2,7 @@
 
 ## 1. Superficie implementada
 
-O slice AG-UI deste repositorio e composto por um boundary HTTP FastAPI, um conjunto de modelos Pydantic estritos, um orchestrator de lifecycle, um registry explicito de adapters, um event store em memoria com sanitizacao, um runtime compartilhado em JavaScript puro e um conjunto de paginas demo de varejo que exercitam o contrato.
+O slice AG-UI deste repositorio e composto por um boundary HTTP FastAPI, um conjunto de modelos Pydantic estritos, um orchestrator de lifecycle, um registry explicito de adapters, um event store com provider canonico e sanitizacao, um runtime compartilhado em JavaScript puro e um conjunto de paginas demo de varejo que exercitam o contrato.
 
 O recorte executavel confirmado no codigo inclui estas superficies publicas.
 
@@ -412,8 +412,12 @@ Isso mostra que o frontend das demos ja foi desenhado como padrao de integracao,
 
 O event store atual e InMemoryAgUiEventStore. Isso significa duas coisas ao mesmo tempo.
 
-1. O contrato de replay ja existe e funciona.
-2. A persistencia ainda nao e duravel entre reinicios de processo.
+O event store AG-UI agora funciona por provider canônico.
+
+1. Em development e teste, sem configuracao explicita, o replay usa InMemoryAgUiEventStore.
+2. Fora de development/test, o provider precisa ser declarado explicitamente por AG_UI_EVENT_STORE_PROVIDER.
+3. O provider duravel suportado hoje e postgres, persistindo em ag_ui.run_events.
+4. Sem provider explicito fora de development/test, o backend falha fechado e nao cai silenciosamente para memoria.
 
 O store tem caracteristicas importantes.
 
@@ -423,8 +427,46 @@ O store tem caracteristicas importantes.
 4. Idempotencia por run_id + sequence quando o payload e identico.
 5. Erro explicito quando a mesma sequence chega com payload divergente.
 6. Sanitizacao recursiva de campos sensiveis antes do replay.
+7. Indexacao preparada para tenant_id quando o boundary autenticado trouxer esse contexto.
 
 Campos como api_key, authorization, password, secret, token, dsn e encrypted_data sao redigidos para [REDACTED].
+
+### 12.1. Variaveis do provider AG-UI
+
+As variaveis operacionais confirmadas no codigo agora sao estas.
+
+1. ENVIRONMENT.
+2. AG_UI_EVENT_STORE_PROVIDER.
+3. AG_UI_EVENT_STORE_DSN.
+4. AG_UI_EVENT_STORE_SCHEMA.
+5. AG_UI_EVENT_STORE_TABLE.
+6. AG_UI_EVENT_STORE_POOL_MIN_SIZE.
+7. AG_UI_EVENT_STORE_POOL_MAX_SIZE.
+8. AG_UI_EVENT_STORE_POOL_MAX_IDLE.
+9. AG_UI_EVENT_STORE_POOL_TIMEOUT_SECONDS.
+10. AG_UI_EVENT_STORE_RETRY_ATTEMPTS.
+11. AG_UI_EVENT_STORE_RETRY_MIN_SECONDS.
+12. AG_UI_EVENT_STORE_RETRY_MAX_SECONDS.
+
+Em linguagem simples, development/test pode continuar usando memoria para velocidade local. Produção e ambientes equivalentes nao podem depender disso. Nesses casos, AG_UI_EVENT_STORE_PROVIDER precisa estar configurado e o DSN do PostgreSQL precisa existir, senao o router AG-UI falha de forma explicita.
+
+### 12.2. Tabela duravel e retencao
+
+O provider PostgreSQL persiste o replay em ag_ui.run_events, criado pelo DDL scripts/sql/20260503_create_ag_ui_schema.sql.
+
+Essa tabela guarda tenant_id opcional, correlation_id, thread_id, run_id, sequence, event_type, payload sanitizado e created_at. O indice unico run_id + sequence protege idempotencia de escrita. Indices por thread, correlation_id, tenant_id e event_type protegem replay e suporte operacional.
+
+No estado atual, a retencao nao tem TTL automatico no proprio adapter. Em termos práticos, o replay fica duravel ate que a operacao aplique politica de limpeza do banco. Isso e intencional nesta etapa: primeiro o slice deixa de perder historico em restart e replica; depois a politica de expurgo pode ser acoplada sem reabrir o contrato do event store.
+
+### 12.3. Falhas esperadas
+
+Os erros esperados do provider canônico agora sao estes.
+
+1. Fora de development/test, AG_UI_EVENT_STORE_PROVIDER ausente ou invalido falha fechado.
+2. Com provider postgres, AG_UI_EVENT_STORE_DSN ausente falha fechado.
+3. Duplicidade de run_id + sequence com payload divergente falha explicitamente.
+4. Payload persistido invalido ou nao JSON object falha explicitamente.
+5. Falha de escrita no provider vira RUN_ERROR com code AG_UI_EVENT_STORE_WRITE_FAILED no orquestrador.
 
 ## 13. HIL e resume
 

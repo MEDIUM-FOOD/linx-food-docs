@@ -80,6 +80,7 @@ contratos espalhados.
 - `ingestion_document_chunks`, `ingestion_document_pages` e `ingestion_document_images` dependem do manifesto do documento.
 - `ingestion_runs` representa uma execução de ingestão, `ingestion_run_documents` guarda o detalhe de cada documento dentro dessa execução e `ingestion_run_slot_leases` materializa o controle de concorrência do fan-out por documento sem concentrar contenção na linha pai.
 - `interaction_runs` representa a execução principal de uma interação e `interaction_run_events` guarda os eventos associados.
+- O schema `ag_ui` concentra o replay durável do protocolo AG-UI, separando a trilha visual de runs e threads do ledger de background e do histórico genérico de interação.
 - O schema `scheduler` concentra a agenda canônica e o ledger canônico de execução, por meio de `scheduler.scheduled_jobs` e `scheduler.job_executions`.
 - `agent_hil_approval_requests` representa a pausa Human-in-the-Loop assíncrona de agentes em background, guardando o pedido de aprovação, o canal esperado, o token seguro, a decisão e a trilha mínima de auditoria para retomada.
 - O schema `agent_background` concentra a capacidade de Execução Agentic em Background, separando alvo autorizado, solicitação criada por prompt, projeção compatível de run, eventos, HIL durável ligado ao run e outbox operacional.
@@ -649,6 +650,35 @@ Como ler na prática:
 - FK `interaction_id` para `interaction_runs.interaction_id` com `ON DELETE CASCADE`.
 - Índice `ix_interaction_run_events_event_type` em `event_type`.
 - Índice `ix_interaction_run_events_interaction` em `interaction_id`.
+
+### ag_ui.run_events
+
+- Finalidade prática: guardar o replay durável dos eventos do protocolo AG-UI por run e por thread.
+- O que resolve na prática: evita perder a trilha visual quando a API reinicia, quando há mais de uma réplica ou quando o operador precisa reconstruir uma execução depois do fato.
+- Chave primária: `event_id`.
+- Colunas:
+- `event_id`: identificador UUID do evento persistido.
+- `tenant_id`: tenant opcional da execução, quando o boundary autenticado disponibiliza esse contexto.
+- `correlation_id`: correlação ponta a ponta da execução AG-UI.
+- `thread_id`: thread formal do protocolo AG-UI.
+- `run_id`: run visual ao qual a sequência pertence.
+- `sequence`: ordem monotônica do evento dentro do run.
+- `event_type`: tipo do evento AG-UI persistido.
+- `payload`: payload sanitizado em `jsonb`, sem token, senha, DSN ou segredo.
+- `created_at`: instante persistido do evento.
+- Índices e restrições:
+- PK em `event_id`.
+- Unique `ux_ag_ui_run_events_run_sequence` em `run_id, sequence`, protegendo idempotência do replay.
+- Check `ag_ui_run_events_sequence_check` exigindo `sequence >= 1`.
+- Check `ag_ui_run_events_payload_json_check` garantindo `payload` como objeto JSON.
+- Índice `idx_ag_ui_run_events_thread_time` em `thread_id, created_at ASC, run_id, sequence` para replay de thread.
+- Índice `idx_ag_ui_run_events_correlation_time` em `correlation_id, created_at DESC` para investigação operacional.
+- Índice parcial `idx_ag_ui_run_events_tenant_time` em `tenant_id, created_at DESC` quando o tenant existir.
+- Índice `idx_ag_ui_run_events_type_time` em `event_type, created_at DESC` para suporte e diagnóstico por tipo de evento.
+- Onde é usado e como:
+- `src/api/services/ag_ui_event_store.py` resolve o provider canônico do AG-UI e grava/lê essa tabela quando `AG_UI_EVENT_STORE_PROVIDER=postgres`.
+- `src/api/routers/ag_ui_router.py` usa esse replay em `GET /ag-ui/runs/{run_id}/events` e `GET /ag-ui/threads/{thread_id}/events`.
+- Em linguagem simples: esta tabela é a memória durável da experiência AG-UI. Ela não substitui o runtime do agente; ela preserva a história visual já sanitizada para replay, suporte e auditoria.
 
 ### agent_hil_approval_requests
 

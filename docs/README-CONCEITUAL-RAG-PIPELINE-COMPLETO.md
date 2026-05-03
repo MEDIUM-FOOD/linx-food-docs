@@ -142,6 +142,10 @@ Rerank é reordenação pós-recuperação. Em vez de confiar apenas na ordem or
 
 A busca pode recuperar documentos relevantes que o usuário não pode ver. Por isso o pipeline aplica controle de acesso depois da recuperação. Isso significa que “o sistema encontrou” não é o mesmo que “o sistema pode usar”.
 
+### 7.13. Metadata de domínio gerada na ingestão
+
+O pipeline RAG não cria sozinho a maior parte do contexto de domínio. Parte importante desse contexto nasce antes, na ingestão, quando JSON, PDF, HTML e Web podem passar por domain processing e ganhar metadados especializados de negócio. Na prática, isso significa que o retriever não enxerga apenas texto e embedding. Ele pode herdar sinais como tipo de catálogo, cupom, domínio operacional, classificações e outros campos enriquecidos pelos plugins de domínio.
+
 ## 8. Como a feature funciona por dentro
 
 O fluxo canônico começa em uma fachada de serviço que recebe a pergunta, resolve timeout, monta o sistema de QA e chama o pipeline moderno. A partir daí, o runtime segue uma ordem clara.
@@ -159,41 +163,55 @@ O fluxo canônico começa em uma fachada de serviço que recebe a pergunta, reso
 
 O ponto importante é que a geração vem depois da recuperação. O modelo não é tratado como substituto do retriever. Ele é tratado como a camada final de redação sobre evidência.
 
+Há um pré-requisito silencioso, mas decisivo, para esse fluxo funcionar bem: a qualidade da metadata produzida na ingestão. Quando domain processing enriquece os chunks antes da indexação, o RAG passa a recuperar e diagnosticar o acervo com mais contexto de negócio. Quando esse enriquecimento não existe ou não se aplica, o pipeline continua funcionando, mas fica mais dependente de texto bruto e sinais genéricos.
+
 ## 9. Divisão em etapas ou submódulos
 
-### 9.1. Fachada de pergunta
+Detalhamento aprofundado por etapa:
+
+1. [Fachada de pergunta](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-FACHADA-DE-PERGUNTA.md)
+2. [Montagem do runtime de QA](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-MONTAGEM-DO-RUNTIME-DE-QA.md)
+3. [Governança do modo moderno](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-GOVERNANCA-DO-MODO-MODERNO.md)
+4. [Reescrita da consulta](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-REESCRITA-DA-CONSULTA.md)
+5. [Análise e roteamento](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-ANALISE-E-ROTEAMENTO.md)
+6. [Recuperação especializada](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-RECUPERACAO-ESPECIALIZADA.md)
+7. [Pós-retrieval](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-POS-RETRIEVAL.md)
+8. [Geração final](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-GERACAO-FINAL.md)
+9. [Diagnóstico e observabilidade](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-DIAGNOSTICO-E-OBSERVABILIDADE.md)
+
+### 9.1. [Fachada de pergunta](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-FACHADA-DE-PERGUNTA.md)
 
 Esta etapa recebe a pergunta, valida entrada, decodifica imagem em base64 quando existe, aplica timeout e registra telemetria operacional. O valor dela é proteger a interface pública e manter diagnósticos estáveis para API e outros chamadores.
 
-### 9.2. Montagem do runtime de QA
+### 9.2. [Montagem do runtime de QA](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-MONTAGEM-DO-RUNTIME-DE-QA.md)
 
 Aqui o sistema monta ou reaproveita o pipeline de QA a partir do cache global. Essa etapa garante que a recuperação use o runtime moderno configurado, incluindo LLM, embeddings, vector store, memória e pipeline inteligente.
 
-### 9.3. Governança do modo moderno
+### 9.3. [Governança do modo moderno](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-GOVERNANCA-DO-MODO-MODERNO.md)
 
 O código força um comportamento importante: quando o modo moderno está ativo, ausência do orchestrator inteligente é falha, não caminho alternativo silencioso. Isso reforça o caráter fail-fast do pipeline.
 
-### 9.4. Reescrita da consulta
+### 9.4. [Reescrita da consulta](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-REESCRITA-DA-CONSULTA.md)
 
 Se habilitada, a pergunta passa por um reescritor que corrige, parafraseia e expande de forma controlada. Se a similaridade entre original e reescrita cair abaixo do limiar configurado, a reescrita é descartada.
 
-### 9.5. Análise e roteamento
+### 9.5. [Análise e roteamento](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-ANALISE-E-ROTEAMENTO.md)
 
 O analisador identifica sinais como domínio, filtros, entidades, tipo de dado e complexidade. O router usa esses sinais para escolher estratégia e fallback lógico. Há uma regra especialmente relevante: consultas com sinais técnicos ou códigos exatos são empurradas para busca híbrida com prioridade, mesmo quando a rota inicial poderia parecer puramente semântica.
 
-### 9.6. Recuperação especializada
+### 9.6. [Recuperação especializada](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-RECUPERACAO-ESPECIALIZADA.md)
 
 Esta é a etapa que efetivamente busca documentos. O runtime suporta múltiplos caminhos: tradicional, híbrido, self-query, multi-query e JSON/Excel especializado.
 
-### 9.7. Pós-retrieval
+### 9.7. [Pós-retrieval](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-POS-RETRIEVAL.md)
 
 Depois de recuperar documentos, o sistema ainda pode fundir rankings, deduplicar chunks, acionar FTS, aplicar cache, reordenar resultados e filtrar por ACL.
 
-### 9.8. Geração final
+### 9.8. [Geração final](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-GERACAO-FINAL.md)
 
 Só então a resposta é gerada com LLM. A geração recebe contexto formatado, histórico recente quando houver, memória do usuário quando houver e uma seleção limitada de documentos e fontes.
 
-### 9.9. Diagnóstico e observabilidade
+### 9.9. [Diagnóstico e observabilidade](README-CONCEITUAL-RAG-PIPELINE-COMPLETO-DIAGNOSTICO-E-OBSERVABILIDADE.md)
 
 Ao final, o payload carrega métricas, decisão de roteamento, traço de retrieval, status de hybrid retry quando presente, estatísticas BM25 e resumo de controle de acesso. Isso faz parte da feature, não é detalhe cosmético.
 
@@ -312,6 +330,8 @@ Na prática, isso permite responder perguntas operacionais como:
 - o FTS entrou como augment ou fallback;
 - a ACL removeu todos os documentos;
 - a especialização Excel foi acionada ou descartada.
+
+No caso do bloco `processadores_dominio`, a leitura correta é importante: ele não significa que o RAG executou plugins de domínio em tempo de pergunta. Ele resume sinais e metadados herdados da ingestão e expostos ao diagnóstico do pipeline para explicar por que certos documentos pareceram mais específicos, mais ricos ou mais filtráveis.
 
 ## 16. Impacto técnico
 

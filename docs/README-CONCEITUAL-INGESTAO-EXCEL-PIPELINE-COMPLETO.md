@@ -122,7 +122,17 @@ O ponto decisivo é este: a parte especializada do Excel não termina na extraç
 
 ## 8. Divisão em etapas ou submódulos
 
-### 8.1. Normalização de entrada
+Detalhamento aprofundado por etapa:
+
+1. [Normalizacao de entrada](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-NORMALIZACAO-DE-ENTRADA.md)
+2. [Validacao de contrato do arquivo](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-VALIDACAO-DE-CONTRATO-DO-ARQUIVO.md)
+3. [Carregamento do workbook](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-CARREGAMENTO-DO-WORKBOOK.md)
+4. [Analise estrutural por aba](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-ANALISE-ESTRUTURAL-POR-ABA.md)
+5. [Extracao de conteudo e metadados](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-EXTRACAO-DE-CONTEUDO-E-METADADOS.md)
+6. [Chunking row-aware](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-CHUNKING-ROW-AWARE.md)
+7. [Fechamento na esteira comum](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-FECHAMENTO-NA-ESTEIRA-COMUM.md)
+
+### 8.1. [Normalizacao de entrada](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-NORMALIZACAO-DE-ENTRADA.md)
 
 Esta etapa existe para garantir que o arquivo chega ao processor como `StorageDocument` com tipo coerente. A esteira comum faz a inferência da extensão e escolhe o processor certo.
 
@@ -132,7 +142,7 @@ O que faz: resolve `.xlsx` e `.xls` como tipos próprios de Excel.
 
 O que entrega: documento apto a virar `ExcelDocument`.
 
-### 8.2. Validação de contrato do arquivo
+### 8.2. [Validacao de contrato do arquivo](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-VALIDACAO-DE-CONTRATO-DO-ARQUIVO.md)
 
 Esta etapa existe para rejeitar formatos fora do contrato atual e impedir que o pipeline finja suportar mais do que realmente suporta.
 
@@ -142,7 +152,7 @@ O que faz: valida extensão, tamanho, existência do arquivo local quando aplic�
 
 O que entrega: autorização para carregar o workbook ou falha explícita.
 
-### 8.3. Carregamento do workbook
+### 8.3. [Carregamento do workbook](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-CARREGAMENTO-DO-WORKBOOK.md)
 
 Esta etapa existe para abrir o Excel com a engine adequada.
 
@@ -152,7 +162,7 @@ O que faz: tenta `openpyxl` para o caminho moderno e usa `xlrd` apenas para `.xl
 
 O que entrega: workbook carregado em modo moderno ou best-effort legado.
 
-### 8.4. Análise estrutural por aba
+### 8.4. [Analise estrutural por aba](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-ANALISE-ESTRUTURAL-POR-ABA.md)
 
 Esta etapa existe para descobrir o que cada planilha é de fato.
 
@@ -162,7 +172,7 @@ O que faz: detecta tabelas nativas, tabelas heurísticas, densidade e tipo estru
 
 O que entrega: `ExcelSheetInfo` e `ExcelTableInfo`.
 
-### 8.5. Extração de conteúdo e metadados
+### 8.5. [Extracao de conteudo e metadados](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-EXTRACAO-DE-CONTEUDO-E-METADADOS.md)
 
 Esta etapa existe para transformar a planilha em conteúdo indexável sem perder sua semântica principal.
 
@@ -172,7 +182,7 @@ O que faz: percorre linhas, monta texto por aba, resume schema, calcula estatís
 
 O que entrega: `ExcelDocument` com conteúdo textual e metadata rica.
 
-### 8.6. Chunking row-aware
+### 8.6. [Chunking row-aware](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-CHUNKING-ROW-AWARE.md)
 
 Esta etapa existe para evitar que a planilha seja quebrada por sentenças como um texto comum.
 
@@ -182,7 +192,7 @@ O que faz: gera um chunk por linha útil, preservando sheet, row, columns, roles
 
 O que entrega: chunks estruturados que continuam parecendo linhas tabulares.
 
-### 8.7. Fechamento na esteira comum
+### 8.7. [Fechamento na esteira comum](README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO-FECHAMENTO-NA-ESTEIRA-COMUM.md)
 
 Esta etapa existe para transformar o resultado do processor em acervo operacional do produto.
 
