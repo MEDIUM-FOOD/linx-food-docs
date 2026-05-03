@@ -61,8 +61,9 @@ Use esta trilha.
 1. [README-RAG.md](./README-RAG.md) para a visão unificada do tema RAG no catálogo principal.
 2. [README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md](./README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md) para entender conceito, valor, decisões, limites e comparação com estado da arte.
 3. [README-TECNICO-RAG-PIPELINE-COMPLETO.md](./README-TECNICO-RAG-PIPELINE-COMPLETO.md) para seguir ingestão, retrieval, fusão, cache, ACL, geração e troubleshooting.
-4. [README-CACHING.md](./README-CACHING.md) se a dúvida for reaproveitamento de contexto, invalidação ou comportamento de runtime.
-5. [tutorial-101-rag.md](./tutorial-101-rag.md) se você precisa de uma leitura didática e guiada antes do manual técnico completo.
+4. [README-CONCEITUAL-CACHING-SISTEMA-COMPLETO.md](./README-CONCEITUAL-CACHING-SISTEMA-COMPLETO.md) para entender por que a plataforma usa múltiplas camadas de cache, qual valor isso entrega e quais limites operacionais existem.
+5. [README-TECNICO-CACHING-SISTEMA-COMPLETO.md](./README-TECNICO-CACHING-SISTEMA-COMPLETO.md) para seguir hash canônico, WarmResourcePool, PipelineCacheManager, sessão efêmera, invalidação global e operação administrativa.
+6. [tutorial-101-rag.md](./tutorial-101-rag.md) se você precisa de uma leitura didática e guiada antes do manual técnico completo.
 
 ## 5. Se você quer entender YAML, AST e governança agentic
 
@@ -72,7 +73,8 @@ Esse assunto precisa ser lido pela lógica de decisão, não por jargão.
 - [README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md) mostra o ciclo técnico de carga, AST, seleção de alvos, tools_library e ETL declarativo.
 - [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md) explica o modelo mental.
 - [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md) explica por que a AST existe e como ela governa edição, validação e compilação.
-- [README-DEEPAGENTS-SUPERVISOR.md](./README-DEEPAGENTS-SUPERVISOR.md) explica agentes governados.
+- [README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md) explica o DeepAgent Supervisor como capacidade governada, seu valor, seus limites e sua relação com HIL, memória e subagentes.
+- [README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md) descreve AST, validator, runtime, middlewares, memória Redis, execução, continuação HIL e operação do DeepAgent Supervisor.
 - [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md) explica grafo determinístico e execução por nós.
 - [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md) aprofunda conceito, valor, estratégia e limites do agente workflow.
 - [README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md](./README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md) detalha sintaxe, AST, runtime, nodes, HIL, API e troubleshooting do agente workflow.
@@ -172,7 +174,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-RAG.md](./README-RAG.md): visão unificada do tema RAG no catálogo principal.
 - [README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md](./README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do pipeline RAG ponta a ponta.
 - [README-TECNICO-RAG-PIPELINE-COMPLETO.md](./README-TECNICO-RAG-PIPELINE-COMPLETO.md): manual técnico e operacional do pipeline RAG ponta a ponta.
-- [README-CACHING.md](./README-CACHING.md): reaproveitamento de contexto, invalidação e impacto operacional do cache.
+- [README-CONCEITUAL-CACHING-SISTEMA-COMPLETO.md](./README-CONCEITUAL-CACHING-SISTEMA-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do sistema de caching completo.
+- [README-TECNICO-CACHING-SISTEMA-COMPLETO.md](./README-TECNICO-CACHING-SISTEMA-COMPLETO.md): manual técnico e operacional do sistema de caching completo, incluindo invalidação, snapshots e contratos administrativos.
 - [tutorial-101-bm25-vs-auto-config-dnit.md](./tutorial-101-bm25-vs-auto-config-dnit.md): leitura aplicada do caso DNIT com foco em vocabulário lexical e auto_config.
 - [tutorial-101-rag.md](./tutorial-101-rag.md): introdução 101 ao funcionamento de RAG.
 - [tutorial-101-status-feature-geracao-sql-linguagem-natural.md](./tutorial-101-status-feature-geracao-sql-linguagem-natural.md): estado atual e limites da geração SQL por linguagem natural.
@@ -188,7 +191,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-AGENTIC-BACKGROUND-EXECUTION.md](./README-AGENTIC-BACKGROUND-EXECUTION.md): execução agentic em background baseada em solicitação de prompt, com schedules, runs, HIL e APIs administrativas.
 - [README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para entender o pedido em linguagem natural, a agenda canônica e o valor do HIL em execuções agendadas.
 - [README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md): leitura especializada para seguir o fluxo técnico entre tool, scheduler, worker e finalização HIL.
-- [README-DEEPAGENTS-SUPERVISOR.md](./README-DEEPAGENTS-SUPERVISOR.md): deepagents governados por supervisor.
+- [README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do DeepAgent Supervisor completo.
+- [README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-TECNICO-DEEPAGENT-SUPERVISOR-COMPLETO.md): manual técnico e operacional do DeepAgent Supervisor completo, incluindo AST, runtime, HIL e memória persistente.
 - [README-AGENTE-WORKFLOW.md](./README-AGENTE-WORKFLOW.md): workflow determinístico baseado em grafo.
 - [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md): manual conceitual, executivo, comercial e estratégico do agente workflow completo.
 - [README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md](./README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md): manual técnico, operacional e de sintaxe do agente workflow completo.
@@ -244,9 +248,12 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 
 ### 9.7 Segurança e controle de acesso
 
+- [README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md](./README-CONCEITUAL-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md): visão conceitual, executiva, comercial e estratégica da autenticação humana do projeto, incluindo Google, sessão web, login local e MFA TOTP.
+- [README-TECNICO-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md](./README-TECNICO-AUTENTICACAO-GOOGLE-MFA-PROJETO-APIS.md): manual técnico e operacional dos endpoints, contratos, middleware, sessão federada, integração Google e segundo fator TOTP.
 - [README-AUTENTICACAO-MFA.md](./README-AUTENTICACAO-MFA.md): autenticação com múltiplos fatores.
 - [README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md): visão do sistema de autenticação como capacidade de plataforma.
-- [README-AUTORIZACAO.md](./README-AUTORIZACAO.md): regras e impacto de autorização.
+- [README-CONCEITUAL-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md](./README-CONCEITUAL-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md): visão conceitual, executiva, comercial e estratégica da autorização, das permissões e do controle de acesso nas APIs e no runtime.
+- [README-TECNICO-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md](./README-TECNICO-AUTORIZACAO-PERMISSAO-PROJETO-APIS.md): manual técnico e operacional do catálogo de permissões, enforcement HTTP, grants humanos, ACL de documentos e governança administrativa.
 
 ### 9.8 Metodologia de desenvolvimento
 
