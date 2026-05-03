@@ -1,16 +1,12 @@
-sequenceDiagram
-        participant C as Cliente
-        participant R as resolve_yaml_configuration
-        participant F as ConfigurationFactory
-        participant D as ClientDirectory
-        participant P as Placeholders
-        participant N as Normalizador
-
-        C->>R: encrypted_data, inline ou path
-        R->>F: cria configuração base
-        F-->>R: dicionário inicial
-        R->>D: injeta client_context e security_keys
-        D-->>R: tenant e segredos
-        R->>P: expande placeholders
-        R->>N: normaliza contrato
-        N-->>R: ResolvedConfig
+flowchart TD
+    A["Origem do YAML"] --> B["ConfigurationFactory"]
+    B --> C["Validação de security_keys"]
+    C --> D["Injeção de tools_library"]
+    D --> E["Expansão de placeholders"]
+    E --> F["YamlSchemaNormalizer"]
+    F --> G["Contratos especializados"]
+    G --> H["Enriquecimento multi-tenant"]
+    H --> I{"Escopo agentic governado?"}
+    I -- Não --> J["YAML pronto para runtime"]
+    I -- Sim --> K["AST + validate + drift + confirm"]
+    K --> L["YAML governado com hash"]

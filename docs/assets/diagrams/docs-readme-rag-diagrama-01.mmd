@@ -1,19 +1,12 @@
-sequenceDiagram
-    participant Cliente
-    participant API as API /rag/execute
-    participant QA as ContentQASystem
-    participant Assembly as QARuntimeAssembly
-    participant Orch as IntelligentRAGOrchestrator
-    participant Retrieval as RetrievalEngine
-    participant Generation as GenerationEngine
-
-    Cliente->>API: POST /rag/execute
-    API->>QA: ask_question
-    QA->>Assembly: prepara runtime moderno
-    Assembly-->>QA: runtime pronto
-    QA->>Orch: coordena retrieval
-    Orch->>Retrieval: busca contexto
-    Retrieval-->>Orch: documentos e sinais
-    Orch->>Generation: gera resposta
-    Generation-->>API: answer e metadata
-    API-->>Cliente: resposta final
+flowchart TD
+    A["Pergunta recebida"] --> B["Montagem do runtime"]
+    B --> C["Query rewrite controlado"]
+    C --> D["Query analysis"]
+    D --> E["Domain processing"]
+    E --> F["Roteamento adaptativo"]
+    F --> G["Retrieval principal"]
+    G --> H["FTS augment ou fallback"]
+    H --> I["Fusion quando exigida"]
+    I --> J["ACL e normalizacao"]
+    J --> K["Generation Engine"]
+    K --> L["Resposta e metricas"]

@@ -457,43 +457,11 @@ Como confirmar: revisar os YAMLs de PDV e o runtime schema_rag_sql.
 
 ## 31. Diagramas
 
-```mermaid
-flowchart TD
-    A[YAML com MCP] --> B[MCPConfigResolver]
-    B --> C[Merge de camadas por escopo]
-    C --> D[MCPToolsResolver]
-    D --> E{Cache por tenant existe?}
-    E -- Sim --> F[Reaproveita catalogo MCP]
-    E -- Nao --> G[Carrega tools via cliente MCP]
-    F --> H[MCPToolsMerger]
-    G --> H
-    H --> I[Merge com tools locais]
-    I --> J[Agente ou workflow recebe lista final]
-```
+![31. Diagramas](assets/diagrams/docs-readme-mcp-diagrama-01.svg)
 
 Esse diagrama mostra que MCP entra como extensão governada do catálogo, não como runtime paralelo isolado.
 
-```mermaid
-sequenceDiagram
-    participant Y as YAML
-    participant R as MCPConfigResolver
-    participant T as MCPToolsResolver
-    participant P as Proxy /mcp
-    participant S as Servidor MCP stdio
-    participant A as Agente
-
-    Y->>R: global_mcp_configuration + local_mcp_configuration
-    R->>T: conexoes resolvidas por escopo
-    alt transporte stdio
-        T->>P: conexao streamable_http local
-        P->>S: list_tools ou call_tool
-        S-->>P: resposta MCP
-        P-->>T: catalogo ou resultado
-    else transporte remoto
-        T->>T: cliente MCP remoto
-    end
-    T->>A: tools MCP mescladas com tools locais
-```
+![31. Diagramas](assets/diagrams/docs-readme-mcp-diagrama-02.svg)
 
 Esse diagrama mostra a diferença entre stdio local, que passa pelo proxy /mcp, e transportes remotos, que não precisam desse redirecionamento interno.
 

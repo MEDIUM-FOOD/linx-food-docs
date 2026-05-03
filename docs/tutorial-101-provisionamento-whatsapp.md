@@ -5,11 +5,13 @@ Se você acabou de entrar no projeto, este guia vai te mostrar, passo a passo e 
 ## 1) Para quem é este tutorial
 
 Este tutorial é para:
+
 - Iniciante
 - Desenvolvedor de negócio
 - Desenvolvedor de plataforma
 
 Ao final você vai conseguir:
+
 - Entender o fluxo completo de provisionamento WhatsApp (`start`, `verify`, `import-existing`, `takeover`).
 - Saber onde o tenant, `client_code`, canal e credenciais são validados.
 - Identificar onde o webhook é assumido e onde o teste de callback é executado.
@@ -50,9 +52,10 @@ Analogia: é como fazer portabilidade de um número para uma nova operadora. O n
 - `src/api/routers/channel_router.py` -> validação/consumo de webhook por canal após provisionamento.
 - `tests/unit/test_whatsapp_provision_router.py` -> cobertura unitária do router.
 - `tests/unit/test_whatsapp_meta_onboarding.py` -> cobertura do manager/provisioner.
-- `docs/README-WHATSAPP-PROVISIONING.md` -> visão funcional consolidada.
+- [README-WHATSAPP-PROVISIONING.md](./README-WHATSAPP-PROVISIONING.md) -> visão funcional consolidada.
 
 Guarda-corpos:
+
 - Não bypassar `require_permission(PermissionKeys.PROVISION_WHATSAPP)`.
 - Não gravar telefone sem passar por validação E.164.
 
@@ -112,9 +115,11 @@ Guarda-corpos:
 13. Em `/test-callback`, o sistema simula webhook assinado para validar o pipeline de entrada.
 
 Com config ativa:
+
 - `meta_access_token`, `meta_app_id`, `meta_whatsapp_business_account_id`, `meta_webhook_callback_url` e `meta_webhook_verify_token` precisam estar no perfil do cliente no diretório.
 
 No estado atual:
+
 - Não foi encontrado no código um endpoint público dedicado só à configuração de credenciais Meta; o fluxo depende de dados já presentes no diretório.
 
 ## 12) Status: está pronto? quanto está pronto?
@@ -133,17 +138,21 @@ No estado atual:
 ## 13) Como colocar para funcionar (hands-on end-to-end)
 
 Passo 0: pré-requisitos
+
 - Python 3.11 (`pyproject.toml`).
 - Dependências instaladas (incluindo `httpx` e `phonenumbers`).
 
 Passo 1: ambiente
+
 - Comando: `source .venv/bin/activate`.
 
 Passo 2: subir API
+
 - Comando: `python main.py`.
 - Ponto de entrada efetivo: `app/main.py` carregando `src.api.service_api:app`.
 
 Passo 3: garantir tenant + credenciais
+
 - O tenant precisa possuir perfil com:
 - `meta_access_token`
 - `meta_app_id`
@@ -153,27 +162,35 @@ Passo 3: garantir tenant + credenciais
 - Evidência: leitura em `MultiTenantWhatsAppManager.get_credentials` e `get_webhook_config`.
 
 Passo 4: validar acesso
+
 - Chame `GET /api/whatsapp/provision/client-codes` com chave que tenha `provision.whatsapp`.
 
 Passo 5: iniciar onboarding
+
 - Chame `POST /api/whatsapp/provision/start` com `phone_e164` e `client_code`.
 
 Passo 6: finalizar onboarding
+
 - Chame `POST /api/whatsapp/provision/verify` com `phone_number_id`, `phone_e164`, `client_code` e `codigo_sms`.
 
 Passo 7: validar migração sem re-onboarding (opcional)
+
 - `POST /import-existing` seguido de `POST /takeover`.
 
 Passo 8: validar callback
+
 - `POST /test-callback` para simular entrega de webhook no pipeline.
 
 Passo 9: validar testes automatizados
+
 - Comando focado: `source .venv/bin/activate && PROMETEU_RUNNING_TESTS=1 pytest tests/unit/test_whatsapp_provision_router.py tests/unit/test_whatsapp_meta_onboarding.py -q`.
 
 Portas/healthchecks
+
 - A API usa host/porta definidos em configuração FastAPI (`app/main.py`).
 
 Se não existir automação
+
 - Não encontrado no código/config: script único de bootstrap para provisionamento WhatsApp com dados de exemplo de tenant em ambiente local.
 - Trabalho mínimo sugerido: script de seed de tenant e smoke de endpoints de provisionamento.
 
@@ -198,31 +215,38 @@ Se não existir automação
 ## 15) Template de mudança (preenchido com padrões do repo)
 
 1) entrada: qual endpoint/job dispara?
+
 - paths: `src/api/routers/whatsapp_provision_router.py`
 - contrato de entrada: `ProvisionStartRequest`, `ProvisionVerifyRequest`, `ImportExistingRequest`, `TakeoverRequest`
 
-2) config: qual YAML/env controla?
+1) config: qual YAML/env controla?
+
 - keys: não é chave YAML do fluxo de provisionamento; o principal vem de perfil multi-tenant no diretório
 - onde é lido: `MultiTenantWhatsAppManager.get_credentials` e `get_webhook_config`
 
-3) execução: qual grafo ou nó entra?
+1) execução: qual grafo ou nó entra?
+
 - builder/factory: Não encontrado no código para LangGraph neste fluxo
 - state: estado operacional de provisão fica persistido em registro de telefone (`pending`/`active`)
 
-4) ferramentas: quais tools são usadas?
+1) ferramentas: quais tools são usadas?
+
 - registro: Não encontrado no código como tool LangChain para este fluxo
 - chamadas: integração direta via `WhatsAppProvisionerAsync`
 
-5) dados: onde persiste/cache/indexa?
+1) dados: onde persiste/cache/indexa?
+
 - MySQL: indireto via repositórios do diretório multi-tenant
 - Redis: Não encontrado no escopo deste fluxo
 - Qdrant/outros: Não encontrado no escopo deste fluxo
 
-6) observabilidade: onde loga/traça?
+1) observabilidade: onde loga/traça?
+
 - logs: `create_logger_with_correlation(...)`
 - correlation/trace: extraído de `user_data` e propagado nos endpoints
 
-7) testes: onde validar?
+1) testes: onde validar?
+
 - unit: `tests/unit/test_whatsapp_provision_router.py`, `tests/unit/test_whatsapp_meta_onboarding.py`
 - integration: Não foi encontrado no escopo analisado
 
@@ -237,67 +261,81 @@ Se não existir automação
 ## 17) Anti-exemplos (obrigatório)
 
 Erro comum: validar permissão só no frontend.
+
 - por que é ruim: qualquer cliente HTTP pode burlar.
 - correção: validar sempre com `require_permission` no endpoint.
 
 Erro comum: salvar número ativo antes do `verify`.
+
 - por que é ruim: estado inconsistente e onboarding falso.
 - correção: manter `pending_verification` até `finalize_provision` concluir.
 
 Erro comum: executar takeover sem importação prévia.
+
 - por que é ruim: sistema local não conhece `phone_number_id`.
 - correção: usar `/import-existing` antes de `/takeover`.
 
 Erro comum: usar telefone fora de E.164.
+
 - por que é ruim: falha em integração e matching local.
 - correção: normalizar e validar via `PhoneNormalizer`.
 
 ## 18) Exemplos guiados (2 a 4)
 
 Exemplo 1: onboarding de número novo
+
 - Siga `POST /start` em `whatsapp_provision_router.py`.
 - Continue em `start_provision` no manager para ver registro + request de código.
 
 Exemplo 2: confirmação com idempotência
+
 - Siga `POST /verify` no router e localize `x_idempotency_key`.
 - Veja no teste `test_quando_verificar_com_idempotencia_entao_reutiliza_resposta`.
 
 Exemplo 3: migração de número existente
+
 - Leia `/import-existing` e depois `/takeover` no router.
 - Observe chamadas `ensure_webhook_subscription` e `ensure_template_exists`.
 
 Exemplo 4: validação operacional de webhook
+
 - Leia endpoint `/test-callback` no router.
 - Siga resolução de YAML do canal e assinatura simulada antes do processamento.
 
 ## 19) Erros comuns e como reconhecer (debugging)
 
 sintoma observável: `403` ao chamar `/start`.
+
 - hipótese: tenant sem permissão `provision.whatsapp`.
 - como confirmar: verificar `PermissionKeys.PROVISION_WHATSAPP` e auth da chave.
 - correção segura: ajustar permissão da credencial no diretório.
 
 sintoma observável: `409` no `/start`.
+
 - hipótese: telefone já registrado localmente.
 - como confirmar: `get_whatsapp_phone_by_e164` retorna registro com `phone_number_id`.
 - correção segura: seguir por `/takeover` quando aplicável.
 
 sintoma observável: `409` no `/verify` com mismatch.
+
 - hipótese: `phone_number_id` enviado diferente do armazenado.
 - como confirmar: comparar payload e registro local do número.
 - correção segura: reiniciar do `/start`.
 
 sintoma observável: `502` no `/start`.
+
 - hipótese: Meta não retornou `phone_number_id` ou falha de integração.
 - como confirmar: logs de erro do manager/provisioner e resposta HTTP externa.
 - correção segura: revisar credenciais Meta do tenant.
 
 sintoma observável: `404` no `/takeover`.
+
 - hipótese: número não importado no diretório.
 - como confirmar: consulta local por `phone_e164` sem resultado.
 - correção segura: executar `/import-existing` primeiro.
 
 sintoma observável: falha em remover webhook.
+
 - hipótese: ausência de `app_access_token`/`app_secret` no security keys.
 - como confirmar: exceção `SecurityKeysNotFoundError` no manager.
 - correção segura: cadastrar segredo no diretório e tentar novamente.
@@ -305,18 +343,21 @@ sintoma observável: falha em remover webhook.
 ## 20) Exercícios guiados (obrigatório)
 
 Exercício 1
+
 - objetivo: mapear autorização ponta a ponta.
 - passos: localizar decorators/dependencies de `PROVISION_WHATSAPP` nos endpoints.
 - como verificar no código: `whatsapp_provision_router.py` e `permissions.py`.
 - gabarito: todos os endpoints de provisão exigem a mesma permissão.
 
 Exercício 2
+
 - objetivo: entender persistência de estado do número.
 - passos: seguir `register_whatsapp_phone` no `/start` e no `/verify`.
 - como verificar no código: `whatsapp_provision_router.py` e `client_directory.py`.
 - gabarito: estado muda de `pending_verification` para `active` após finalize.
 
 Exercício 3
+
 - objetivo: validar sequência de migração sem re-onboarding.
 - passos: ler `/import-existing` e `/takeover`, depois os testes relacionados.
 - como verificar no código: `whatsapp_provision_router.py` e `test_whatsapp_provision_router.py`.
@@ -350,6 +391,7 @@ Exercício 3
 ## 23) Referências
 
 Referências internas:
+
 - `src/api/service_api.py`
 - `src/api/routers/whatsapp_provision_router.py`
 - `src/channel_layer/services/whatsapp_meta_onboarding.py`
@@ -358,27 +400,33 @@ Referências internas:
 - `src/api/routers/channel_router.py`
 - `tests/unit/test_whatsapp_provision_router.py`
 - `tests/unit/test_whatsapp_meta_onboarding.py`
-- `docs/README-WHATSAPP-PROVISIONING.md`
+- [README-WHATSAPP-PROVISIONING.md](./README-WHATSAPP-PROVISIONING.md)
 
 Referências externas consultadas:
+
 - FastAPI Documentation, Tutorial/User Guide.
 - Meta Developers, WhatsApp Cloud API (phone numbers e webhooks).
 
 ## 24) Pronto ou não pronto para produção?
 
 Status funcional:
+
 - Está pronto para provisionamento operacional (novo número, verificação, importação e takeover).
 
 Status de qualidade:
+
 - Está parcialmente pronto para resiliência máxima porque faltam evidências de retry explícito no serviço de integração externa desse fluxo.
 
 Status de produção:
+
 - Está pronto com controle de permissão, validações críticas e testes unitários relevantes.
 
 O que falta para elevar maturidade:
+
 - Padronizar retry/backoff explícito no provisioner com classificação de erro transitório.
 - Incluir teste de integração end-to-end (router -> manager -> client_directory com cenários de falha de rede).
 - Disponibilizar UI operacional dedicada (não encontrada no escopo analisado).
 
 Recomendação objetiva:
+
 - Primeiro estabilize retry + teste de integração; depois evolua UI. Isso reduz risco de incidentes reais antes de ampliar uso por times não técnicos.

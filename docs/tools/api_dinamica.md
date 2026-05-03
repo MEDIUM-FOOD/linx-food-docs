@@ -64,18 +64,7 @@ Esse desenho fortalece multi-tenant, governança e evolução incremental.
 
 ## 9. Fluxo principal
 
-```mermaid
-flowchart TD
-  A[dyn_api endpoint_id] --> B{Existe no YAML efetivo?}
-  B -->|Sim| C[Usa tools_config.api_dynamic]
-  B -->|Nao| D[Consulta api_operation_registry]
-  D --> E[Valida tenant, publish_to_agents e protocol_type]
-  E --> F[Mescla endpoint e auth em tools_config]
-  C --> G[Factory cria tool dinamica]
-  F --> G
-  G --> H[Cache dinamico por chave logica]
-  H --> I[Tool executavel para o agente]
-```
+![9. Fluxo principal](../assets/diagrams/docs-tools-api-dinamica-diagrama-01.svg)
 
 O diagrama deixa claro que o runtime não improvisa endpoint. A operação precisa existir no YAML ou estar publicada em registro compatível.
 

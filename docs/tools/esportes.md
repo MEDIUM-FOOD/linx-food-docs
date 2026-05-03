@@ -138,21 +138,7 @@ Ferramentas representativas:
 
 ## 9. Fluxo principal
 
-```mermaid
-flowchart TD
-    A[Pergunta esportiva] --> B{Tipo de resposta}
-    B -->|Calendário| C[Fixtures e partidas]
-    B -->|Tabela| D[Classificação]
-    B -->|Elenco| E[Times e jogadores]
-    B -->|Evento| F[Partida ou resumo]
-    B -->|Mercado| G[Odds]
-    C --> H[Provider escolhido]
-    D --> H
-    E --> H
-    F --> H
-    G --> H
-    H --> I[Resposta normalizada para o agente]
-```
+![9. Fluxo principal](../assets/diagrams/docs-tools-esportes-diagrama-01.svg)
 
 O diagrama mostra a lógica correta: primeiro o agente identifica o tipo de informação esportiva necessário; depois escolhe a family adequada.
 

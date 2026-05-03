@@ -8,7 +8,7 @@ Este documento consolida o contrato YAML compartilhado entre:
 
 Se você está começando agora, leia primeiro:
 
-1. `docs/README-AGENTIC-INICIANTES.md`
+1. [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md)
 
 Escopo:
 

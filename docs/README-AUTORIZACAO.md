@@ -46,6 +46,40 @@ o login tenha dado certo.
 - Boundary HTTP que aplica permissão por endpoint: [README-SERVICE-API.md](./README-SERVICE-API.md)
 - Índice central da documentação: [README.md](./README.md)
 
+## Que problema esta feature resolve
+
+Sem um catálogo central e uma precedência canônica, a plataforma cairia
+em um problema clássico: cada rota começaria a validar acesso de um
+jeito, a UI administrativa teria um modelo de grants diferente do usado
+pelas access keys e a revogação de acesso ficaria imprevisível.
+
+O desenho atual resolve isso concentrando três decisões em um mesmo
+contrato: qual principal está tentando entrar, qual permissão a rota
+declarou e qual regra de precedência governa conflito entre allow, deny
+e papel base.
+
+## Visão executiva
+
+Executivamente, autorização é o mecanismo que impede crescimento caótico
+de privilégios. Ela reduz risco de operação indevida, facilita auditoria
+de acesso e evita que a expansão da plataforma force times diferentes a
+manter catálogos paralelos de permissão.
+
+## Visão comercial
+
+Comercialmente, esse módulo sustenta uma promessa importante para
+clientes maiores: a plataforma não trata segurança como detalhe de tela.
+Ela já nasce com modelo claro de quem pode operar cadastro, billing,
+integração, canais e governança humana. Isso ajuda em pré-venda quando o
+cliente pergunta sobre segregação de acesso e trilha de responsabilidade.
+
+## Visão estratégica
+
+Estrategicamente, autorização central reforça a direção de plataforma
+multi-tenant governada. O mesmo catálogo pode ser reutilizado por API,
+painel web, fluxos agentic e futuras superfícies sem reabrir a discussão
+de permissão em cada módulo novo.
+
 ## Tipos de principal encontrados no catálogo
 
 - machine_credential para access key técnica.
@@ -129,6 +163,42 @@ refletir em novas chamadas sem depender de um login completo do zero.
    O payload deve refletir membership_role e effective_permissions.
 3. Altere grants humanos no painel administrativo.
    A nova chamada deve refletir o refresh do snapshot humano.
+
+## Troubleshooting
+
+### Recebe 403 mesmo com login válido
+
+Causa provável: a autenticação funcionou, mas o principal autenticado não
+carrega a permissão declarada no endpoint.
+
+Como confirmar: verifique a permissão anexada pela rota, confirme o tipo
+de principal resolvido e compare com `effective_permissions` ou com o
+catálogo da access key.
+
+### Recebe 401 em vez de 403
+
+Causa provável: a identidade não foi montada corretamente. Isso é um
+problema de autenticação, não de autorização.
+
+Como confirmar: valide primeiro a trilha de access key ou a sessão web em
+[README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md).
+
+### Grant mudou, mas a sessão humana continua parecendo antiga
+
+Causa provável: a sessão ainda não foi relida ou a rota consultada não
+executou o refresh do snapshot humano.
+
+Como confirmar: refaça a chamada que expõe o contexto autenticado e
+compare `membership_role` e `effective_permissions` antes e depois da
+alteração administrativa.
+
+## Checklist de entendimento
+
+- Entendi a diferença entre autenticação e autorização.
+- Entendi que a permissão nasce no endpoint e não em texto solto.
+- Entendi a ordem de precedência entre deny, allow e papel base.
+- Entendi por que o mesmo catálogo atende access key e sessão humana.
+- Entendi como diagnosticar 401 versus 403.
 
 ## Evidência no código
 

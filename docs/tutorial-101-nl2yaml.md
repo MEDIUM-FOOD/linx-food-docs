@@ -181,24 +181,7 @@ Valor entregue: tornar o pipeline operacionalmente acessível para quem pensa pr
 
 ## 12. Fluxo principal ponta a ponta
 
-```mermaid
-flowchart TD
-    A[Briefing em linguagem natural] --> B[Router objective-to-yaml]
-    B --> C[Resolve correlation_id, permissao e feature flag]
-    C --> D[Resolve target e YAML base]
-    D --> E[Preflight]
-    E -->|bloqueado| F[Retorna blocking_stage preflight]
-    E -->|pronto| G[Draft AST]
-    G -->|faltam decisoes| H[Retorna questions e blocking_stage draft]
-    G -->|rascunho consistente| I[Validate]
-    I -->|invalido| J[Retorna blocking_stage validate]
-    I -->|valido| K[Confirm dry-run]
-    K -->|falha| L[Retorna blocking_stage confirm]
-    K -->|sucesso| M[Retorna final_yaml, texto, diff e rastro]
-    M --> N[Studio revisa preview]
-    N --> O[Confirm com apply true]
-    O --> P[Normaliza output_path em app/yaml e salva]
-```
+![12. Fluxo principal ponta a ponta](assets/diagrams/docs-tutorial-101-nl2yaml-diagrama-01.svg)
 
 O ponto mais importante desse diagrama é que a publicação é uma etapa separada da geração. O fluxo oficial não trata preview e persistência como a mesma coisa.
 
@@ -543,29 +526,7 @@ Na UI, o uso prático é:
 
 ### 33.1. Sequência macro do fluxo único
 
-```mermaid
-sequenceDiagram
-    participant User as Operador
-    participant UI as Studio NL2YAML
-    participant API as Router config assembly
-    participant Service as AgenticAssemblyService
-    participant Draft as Draft AST
-    participant Confirm as Confirm dry-run
-
-    User->>UI: escreve briefing e escolhe target
-    UI->>API: POST objective-to-yaml
-    API->>Service: objective_to_yaml
-    Service->>Service: preflight
-    Service->>Draft: gerar rascunho AST
-    Draft-->>Service: ast_payload ou questions
-    Service->>Service: validate
-    Service->>Confirm: confirm apply false
-    Confirm-->>Service: final_yaml e diff
-    Service-->>API: resposta consolidada
-    API-->>UI: preview, diagnostics, decision_trace
-    User->>UI: confirma publicação
-    UI->>API: POST confirm apply true
-```
+![33.1. Sequência macro do fluxo único](assets/diagrams/docs-tutorial-101-nl2yaml-diagrama-02.svg)
 
 Esse diagrama mostra a separação entre gerar e persistir. A publicação só acontece depois de o preview já existir.
 

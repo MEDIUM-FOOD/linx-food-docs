@@ -65,18 +65,7 @@ Esse desenho melhora escalabilidade de produto e evita acoplamento excessivo ent
 
 ## 9. Fluxo principal
 
-```mermaid
-flowchart TD
-  A[dyn_sql query_id] --> B{Existe no YAML efetivo?}
-  B -->|Sim| C[Usa tools_config.sql_dynamic]
-  B -->|Nao| D[Consulta sql_query_registry]
-  D --> E[Valida tenant, publish_to_agents e read_only]
-  E --> F[Mescla secao resolvida em tools_config]
-  C --> G[Factory cria tool dinamica]
-  F --> G
-  G --> H[Cache dinamico por chave logica]
-  H --> I[Tool executavel para o agente]
-```
+![9. Fluxo principal](../assets/diagrams/docs-tools-sql-dinamico-diagrama-01.svg)
 
 O diagrama mostra o comportamento mais importante: a query não nasce livremente no agente. Ela precisa existir no YAML ou em registro persistido publicado.
 

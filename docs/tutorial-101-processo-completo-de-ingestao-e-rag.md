@@ -60,5 +60,5 @@ Pense numa biblioteca. A ingestão é o trabalho de catalogar e guardar os livro
 
 - [README-INGESTAO.md](./README-INGESTAO.md)
 - [README-RAG.md](./README-RAG.md)
-- [PIPELINE-INGESTAO-RAG.md](./PIPELINE-INGESTAO-RAG.md)
+- [README-LOGGING.md](./README-LOGGING.md)
 - [README-ARQUITETURA.md](./README-ARQUITETURA.md)

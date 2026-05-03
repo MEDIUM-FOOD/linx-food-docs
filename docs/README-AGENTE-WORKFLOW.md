@@ -1,5 +1,8 @@
 # Manual técnico, executivo, comercial e estratégico: Agente Workflow
 
+> Este manual consolidado continua útil como visão geral do tema, mas agora foi complementado por dois manuais especializados e mais profundos: [README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md](./README-CONCEITUAL-AGENTE-WORKFLOW-COMPLETO.md) e [README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md](./README-TECNICO-AGENTE-WORKFLOW-COMPLETO.md). Use os dois novos arquivos quando a necessidade for entender o contrato, o runtime, a sintaxe, os nodes, a retomada HIL e os exemplos reais com mais precisão.
+> Para a trilha de monitoramento pós-resposta, revisão humana e melhoria futura via interaction_runs, veja também [README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md](./README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md) e [README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md](./README-TECNICO-TELEMETRIA-INTERACOES-AGENTE.md).
+
 ## 1. O que é esta feature
 
 O Agente Workflow é a espinha dorsal determinística da plataforma quando o produto precisa declarar com precisão a ordem das etapas, os pontos de decisão, os dados que entram e saem de cada passo e os critérios que definem o próximo salto do processo. Ele não é um agente que improvisa o fluxo em tempo real. Ele é um runtime LangGraph montado a partir de YAML, validado por AST, compilado para um grafo executável e envolvido por telemetria, integridade estática, cache de artefato e contratos explícitos de continuidade.
@@ -164,20 +167,7 @@ O runtime constrói o estado inicial, roda o grafo, normaliza o status, trata er
 
 ## 9. Pipeline ou fluxo principal
 
-```mermaid
-flowchart TD
-    A[YAML com selected_workflow e workflows] --> B[WorkflowParser cria AST canônica]
-    B --> C[WorkflowCompiler normaliza ids e fragmento]
-    C --> D[WorkflowSemanticValidator valida contrato e integridade]
-    D --> E[AgentWorkflow carrega contexto e factories]
-    E --> F{edges declaradas e válidas?}
-    F -- Sim --> G[EdgeCompiler monta modo edge-first]
-    F -- Não --> H[Montagem node-driven]
-    G --> I[StateGraph compilado]
-    H --> I
-    I --> J[Run com estado inicial e thread_id]
-    J --> K[Retorno com final_response, metadata e execution_steps]
-```
+![9. Pipeline ou fluxo principal](assets/diagrams/docs-readme-agente-workflow-diagrama-01.svg)
 
 O diagrama mostra a lógica principal: o workflow não começa na invocação do modelo, e sim no contrato. Primeiro o sistema decide se o documento é compilável. Só depois ele compila e executa.
 
@@ -595,25 +585,7 @@ Como confirmar: revisar edges da origem, expressões when e defaults.
 
 ## 26. Diagramas
 
-```mermaid
-sequenceDiagram
-    participant API as API /workflow/execute
-    participant Service as WorkflowExecutionService
-    participant Orch as WorkflowOrchestrator
-    participant Runtime as AgentWorkflow
-    participant Graph as StateGraph
-
-    API->>Service: hidrata YAML e sessão
-    Service->>Orch: execute(message, thread_id)
-    Orch->>Runtime: initialize()
-    Runtime->>Runtime: parser, integridade, factories, cache
-    Runtime->>Graph: compila node-driven ou edge-first
-    Orch->>Runtime: run(message, thread_id)
-    Runtime->>Graph: ainvoke(initial_state)
-    Graph-->>Runtime: state final
-    Runtime-->>Orch: final_response e metadata
-    Orch-->>API: response normalizada
-```
+![26. Diagramas](assets/diagrams/docs-readme-agente-workflow-diagrama-02.svg)
 
 O diagrama mostra a ordem prática da execução exposta pela API. Ele ajuda a entender que a rota HTTP não executa o grafo diretamente. Ela passa por serviço, orchestrator e runtime antes de chegar no StateGraph.
 

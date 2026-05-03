@@ -20,8 +20,8 @@ Ao final voce deve conseguir:
 - auto_config: snapshot derivado da ingestao com sinais de dominio, termos, codigos e pistas de expansao. Evidencia: src/ingestion_layer/processors/domain_plugins/domain_config_repository.py, metodo update_auto_config.
 - snapshot: fotografia persistida de vocabulario e metadados em um momento da ingestao. Evidencia: src/qa_layer/rag_engine/bm25_index_manager.py, dataclass BM25VocabularySnapshot.
 - query expansion: enriquecimento da pergunta com termos relacionados para melhorar cobertura. Evidencia: tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py.
-- detection keywords: palavras usadas para ajudar a identificar o dominio da pergunta. Evidencia: src/qa_layer/rag_engine/query_analyzer.py, metodo _load_auto_detection_keywords.
-- runtime domain config: configuracao de dominio montada na hora da pergunta. Evidencia: src/domain_configuration/service.py, metodo _build_runtime_domain_config.
+- detection keywords: palavras usadas para ajudar a identificar o dominio da pergunta. Evidencia: src/qa_layer/rag_engine/query_analyzer.py, metodo_load_auto_detection_keywords.
+- runtime domain config: configuracao de dominio montada na hora da pergunta. Evidencia: src/domain_configuration/service.py, metodo_build_runtime_domain_config.
 - retrieval hibrido: recuperacao que junta sinais lexicais e sinais semanticos. Evidencia: src/qa_layer/rag_engine/retrieval_engine.py e src/qa_layer/rag_engine/bm25_retriever.py.
 - manifest de ingestao: registro persistido do que foi processado e dos sinais extraidos. Evidencia: src/ingestion_layer/telemetry/domain_signal_processor.py.
 - rag_router: camada HTTP que recebe ingestao, pergunta e reindexacao. Evidencia: src/api/routers/rag_router.py.
@@ -32,7 +32,7 @@ Pense no sistema como um bibliotecario especializado em normas DNIT.
 
 BM25 e a parte do bibliotecario que olha o texto impresso do documento e pensa: “essa pergunta citou o codigo certo, a sigla certa ou a expressao exata?”. Ele e forte quando a pergunta traz termos literais como DNIT 031, concreto asfaltico ou uma sigla muito especifica. Isso aparece no codigo quando o runtime carrega vocabulario persistido do BM25 e usa o BM25Retriever para pontuar ocorrencias lexicais. Evidencia: src/qa_layer/rag_engine/retrieval_engine.py, metodo merge_bm25_vocabulary_config; src/qa_layer/rag_engine/bm25_retriever.py, metodo retrieve.
 
-auto_config e a parte do bibliotecario que aprendeu o assunto da estante com a ingestao. Em vez de procurar so a palavra exata, ele pensa: “quem pergunta sobre fresagem tambem pode estar falando de pavimento, camada, remendo, norma e tabela tecnica relacionada”. Isso aparece quando a ingestao agrega sinais de dominio e grava um snapshot na coluna ingestion_domain_processors.auto_config, depois carregado no runtime pelo DomainConfigurationService e lido pelo QueryAnalyzer. Evidencia: src/ingestion_layer/processors/domain_plugins/domain_config_repository.py, metodo update_auto_config; src/domain_configuration/service.py, metodo _apply_auto_config_runtime_hints; src/qa_layer/rag_engine/query_analyzer.py, metodo _load_auto_detection_keywords.
+auto_config e a parte do bibliotecario que aprendeu o assunto da estante com a ingestao. Em vez de procurar so a palavra exata, ele pensa: “quem pergunta sobre fresagem tambem pode estar falando de pavimento, camada, remendo, norma e tabela tecnica relacionada”. Isso aparece quando a ingestao agrega sinais de dominio e grava um snapshot na coluna ingestion_domain_processors.auto_config, depois carregado no runtime pelo DomainConfigurationService e lido pelo QueryAnalyzer. Evidencia: src/ingestion_layer/processors/domain_plugins/domain_config_repository.py, metodo update_auto_config; src/domain_configuration/service.py, metodo_apply_auto_config_runtime_hints; src/qa_layer/rag_engine/query_analyzer.py, metodo_load_auto_detection_keywords.
 
 Resumo de bolso:
 
@@ -77,8 +77,8 @@ Observacao: a validacao automatica de Mermaid nao estava disponivel no ambiente 
 - O endpoint principal de ETL e POST /rag/etl. Evidencia: src/api/routers/rag_router.py, funcao extract_transform_load_endpoint.
 - O endpoint de reindexacao BM25 e POST /rag/reindex. Evidencia: src/api/routers/rag_router.py, funcao reindex_bm25_endpoint.
 - O rag_router entra no app FastAPI pelo include_router do service_api. Evidencia: src/api/service_api.py, linhas de include_router do rag_router.
-- O runtime de dominio e montado no DomainConfigurationService. Evidencia: src/domain_configuration/service.py, metodo _build_runtime_domain_config.
-- O auto_config manual e o auto_config derivado sao mesclados antes de virar hints de runtime. Evidencia: src/domain_configuration/service.py, metodos _merge_manual_auto_config e _apply_auto_config_runtime_hints.
+- O runtime de dominio e montado no DomainConfigurationService. Evidencia: src/domain_configuration/service.py, metodo_build_runtime_domain_config.
+- O auto_config manual e o auto_config derivado sao mesclados antes de virar hints de runtime. Evidencia: src/domain_configuration/service.py, metodos_merge_manual_auto_config e_apply_auto_config_runtime_hints.
 - O QueryAnalyzer carrega keywords vindas do auto_config. Evidencia: src/qa_layer/rag_engine/query_analyzer.py, atribuicao auto_detection_keywords e metodo _load_auto_detection_keywords.
 - O RetrievalEngine injeta vocabulario BM25 persistido no runtime. Evidencia: src/qa_layer/rag_engine/retrieval_engine.py, metodo merge_bm25_vocabulary_config.
 - O BM25Retriever executa a busca lexical. Evidencia: src/qa_layer/rag_engine/bm25_retriever.py, metodo retrieve.
@@ -107,12 +107,12 @@ Observacao: a validacao automatica de Mermaid nao estava disponivel no ambiente 
 2. Durante o processamento, a camada de telemetria agrega sinais de dominio. Evidencia: src/ingestion_layer/telemetry/domain_signal_processor.py.
 3. Esses sinais sao consolidados e enviados ao repositorio de dominio, que decide se grava ou nao o auto_config. Evidencia: src/ingestion_layer/processors/domain_plugins/domain_config_repository.py, metodo update_auto_config.
 4. O snapshot persistido vai para ingestion_domain_processors.auto_config. Evidencia: mesmo arquivo acima.
-5. Quando uma pergunta chega, o DomainConfigurationService monta a configuracao de runtime do dominio. Evidencia: src/domain_configuration/service.py, metodo _build_runtime_domain_config.
+5. Quando uma pergunta chega, o DomainConfigurationService monta a configuracao de runtime do dominio. Evidencia: src/domain_configuration/service.py, metodo_build_runtime_domain_config.
 6. Nessa montagem, o auto_config e transformado em hints de deteccao, expansao e vocabulario auxiliar. Evidencia: src/domain_configuration/service.py, metodo _apply_auto_config_runtime_hints.
-7. O QueryAnalyzer carrega as auto_detection_keywords e usa isso para ajudar a reconhecer o dominio da pergunta. Evidencia: src/qa_layer/rag_engine/query_analyzer.py, metodo _load_auto_detection_keywords.
+7. O QueryAnalyzer carrega as auto_detection_keywords e usa isso para ajudar a reconhecer o dominio da pergunta. Evidencia: src/qa_layer/rag_engine/query_analyzer.py, metodo_load_auto_detection_keywords.
 8. Em paralelo, o RetrievalEngine consulta o snapshot BM25 persistido e injeta detection_keywords e query_expansion_vocabulary no runtime. Evidencia: src/qa_layer/rag_engine/retrieval_engine.py, metodo merge_bm25_vocabulary_config.
 9. O BM25Retriever pontua o texto literal com base nesse vocabulário e no corpus indexado. Evidencia: src/qa_layer/rag_engine/bm25_retriever.py, metodo retrieve.
-10. O IntelligentOrchestrator combina esses sinais para decidir o melhor contexto antes da resposta. Evidencia: src/qa_layer/rag_engine/intelligent_orchestrator.py, metodos _apply_vocabulary_to_yaml e _merge_bm25_vocabulary_config.
+10. O IntelligentOrchestrator combina esses sinais para decidir o melhor contexto antes da resposta. Evidencia: src/qa_layer/rag_engine/intelligent_orchestrator.py, metodos_apply_vocabulary_to_yaml e_merge_bm25_vocabulary_config.
 
 ### Com config ativa
 
@@ -128,19 +128,19 @@ O fluxo existe e esta implementado. O que varia de ambiente para ambiente e a di
 | --- | --- | --- | --- | --- |
 | Entry HTTP de ingestao | src/api/routers/rag_router.py, ingest_content_endpoint | pronto | Ha ponto de entrada claro para gerar sinais de dominio | Validar payload real do tenant |
 | Persistencia de auto_config | src/ingestion_layer/processors/domain_plugins/domain_config_repository.py, update_auto_config | pronto | O snapshot pode ser gravado por dominio | Melhorar logs decisorios de gravacao |
-| Runtime de auto_config | src/domain_configuration/service.py, _apply_auto_config_runtime_hints | pronto | A pergunta recebe hints, keywords e expansao | Aumentar observabilidade de quais hints entraram |
-| Consumo no QueryAnalyzer | src/qa_layer/rag_engine/query_analyzer.py, _load_auto_detection_keywords | pronto | Ajuda a detectar dominio com base no historico de ingestao | Medir precisao por dominio |
+| Runtime de auto_config | src/domain_configuration/service.py,_apply_auto_config_runtime_hints | pronto | A pergunta recebe hints, keywords e expansao | Aumentar observabilidade de quais hints entraram |
+| Consumo no QueryAnalyzer | src/qa_layer/rag_engine/query_analyzer.py,_load_auto_detection_keywords | pronto | Ajuda a detectar dominio com base no historico de ingestao | Medir precisao por dominio |
 | Persistencia BM25 | src/qa_layer/rag_engine/bm25_index_manager.py | pronto | O vocabulario lexical pode ser salvo e recarregado | Confirmar cobertura em todos os tenants |
 | Integracao BM25 no runtime | src/qa_layer/rag_engine/retrieval_engine.py, merge_bm25_vocabulary_config | pronto | A busca lexical recebe vocabulario persistido | Adicionar metricas comparativas por consulta |
 | Retrieval lexical | src/qa_layer/rag_engine/bm25_retriever.py, retrieve | pronto | Termos exatos e codigos literais ganham peso | Afinar relevancia em dominios ruidosos |
 | Casos DNIT de expansao | tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py | pronto | Ha prova automatizada de enriquecimento DNIT | Adicionar benchmarks agressivos com corpus real |
-| Execucao local minima | app/main.py e docs/README-TESTS.MD | parcial | Subir API e facil, mas depende de env correta e bancos | Montar arquivo de ambiente minimo por cenario |
+| Execucao local minima | app/main.py e [README-TESTS.MD](./README-TESTS.MD) | parcial | Subir API e facil, mas depende de env correta e bancos | Montar arquivo de ambiente minimo por cenario |
 | Execucao em container/cloud | Dockerfile e ausencia de compose dedicado no escopo analisado | parcial | Existe imagem, mas nao foi encontrado no escopo um roteiro completo para BM25 + telemetria + Redis | Criar compose/tutorial operacional especifico |
 | Benchmark formal BM25 vs auto_config | Nao encontrado no codigo analisado | ausente | Nao ha numero comparativo reproduzivel por tenant | Criar suite de benchmark DNIT |
 
 ## 14) Como colocar para funcionar
 
-Passo 0. Prepare o ambiente Python 3.11 e a .venv. Evidencia: pyproject.toml e docs/README-TESTS.MD.
+Passo 0. Prepare o ambiente Python 3.11 e a .venv. Evidencia: pyproject.toml e [README-TESTS.MD](./README-TESTS.MD).
 
 Passo 1. Defina FASTAPI_PORT, porque ele e obrigatorio. Evidencia: src/config/config_api/system_config_manager.py, metodo _get_required_fastapi_port.
 
@@ -156,7 +156,7 @@ Passo 6. Execute uma ingestao com POST /rag/ingest para gerar ou atualizar sinai
 
 Passo 7. Se o foco for lexical, use POST /rag/reindex para descartar e reconstruir o indice BM25. Evidencia: src/api/routers/rag_router.py, reindex_bm25_endpoint.
 
-Passo 8. Valide o comportamento DNIT pelo teste de menor custo operacional. Comando focado: `source .venv/bin/activate && PROMETEU_RUNNING_TESTS=1 pytest tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py -q`. Evidencia: docs/README-TESTS.MD e tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py.
+Passo 8. Valide o comportamento DNIT pelo teste de menor custo operacional. Comando focado: `source .venv/bin/activate && PROMETEU_RUNNING_TESTS=1 pytest tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py -q`. Evidencia: [README-TESTS.MD](./README-TESTS.MD) e tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py.
 
 Passo 9. O que eu espero ver:
 
@@ -191,23 +191,23 @@ Paths: src/api/routers/rag_router.py.
 
 Contrato de entrada: ingestao em /rag/ingest; reindexacao em /rag/reindex.
 
-2. Config: qual YAML ou env controla?
+1. Config: qual YAML ou env controla?
 
 Keys: domain_specific_processing, domain_specific_rag, FASTAPI_PORT, BM25_INDEX_DATABASE_DSN, BM25_INDEX_SCHEMA, BM25_INDEX_TABLE, INGESTION_TELEMETRY_STORAGE, INGESTION_TELEMETRY_DSN.
 
 Onde e lido: src/config/config_api/system_config_manager.py e src/ingestion_layer/processors/domain_plugins/domain_config_repository.py.
 
-3. Execucao: qual componente entra?
+1. Execucao: qual componente entra?
 
 Builder ou factory principal: DomainConfigurationService para hints de dominio e RetrievalEngine para integracao BM25.
 
 State relevante: runtime domain config, auto_detection_keywords, detection_keywords, query_expansion_vocabulary.
 
-4. Ferramentas: quais tools sao usadas?
+1. Ferramentas: quais tools sao usadas?
 
 Para este fluxo especifico, nao foi encontrado no codigo analisado um Tool LangChain como ator principal. O fluxo e dominado por servicos e componentes de retrieval.
 
-5. Dados: onde persiste, cacheia ou indexa?
+1. Dados: onde persiste, cacheia ou indexa?
 
 MySQL: nao encontrado no codigo analisado como armazenamento principal deste tema.
 
@@ -217,13 +217,13 @@ PostgreSQL: bm25_indexes e ingestion_domain_processors.auto_config. Evidencia: s
 
 Qdrant ou outros: a busca vetorial existe no projeto, mas nao foi o foco principal do trecho de codigo analisado neste tutorial.
 
-6. Observabilidade: onde loga?
+1. Observabilidade: onde loga?
 
 Logs de bootstrap: app/main.py e service_api.py.
 
 Logs de runtime BM25 e auto_config: src/qa_layer/rag_engine/retrieval_engine.py, src/domain_configuration/service.py e src/qa_layer/rag_engine/query_analyzer.py.
 
-7. Testes: onde validar?
+1. Testes: onde validar?
 
 Unit: tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py.
 
@@ -291,11 +291,11 @@ Siga o fio assim: tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py pr
 
 Hipotese: o auto_config nao entrou no runtime.
 
-Como confirmar: verifique src/domain_configuration/service.py e procure a execucao de _apply_auto_config_runtime_hints; depois confira se o QueryAnalyzer carrega auto_detection_keywords em src/qa_layer/rag_engine/query_analyzer.py.
+Como confirmar: verifique src/domain_configuration/service.py e procure a execucao de_apply_auto_config_runtime_hints; depois confira se o QueryAnalyzer carrega auto_detection_keywords em src/qa_layer/rag_engine/query_analyzer.py.
 
 Correcao segura: corrigir a montagem do runtime antes de alterar retrieval.
 
-2. Sintoma observavel: consulta com codigo exato nao melhora.
+1. Sintoma observavel: consulta com codigo exato nao melhora.
 
 Hipotese: o vocabulario BM25 persistido nao foi carregado.
 
@@ -303,7 +303,7 @@ Como confirmar: verifique src/qa_layer/rag_engine/retrieval_engine.py e src/qa_l
 
 Correcao segura: restaurar a persistencia ou reindexacao BM25 antes de mexer no orchestrator.
 
-3. Sintoma observavel: a ingestao termina, mas nao aparece novo snapshot de dominio.
+1. Sintoma observavel: a ingestao termina, mas nao aparece novo snapshot de dominio.
 
 Hipotese: o repositorio de dominio recusou a gravacao por escopo ou falta de backend.
 
@@ -311,7 +311,7 @@ Como confirmar: verifique src/ingestion_layer/processors/domain_plugins/domain_c
 
 Correcao segura: corrigir configuracao de telemetria e filtros de escopo.
 
-4. Sintoma observavel: o teste DNIT de expansao falha apos uma mudanca aparentemente pequena.
+1. Sintoma observavel: o teste DNIT de expansao falha apos uma mudanca aparentemente pequena.
 
 Hipotese: alguma etapa removeu hints ou alterou merge de vocabulario.
 
@@ -319,15 +319,15 @@ Como confirmar: leia tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py
 
 Correcao segura: restaurar o merge de hints ou ajustar a mudanca de forma compativel com o contrato do teste.
 
-5. Sintoma observavel: a API nao sobe.
+1. Sintoma observavel: a API nao sobe.
 
 Hipotese: FASTAPI_PORT ausente ou invalido.
 
-Como confirmar: verifique src/config/config_api/system_config_manager.py, metodo _get_required_fastapi_port.
+Como confirmar: verifique src/config/config_api/system_config_manager.py, metodo_get_required_fastapi_port.
 
 Correcao segura: definir FASTAPI_PORT com valor valido entre 1 e 65535.
 
-6. Sintoma observavel: reindexacao BM25 falha cedo.
+1. Sintoma observavel: reindexacao BM25 falha cedo.
 
 Hipotese: BM25_INDEX_DATABASE_DSN nao foi definido.
 
@@ -341,7 +341,7 @@ Exercicio 1.
 
 Objetivo: provar para voce mesmo onde o auto_config entra no runtime.
 
-Passos: abra src/domain_configuration/service.py; localize _apply_auto_config_runtime_hints; depois abra src/qa_layer/rag_engine/query_analyzer.py e localize _load_auto_detection_keywords.
+Passos: abra src/domain_configuration/service.py; localize_apply_auto_config_runtime_hints; depois abra src/qa_layer/rag_engine/query_analyzer.py e localize_load_auto_detection_keywords.
 
 Como verificar no codigo: confirme que a saida do service alimenta a analise da query.
 
@@ -392,18 +392,18 @@ Gabarito: DNIT cobre bem o valor pratico do auto_config porque usa termos tecnic
 - Validar se o BM25Retriever continua focado em retrieval lexical, sem acoplamento indevido.
 - Validar se a persistencia do auto_config continua centralizada no DomainConfigRepository.
 - Rodar o teste tests/unit/qa_layer/rag_engine/test_dnit_query_expansion.py.
-- Se a mudanca for ampla, rodar a suite oficial descrita em docs/README-TESTS.MD.
-- Verificar se alguma mudanca exige atualizar docs/README-RAG.md ou docs/README-INGESTAO.md.
+- Se a mudanca for ampla, rodar a suite oficial descrita em [README-TESTS.MD](./README-TESTS.MD).
+- Verificar se alguma mudanca exige atualizar [README-RAG.md](./README-RAG.md) ou [README-INGESTAO.md](./README-INGESTAO.md).
 - Nao introduzir fallback silencioso para env ou YAML obrigatorio.
 
 ## 24) Referencias
 
 Referencias internas:
 
-- README.md
-- docs/README-RAG.md
-- docs/README-INGESTAO.md
-- docs/README-TESTS.MD
+- [../README.md](../README.md)
+- [README-RAG.md](./README-RAG.md)
+- [README-INGESTAO.md](./README-INGESTAO.md)
+- [README-TESTS.MD](./README-TESTS.MD)
 - app/main.py
 - service_api.py
 - src/api/service_api.py

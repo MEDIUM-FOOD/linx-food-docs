@@ -16,8 +16,38 @@ registro governado por tenant quando ela não está no YAML local.
 - Guia geral de tools: [GUIA-USUARIO-TOOLS.md](./GUIA-USUARIO-TOOLS.md)
 - Catálogo governado por tenant: [README-INTEGRACOES-GOVERNADAS.md](./README-INTEGRACOES-GOVERNADAS.md)
 - SQL dinâmico e procedures: [README-DYNAMIC-SQL-TOOLS.md](./README-DYNAMIC-SQL-TOOLS.md)
+- Manual conceitual especializado: [README-CONCEITUAL-DYNAMIC-API-TOOLS.md](./README-CONCEITUAL-DYNAMIC-API-TOOLS.md)
+- Manual técnico especializado: [README-TECNICO-DYNAMIC-API-TOOLS.md](./README-TECNICO-DYNAMIC-API-TOOLS.md)
 - Tools por finalidade: [tools/por_finalidade.md](./tools/por_finalidade.md)
 - Catálogo alfabético: [tools/alfabetica.md](./tools/alfabetica.md)
+
+## Leitura especializada recomendada
+
+Este manual continua sendo a porta de entrada do tema dyn_api. Para aprofundamento por finalidade, use a trilha especializada abaixo.
+
+- [README-CONCEITUAL-DYNAMIC-API-TOOLS.md](./README-CONCEITUAL-DYNAMIC-API-TOOLS.md): explica dyn_api como capability governada, incluindo valor executivo, comercial e estratégico.
+- [README-TECNICO-DYNAMIC-API-TOOLS.md](./README-TECNICO-DYNAMIC-API-TOOLS.md): detalha a arquitetura de runtime, o fallback governado, autenticação, boundaries administrativos, troubleshooting e limites operacionais.
+
+## Visão executiva
+
+Executivamente, dyn_api reduz custo de integração repetida. Em vez de
+pedir um deploy novo para cada endpoint externo homologado, o produto
+pode publicar operações governadas por tenant com contrato, autenticação
+e guardrails já descritos.
+
+## Visão comercial
+
+Comercialmente, essa família ajuda a vender velocidade com controle. O
+cliente percebe ganho porque novas integrações simples deixam de exigir
+um conector dedicado em código, mas a plataforma continua impondo
+catálogo, autenticação válida e filtro por publicação para agentes.
+
+## Visão estratégica
+
+Estrategicamente, dyn_api é uma peça da tese YAML-first governada. Ela
+permite expandir capacidade agentic por configuração e catálogo
+persistido, sem transformar cada nova API externa em ramo especial do
+runtime.
 
 ## Sintaxe pública no YAML
 
@@ -105,6 +135,40 @@ ou esquecer um obrigatório, a falha deve acontecer antes da API externa.
 4. Confirme se a autenticação foi resolvida.
 5. Em runtime, siga o correlation_id para separar erro de cadastro,
      autenticação e rede.
+
+## Troubleshooting
+
+### A tool dyn_api não aparece para o agente
+
+Causa provável: o endpoint não foi publicado no YAML local nem no
+registro governado com `publish_to_agents=true`.
+
+Como confirmar: valide primeiro a trilha de resolução em
+`tools_config.api_dynamic.endpoints` e depois o cadastro governado por
+tenant.
+
+### A operação existe, mas falha antes da chamada externa
+
+Causa provável: schema dinâmico rejeitou parâmetro ausente, nome de campo
+inválido ou autenticação mal resolvida.
+
+Como confirmar: compare o payload informado com o contrato montado pela
+factory e confirme se headers, query e body exigidos foram declarados.
+
+### O cadastro governado existe, mas continua ignorado
+
+Causa provável: `protocol_type` fora de `rest_json`, ausência de
+`tenant_id` no contexto ou perfil de autenticação não resolvido.
+
+Como confirmar: revise a linha do registro governado e confirme se ela
+está ativa, publicada e compatível com o resolver.
+
+## Checklist de entendimento
+
+- Entendi quando dyn_api usa YAML local e quando cai no registro governado.
+- Entendi por que `publish_to_agents` e `protocol_type` importam.
+- Entendi a diferença entre erro de contrato, erro de autenticação e erro de rede.
+- Entendi quando dyn_api acelera a entrega e quando ainda faz mais sentido um conector dedicado.
 
 ## Evidência no código
 

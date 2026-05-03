@@ -21,6 +21,28 @@ claro o que é infraestrutura e o que é ativo de negócio.
 - Catálogo alfabético de tools: [tools/alfabetica.md](./tools/alfabetica.md)
 - Catálogo por finalidade: [tools/por_finalidade.md](./tools/por_finalidade.md)
 
+## Visão executiva
+
+Executivamente, este módulo reduz um problema caro de escala: segredo,
+endpoint, query e procedure deixam de ficar espalhados entre times,
+ambientes e YAMLs locais. O ganho real é governança com reaproveitamento.
+O cadastro técnico fica separável do ativo funcional, e o teste seguro
+permite validar contrato sem abrir um console irrestrito de produção.
+
+## Visão comercial
+
+Comercialmente, integrações governadas ajudam a vender velocidade com
+controle. O cliente percebe que a plataforma consegue homologar APIs e
+operações SQL sem depender de código novo em toda pequena evolução, mas
+também não abre mão de autenticação, rastreabilidade e guardrails.
+
+## Visão estratégica
+
+Estrategicamente, esse catálogo é o elo entre administração humana e
+execução agentic. Ele prepara ativos que depois podem virar dyn_api,
+dyn_sql ou apoio a NL2SQL, sem duplicar a lógica de cadastro, teste e
+publicação em cada superfície nova.
+
 ## Trilhas HTTP observadas no runtime
 
 O módulo já aparece no boundary administrativo em três grupos.
@@ -156,6 +178,40 @@ publicação para agentes e a execução do agente ficam em outras camadas.
   segredo.
 6. Se o objetivo final for agentic, valide depois o uso em dyn_api,
   dyn_sql ou schema_rag_sql.
+
+## Troubleshooting
+
+### A operação existe no catálogo, mas não aparece para agentes
+
+Causa provável: o cadastro funcional foi criado, mas não passou pela
+trilha de publicação usada por dyn_api ou dyn_sql.
+
+Como confirmar: diferencie cadastro administrativo de publicação
+agentic. O item pode estar válido para teste seguro e ainda não estar
+pronto para consumo por agente.
+
+### O teste HTTP devolve bloqueio mesmo com endpoint correto
+
+Causa provável: a operação usa método mutável sem `allow_non_idempotent`
+ou há parâmetro obrigatório de rota faltando.
+
+Como confirmar: revise método, flags do teste seguro e presença dos
+parâmetros exigidos antes da chamada externa.
+
+### O teste SQL falha mesmo com conexão válida
+
+Causa provável: a query caiu no guardrail de leitura, excedeu timeout ou
+tentou devolver mais do que o preview administrativo aceita.
+
+Como confirmar: valide se a query é realmente de leitura e se o retorno
+esperado cabe no modo de teste seguro.
+
+## Checklist de entendimento
+
+- Entendi a diferença entre cadastro técnico e cadastro funcional.
+- Entendi por que teste seguro não é console livre de produção.
+- Entendi como o catálogo administrativo se conecta a dyn_api, dyn_sql e NL2SQL.
+- Entendi como diagnosticar falha de importação, autenticação e guardrail.
 
 ## Evidência no código
 

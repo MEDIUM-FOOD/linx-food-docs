@@ -83,6 +83,15 @@ Imagine uma operação agentic assistida pela UI administrativa. O operador usa 
 
 Pense no boundary HTTP como a recepção de um hospital. A recepção não faz a cirurgia, mas decide se o paciente pode entrar, coleta identificação, abre a ficha, encaminha para a área certa e diz como acompanhar o caso. Se a recepção estiver desorganizada, até uma equipe clínica excelente vai trabalhar com informação errada.
 
+## Leituras relacionadas
+
+- [README.md](./README.md): índice por intenção para localizar a próxima trilha.
+- [README-ARQUITETURA.md](./README-ARQUITETURA.md): mostra por que a API é só um dos papéis da plataforma.
+- [README-LOGGING.md](./README-LOGGING.md): detalha correlation_id, logging de request e análise forense.
+- [README-SCHEDULER.md](./README-SCHEDULER.md): ajuda a separar o que pertence ao boundary e o que pertence à coordenação temporal.
+- [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md): aprofunda pausa humana e retomada governada expostas pela borda.
+- [README-AG-UI.md](./README-AG-UI.md): mostra uma superfície SSE especializada publicada por esta API.
+
 ## 12. Evidências no código
 
 - [src/api/service_api.py](../src/api/service_api.py): montagem do app FastAPI, middlewares, routers e publicação da UI.

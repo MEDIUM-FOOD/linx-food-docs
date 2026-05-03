@@ -1,17 +1,15 @@
-sequenceDiagram
-  participant U as Usuario
-  participant API as auth_router
-  participant SESS as SessionRepository
-  participant TOTP as TotpService
-
-  U->>API: Login web federado ou local
-  API->>SESS: issue(session)
-  API->>TOTP: get_status(email)
-
-  alt TOTP ja habilitado
-    API-->>U: status mfa_challenge + session_token temporario
-  else Politica global exige MFA
-    API-->>U: status mfa_setup_required + session_token temporario
-  else Sem MFA pendente
-    API-->>U: cookie final da sessao web
-  end
+flowchart TD
+    A["Login principal"] --> B["Emite sessao autenticada no cache central"]
+    B --> C["Consulta estado TOTP persistido"]
+    C --> D["Consulta FEDERATED_MFA_REQUIRED"]
+    D --> E{"Conta tem TOTP ativo?"}
+    E -- Sim --> F["Retorna mfa_challenge com session_token"]
+    E -- Nao --> G{"Politica exige MFA?"}
+    G -- Nao --> H["Retorna ok e grava cookie final"]
+    G -- Sim --> I["Retorna mfa_setup_required com session_token"]
+    F --> J["Usuario informa codigo"]
+    I --> K["Usuario recebe QR Code e ativa autenticador"]
+    K --> J
+    J --> L["Valida codigo TOTP"]
+    L --> M["Persiste ou atualiza verificacao"]
+    M --> N["Grava cookie final"]

@@ -30,7 +30,7 @@ Conceitualmente, o sistema trata tools nativas como catálogo global de família
 
 Uma tool direta aponta para uma implementação concreta já conhecida.
 
-Uma factory parametrizada registra a família, não cada item concreto. É o caso de `dyn_sql`, `dyn_api` e `proc_sql`. O catálogo builtin diz que a plataforma sabe materializar essa família. O item concreto só aparece depois, quando o runtime recebe algo como `dyn_sql<query_id>`.
+Uma factory parametrizada registra a família, não cada item concreto. É o caso de `dyn_sql`, `dyn_api` e `proc_sql`. O catálogo builtin diz que a plataforma sabe materializar essa família. O item concreto só aparece depois, quando o runtime recebe algo como `dyn_sql<query_id>` ou `dyn_api<endpoint_id>`.
 
 Essa distinção é central.
 
@@ -70,6 +70,8 @@ O `ToolsLibraryCache` lê a tabela persistida, mantém snapshots thread-safe e d
 ### 5.5. Injeção automática no YAML
 
 Quando o YAML agentic chega com `tools_library: []`, a `ConfigurationFactory` injeta as tools builtin ativas carregadas do banco. Se `tools_library` vier preenchida ou ausente, o sistema falha fechado.
+
+Para apoiar a montagem agentic, a API também expõe `/config/assembly/catalog` para consultar o catálogo disponível e `/config/assembly/recommend-tools` para recomendar tools conforme a intenção do fluxo.
 
 ## 6. Visão executiva
 
@@ -339,19 +341,7 @@ Essa separação reduz acoplamento e melhora governança. Sem ela, cada tenant p
 
 ## 21. Fluxo principal ponta a ponta
 
-```mermaid
-flowchart TD
-    A[Código-fonte das tools] --> B[ToolsLibraryBuilder descobre implementações]
-    B --> C[Builder adiciona factories parametrizadas base]
-    C --> D[BuiltinToolCatalogSynchronizer normaliza e sincroniza]
-    D --> E[integrations.builtin_tool_registry]
-    E --> F[ToolsLibraryCache carrega snapshot global]
-    F --> G[ConfigurationFactory recebe YAML]
-    G --> H{tools_library existe e está vazia?}
-    H -->|não| I[Falha fechada]
-    H -->|sim| J[Injeta tools builtin ativas]
-    J --> K[Assembly e runtime resolvem tools]
-```
+![21. Fluxo principal ponta a ponta](assets/diagrams/docs-guia-usuario-tools-diagrama-01.svg)
 
 Esse fluxo mostra por que a feature não é só um inventário estático. Ela é uma cadeia operacional completa entre código, persistência, administração e runtime.
 

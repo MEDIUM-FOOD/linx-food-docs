@@ -55,6 +55,41 @@ liberadas para aquela sessão ou credencial.
 - Boundary HTTP onde a identidade é aplicada: [README-SERVICE-API.md](./README-SERVICE-API.md)
 - Índice central da documentação: [README.md](./README.md)
 
+## Que problema esta feature resolve
+
+Sem esse desenho, a plataforma teria identidades fragmentadas: uma para
+integrações, outra para sessão web, outra para MFA e outra para contexto
+multi-tenant. Isso tornaria troubleshooting, auditoria e autorização mais
+frágeis porque cada entrada produziria um tipo diferente de contexto.
+
+O runtime atual resolve isso transformando entradas distintas em um mesmo
+objetivo operacional: produzir um contexto autenticado auditável, com
+tenant, grants, perfil humano ou credencial técnica reconhecíveis pelo
+restante da aplicação.
+
+## Visão executiva
+
+Executivamente, autenticação bem definida reduz risco de acesso indevido,
+ajuda a separar operação humana de integração técnica e melhora
+previsibilidade de suporte. Também reduz dependência de conhecimento
+tribal para explicar por que uma sessão web funciona de um jeito e uma
+access key funciona de outro.
+
+## Visão comercial
+
+Comercialmente, esse módulo sustenta um argumento de maturidade: a
+plataforma suporta tanto integração sistêmica quanto operação humana com
+governança coerente. Isso é especialmente relevante em clientes que
+precisam conciliar APIs, painel administrativo e segundo fator sem criar
+experiências desconectadas.
+
+## Visão estratégica
+
+Estrategicamente, a feature prepara a plataforma para crescer em
+superfícies autenticadas sem duplicar contrato de identidade. Isso vale
+para novos painéis, canais governados e rotas agentic que precisem
+carregar contexto humano ou técnico com a mesma base canônica.
+
 ## Entradas de autenticação encontradas no runtime
 
 ### Credencial técnica
@@ -144,6 +179,44 @@ rotas do mesmo router, como:
   e credencial técnica;
 - a sessão web já nasce preparada para refletir tenant, grants e perfil
   sem inventar um catálogo paralelo de permissões.
+
+## Troubleshooting
+
+### Access key válida no papel, mas a chamada continua falhando
+
+Causa provável: a chave existe, mas o contexto técnico não foi resolvido
+como o endpoint espera ou a permissão necessária não está coberta.
+
+Como confirmar: valide primeiro a resolução da credencial em
+`user_auth.py` e depois confira a etapa de autorização em
+[README-AUTORIZACAO.md](./README-AUTORIZACAO.md).
+
+### Login web funciona, mas a UI perde sessão
+
+Causa provável: falha na trilha de cookie, no middleware da sessão ou em
+alguma condição do fluxo federado/local antes da consolidação do
+snapshot.
+
+Como confirmar: observe se o cookie foi emitido, se a sessão é lida pelo
+middleware e se o redirect forçado acontece apenas nas páginas HTML
+protegidas.
+
+### Usuário federado entra, mas o MFA impede a liberação final
+
+Causa provável: política global exigindo segundo fator ou usuário já com
+TOTP ativo sem confirmação concluída na tentativa atual.
+
+Como confirmar: siga a trilha descrita em
+[README-AUTENTICACAO-MFA.md](./README-AUTENTICACAO-MFA.md) e confirme se o
+bloqueio é de política ou de ativação pendente.
+
+## Checklist de entendimento
+
+- Entendi a diferença entre credencial técnica e sessão web.
+- Entendi por que MFA complementa o login web em vez de substituí-lo.
+- Entendi onde o contexto autenticado é realmente montado.
+- Entendi a separação entre autenticação e autorização.
+- Entendi como investigar falha de access key, sessão ou MFA.
 
 ## Limites e pegadinhas
 

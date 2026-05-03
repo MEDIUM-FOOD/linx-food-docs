@@ -1,26 +1,23 @@
-flowchart LR
-        subgraph API
-                A1["/rag/etl"]
-                A2["ExtractTransformLoadService"]
-        end
+sequenceDiagram
+    participant O as Operador
+    participant API as Boundary ETL
+    participant Queue as RabbitMQ
+    participant Worker as Worker Dramatiq
+    participant SVC as ETL Service
+    participant ORCH as ETL Orchestrator
+    participant SM as Schema Metadata
+    participant CAT as Catalogo dbschemas
+    participant NL as schema_rag_sql
 
-        subgraph Worker
-                W1["ExtractTransformLoadOrchestrator"]
-                W2["BaseApifyETLPipeline"]
-                W3["Booking ou Hotels.com ou TripAdvisor"]
-                W4["TableSchemaMetadataETLProcessor"]
-        end
-
-        subgraph Infra
-                I1["RabbitMQ"]
-                I2["Redis"]
-                I3["Hospitality DB"]
-                I4["Schema DB"]
-                I5["Providers externos"]
-        end
-
-        A1 --> I1 --> A2 --> W1
-        W1 --> W2 --> W3 --> I5
-        W3 --> I3
-        W1 --> W4 --> I4
-        I2 --> A1
+    O->>API: Solicita ETL
+    API->>Queue: Publica job
+    Queue->>Worker: Entrega mensagem
+    Worker->>SVC: execute
+    SVC->>ORCH: run
+    ORCH->>SM: Executa schema metadata
+    SM->>CAT: Grava banco, schema, tabelas, colunas, PKs e FKs
+    CAT-->>SM: Catalogo atualizado
+    SM-->>ORCH: Estatisticas e metadata
+    ORCH-->>SVC: Resultado consolidado
+    SVC-->>API: Estado final monitoravel
+    NL->>NL: Usa documentos schema_metadata indexados em vector store

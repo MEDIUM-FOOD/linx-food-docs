@@ -435,52 +435,11 @@ Como confirmar: revisar os pontos de emissão do cookie final e os erros de infr
 
 ## 28. Diagramas
 
-```mermaid
-flowchart TD
-    A[Login principal] --> B[Emite sessao autenticada no cache central]
-    B --> C[Consulta estado TOTP persistido]
-    C --> D[Consulta FEDERATED_MFA_REQUIRED]
-    D --> E{Conta tem TOTP ativo?}
-    E -- Sim --> F[Retorna mfa_challenge com session_token]
-    E -- Nao --> G{Politica exige MFA?}
-    G -- Nao --> H[Retorna ok e grava cookie final]
-    G -- Sim --> I[Retorna mfa_setup_required com session_token]
-    F --> J[Usuario informa codigo]
-    I --> K[Usuario recebe QR Code e ativa autenticador]
-    K --> J
-    J --> L[Valida codigo TOTP]
-    L --> M[Persiste ou atualiza verificacao]
-    M --> N[Grava cookie final]
-```
+![28. Diagramas](assets/diagrams/docs-readme-autenticacao-mfa-diagrama-01.svg)
 
 Esse diagrama mostra a decisão central do runtime: o login principal não entrega necessariamente a sessão final. O MFA intercepta a emissão do cookie quando o estado do usuário ou a política global exigem isso.
 
-```mermaid
-sequenceDiagram
-    participant UI as Auth Gateway
-    participant Router as Auth Router
-    participant Session as FederatedSessionRepository
-    participant TOTP as TotpService
-    participant Audit as FederatedLoginAudit
-
-    UI->>Router: login federado ou local
-    Router->>Session: issue
-    Router->>TOTP: get_status(email)
-    alt TOTP ativo
-        Router-->>UI: mfa_challenge + session_token
-    else Politica exige MFA
-        Router-->>UI: mfa_setup_required + session_token
-        UI->>Router: POST /totp/start
-        Router->>TOTP: start_activation
-        TOTP-->>UI: QR Code + secret + expires_at
-    else Sem MFA exigido
-        Router-->>UI: ok + cookie final
-    end
-    UI->>Router: POST /totp/confirm
-    Router->>TOTP: confirm_code
-    TOTP->>Audit: habilita ou atualiza TOTP
-    Router-->>UI: ok + cookie final
-```
+![28. Diagramas](assets/diagrams/docs-readme-autenticacao-mfa-diagrama-02.svg)
 
 Esse diagrama mostra a ordem real de interação entre UI, router, sessão, serviço TOTP e persistência auditável.
 

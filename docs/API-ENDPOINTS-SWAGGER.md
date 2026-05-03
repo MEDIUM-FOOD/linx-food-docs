@@ -121,14 +121,20 @@ Na sequência, cada família de router entra com seu prefixo e seu
 contrato próprio. Alguns exemplos confirmados no código:
 
 - /agent para execução, continuidade e cancelamento de agentes;
+- /agent/hil/decisions para registrar decisão HIL assíncrona por POST
+  seguro sem forçar continuação via chamada HTTP interna;
 - /workflow para execução e retomada de workflows;
 - /rag para ingestão, ETL, dispatcher unificado, reindex e rebuild de
   auto_config;
 - /status e /api/v1/status para polling e SSE de tarefas assíncronas;
+- /interaction-runs para consulta paginada da telemetria de interações
+  e atualização do campo observacoes;
 - /config/assembly para draft, validate, confirm, preflight, schema,
   catalog, recommend-tools e objective-to-yaml;
 - /config/nl2sql para geração de SQL proposta a partir de linguagem
   natural;
+- /admin/background-executions para consulta de requests, schedules,
+  runs, eventos, pedidos HIL e cancelamento administrativo de agenda;
 - /client-portal para perfil, credenciais, segredos e importação remota
   de Swagger/OpenAPI;
 - /admin, /channels, /api/auth, /api/whatsapp, /api/instagram,
@@ -244,6 +250,8 @@ Os contratos mais importantes confirmados no código são:
   envelope assíncrono com task_id, polling_url, stream_url e cancel_url.
 - POST /agent/continue: continua execução pausada usando thread_id e
   correlation_id existente.
+- POST /agent/hil/decisions: registra decisão HIL assíncrona por POST
+  seguro, reaproveitando o mesmo contexto lógico da aprovação pendente.
 - POST /agent/tasks/{task_id}/cancel: registra cancelamento de tarefa de
   agente ainda não terminal.
 - POST /workflow/execute: executa workflow e pode responder de forma
@@ -258,9 +266,24 @@ Os contratos mais importantes confirmados no código são:
   progresso.
 - GET /status/stream/{task_id} e GET /api/v1/status/stream/{task_id}:
   stream SSE.
+- POST /interaction-runs/query: consulta paginada da tabela
+  interaction_runs com filtros, ordenação e insights agregados.
+- POST /interaction-runs/observacoes: atualiza o campo observacoes de
+  uma interação já persistida.
 - POST /config/assembly/draft, /validate, /confirm,
   /objective-to-yaml, /preflight: montagem governada da AST agentic.
 - POST /config/nl2sql/generate: gera SQL proposta com diagnósticos.
+- GET /admin/background-executions/requests,
+  /schedules,
+  /runs/recent,
+  /runs/active,
+  /events,
+  /hil,
+  /runs/last,
+  /runs/{run_id}: superfície administrativa de leitura do domínio
+  agentic em background.
+- DELETE /admin/background-executions/schedules/{schedule_id}: cancela
+  uma agenda background preservando histórico e runs já gravados.
 
 ## 13. O que acontece em caso de sucesso
 
@@ -307,6 +330,12 @@ Sinais concretos confirmados no código:
 - os endpoints de status usam contratos tipados para progresso;
 - os boundaries de agente e workflow devolvem polling_url e stream_url
   quando executam em modo assíncrono.
+- a decisão HIL assíncrona entra por endpoint POST seguro dedicado,
+  sem depender de continuação HTTP interna entre serviços.
+- os endpoints de interaction_runs calculam insights agregados e
+  restringem o escopo ao tenant autenticado.
+- os endpoints administrativos de background expõem filtros por
+  access_key, status, run_id e correlation_id para operação auditável.
 
 ## 16. Impacto técnico
 
@@ -376,9 +405,16 @@ não fica aberto para qualquer pessoa por padrão.
 
 - HTTP 200 em /agent/execute não significa sempre resposta final; pode
   ser envelope assíncrono ou pausa HIL.
+- /agent/hil/decisions não substitui /agent/continue para todos os
+  cenários; ele cobre a decisão HIL assíncrona durável, não a retomada
+  genérica de qualquer pausa.
 - HTTP 202 em RAG não significa falha; significa aceitação para execução
   fora do request.
 - API web viva não prova que o domínio assíncrono terminou o trabalho.
+- /interaction-runs depende de tenant autenticado coerente entre YAML e
+  access key; sem isso o boundary falha fechado.
+- /admin/background-executions é superfície administrativa; sem a
+  permissão nominal correta, a leitura e o cancelamento falham.
 - OpenAPI publicado não substitui leitura de permissão e comportamento
   por família de rota.
 - O código lido não expõe um manifesto único listando, em um só lugar,
@@ -407,6 +443,30 @@ Causa provável: interpretação errada do contrato assíncrono.
 Como confirmar: verificar que /rag/ingest e /rag/etl são publicados com
 status 202 no subrouter RAG.
 
+### Sintoma: o pedido HIL foi aprovado, mas a automação externa não sabe qual endpoint chamar
+
+Causa provável: uso incorreto de /agent/continue em vez do endpoint
+dedicado de decisão assíncrona.
+
+Como confirmar: revisar o contrato de POST /agent/hil/decisions e o
+payload esperado para approve ou reject.
+
+### Sintoma: a consulta de interaction_runs devolve 403 mesmo com chave válida
+
+Causa provável: a chave autenticada não resolve um tenant coerente com o
+YAML informado ou não possui a permissão nominal exigida.
+
+Como confirmar: revisar o tenant resolvido, a permission
+logs.analyze_ui e o contexto de autenticação do request.
+
+### Sintoma: /admin/background-executions retorna vazio para um tenant que claramente tem histórico
+
+Causa provável: access_key consultada não pertence ao tenant correto,
+ou o filtro de status/run_id/correlation_id está estreitando demais.
+
+Como confirmar: repetir a consulta com a access_key correta e reduzir os
+filtros até validar se há requests, runs ou eventos para o tenant.
+
 ## 24. Diagramas
 
 ### Fluxo macro da superfície HTTP
@@ -414,19 +474,7 @@ status 202 no subrouter RAG.
 Este diagrama mostra a sequência real do boundary: entrada, controle de
 acesso, roteamento e eventual acompanhamento assíncrono.
 
-```mermaid
-flowchart TD
-    A[Cliente HTTP] --> B[App FastAPI central]
-    B --> C{Rota protegida?}
-    C -->|Sim| D[Valida permissão e contexto]
-    C -->|Não| E[Roteia direto]
-    D --> E
-    E --> F{Execução curta ou longa?}
-    F -->|Curta| G[Resposta no mesmo HTTP]
-    F -->|Longa| H[Task ID e URLs de acompanhamento]
-    H --> I[GET /status ou /api/v1/status]
-    H --> J[GET /status/stream ou /api/v1/status/stream]
-```
+![Fluxo macro da superfície HTTP](assets/diagrams/docs-api-endpoints-swagger-diagrama-01.svg)
 
 ## 25. Mapa de navegação conceitual
 
@@ -475,9 +523,10 @@ O que fica confirmado:
   - Comportamento confirmado: swagger.read existe como permissão própria.
 - src/api/routers/agent_router.py
   - Motivo da leitura: contrato híbrido de /agent/execute,
-    /agent/continue e cancelamento.
+    /agent/continue, /agent/hil/decisions e cancelamento.
   - Comportamento confirmado: /agent/execute pode devolver envelope
-    assíncrono com task_id, polling_url, stream_url e cancel_url.
+    assíncrono com task_id, polling_url, stream_url e cancel_url; e
+    /agent/hil/decisions registra approve/reject por POST seguro.
 - src/api/routers/workflow_router.py
   - Motivo da leitura: contrato de execução e retomada de workflows.
   - Comportamento confirmado: /workflow/execute decide entre sync e
@@ -507,6 +556,18 @@ O que fica confirmado:
   - Motivo da leitura: confirmar contrato dedicado de NL2SQL.
   - Comportamento confirmado: /config/nl2sql/generate devolve SQL
     proposta com diagnósticos.
+- src/api/routers/interaction_runs_router.py
+  - Motivo da leitura: confirmar consulta e edição da telemetria de
+    interaction_runs.
+  - Comportamento confirmado: /interaction-runs/query pagina registros
+    com insights agregados, e /interaction-runs/observacoes atualiza o
+    campo observacoes no escopo do tenant autenticado.
+- src/api/routers/admin/background_execution_router.py
+  - Motivo da leitura: confirmar a superfície administrativa do domínio
+    agentic em background.
+  - Comportamento confirmado: /admin/background-executions publica
+    leitura de requests, schedules, runs, eventos, HIL e cancelamento de
+    agenda por permission key administrativa.
 - src/api/routers/client_portal_router.py
   - Motivo da leitura: confirmar importação remota de Swagger pelo
     portal do cliente.

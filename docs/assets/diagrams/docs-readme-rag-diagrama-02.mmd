@@ -1,26 +1,24 @@
-flowchart LR
-    subgraph Cliente
-        C1["Cliente ou UI"]
-    end
+sequenceDiagram
+    participant U as Usuario
+    participant O as Orquestrador
+    participant A as Analyzer
+    participant D as Domain Processing
+    participant R as Retrieval Engine
+    participant F as FTS e Fusion
+    participant C as ACL
+    participant G as Generation Engine
 
-    subgraph API
-        A1["/rag/execute"]
-    end
-
-    subgraph Runtime
-        R1["ContentQASystem"]
-        R2["QARuntimeAssembly"]
-        R3["IntelligentRAGOrchestrator"]
-        R4["RetrievalEngine"]
-        R5["GenerationEngine"]
-    end
-
-    subgraph Infra
-        I1["Qdrant ou Azure Search"]
-        I2["BM25 e sinais de domínio"]
-    end
-
-    C1 --> A1 --> R1 --> R2 --> R3 --> R4
-    R4 --> I1
-    R4 --> I2
-    R4 --> R5 --> A1
+    U->>O: Pergunta
+    O->>A: Analisa a query
+    A-->>O: QueryFeatures
+    O->>D: Enriquecimento de dominio
+    D-->>O: QueryFeatures enriquecidas
+    O->>R: Escolhe e executa retrieval
+    R-->>O: Documentos primarios
+    O->>F: Aplica FTS e fusion quando necessario
+    F-->>O: Ranking consolidado
+    O->>C: Filtra por ACL
+    C-->>O: Documentos autorizados
+    O->>G: Gera resposta final
+    G-->>O: Resposta e metricas
+    O-->>U: Resultado final

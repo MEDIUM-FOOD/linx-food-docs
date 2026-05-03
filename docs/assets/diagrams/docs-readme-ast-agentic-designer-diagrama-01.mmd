@@ -1,12 +1,13 @@
-flowchart LR
-   P1["Objetivo em linguagem natural"]
-   P2["Preflight"]
-   P3["Draft AST"]
-   P4["Questions ou Diagnostics"]
-   P5["Validate"]
-   P6["Confirm dry-run"]
-   P7["YAML final"]
-
-   P1 --> P2 --> P3
-   P3 --> P4
-   P3 --> P5 --> P6 --> P7
+flowchart TD
+    A["Base YAML ou Prompt"] --> B["Preflight"]
+    B --> C["Draft AST"]
+    C --> D["Validate"]
+    D --> E["Confirm"]
+    E --> F["Final YAML"]
+    E --> G["Persistência canônica em app/yaml"]
+    C --> H["Questions"]
+    D --> I["Drift e diagnóstico"]
+    J["Schema e Catalog"] --> C
+    J --> D
+    J --> K["Designer e Tooling"]
+    L["Language Server"] --> K

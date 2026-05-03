@@ -1,5 +1,14 @@
 # Manual técnico, executivo, comercial e estratégico: configuração YAML
 
+## Leitura especializada recomendada
+
+Para a trilha completa e separada por finalidade sobre configuração declarativa de agentes, workflows e ETL sem editar Python, use estes dois manuais como referência principal.
+
+1. [README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md) para entender valor, limites, impacto e o significado prático da promessa de configuração sem programação.
+2. [README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md) para seguir carga do YAML, assembly AST, seleção de workflow ou supervisor, injeção de tools_library e ativação de extract_transform_load.
+
+Este arquivo continua sendo o manual geral de configuração YAML, mas os dois documentos acima passam a ser a entrada principal para o recorte específico de agentes, workflows e ETL sem programação.
+
 ## 1. O que é esta feature
 
 A configuração YAML é o contrato operacional da plataforma. Ela descreve como o produto deve se comportar, em qual contexto de cliente, com quais segredos, quais pipelines, quais recursos de RAG, qual topologia agentic e sob quais regras de governança.
@@ -108,6 +117,8 @@ YAML-first significa que a plataforma nasce de configuração declarativa. Não 
 ### Escopo agentic governado
 
 É o recorte do YAML que deixa de ser tratado como texto livre e passa a ser controlado por AST tipada, validação semântica, merge seletivo e selo de drift.
+
+A feature flag `FEATURE_AGENTIC_AST_ENABLED` controla a ativação do caminho governado por AST. Na API, o endpoint `/config/assembly/validate` valida esse recorte antes de confirmar alterações sensíveis.
 
 ### Drift governado
 
@@ -481,45 +492,11 @@ Como confirmar: revisar validation_report, diagnostics e metadata.agentic_assemb
 
 ## 29. Diagramas
 
-```mermaid
-flowchart TD
-    A[Origem do YAML] --> B[ConfigurationFactory]
-    B --> C[Validação de security_keys]
-    C --> D[Injeção de tools_library]
-    D --> E[Expansão de placeholders]
-    E --> F[YamlSchemaNormalizer]
-    F --> G[Contratos especializados]
-    G --> H[Enriquecimento multi-tenant]
-    H --> I{Escopo agentic governado?}
-    I -- Não --> J[YAML pronto para runtime]
-    I -- Sim --> K[AST + validate + drift + confirm]
-    K --> L[YAML governado com hash]
-```
+![29. Diagramas](assets/diagrams/docs-readme-configuracao-yaml-diagrama-01.svg)
 
 Esse diagrama mostra a lógica macro: o YAML não vai direto para o domínio. Ele atravessa carga, validação, enriquecimento e, quando necessário, governança AST.
 
-```mermaid
-sequenceDiagram
-    participant Operador as Operador ou API
-    participant Factory as ConfigurationFactory
-    participant Normalizer as YamlSchemaNormalizer
-    participant Directory as ClientDirectory
-    participant Assembly as Assembly Agentic
-    participant Runtime as Runtime
-
-    Operador->>Factory: envia YAML
-    Factory->>Factory: injeta user_session
-    Factory->>Factory: valida security_keys
-    Factory->>Factory: injeta tools_library
-    Factory->>Factory: expande placeholders
-    Factory->>Normalizer: normaliza contrato
-    Normalizer-->>Factory: YAML estruturalmente válido
-    Factory->>Directory: enriquece client_context e security_keys
-    Directory-->>Factory: tenant e segredos resolvidos
-    Factory->>Assembly: valida trecho agentic quando existe
-    Assembly-->>Factory: fragmento governado válido
-    Factory-->>Runtime: configuração pronta
-```
+![29. Diagramas](assets/diagrams/docs-readme-configuracao-yaml-diagrama-02.svg)
 
 Esse diagrama mostra a ordem real do preparo da configuração antes da execução.
 

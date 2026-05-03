@@ -225,9 +225,9 @@ Se a mudança tocar catálogo de tools, schema estruturado ou recomendação de 
 
 ## 12. Próximas leituras recomendadas
 
-1. `docs/README-AST-AGENTIC-DESIGNER.md` para contrato técnico completo da AST.
-2. `docs/README-AGENTIC-CONTRATO-COMUM.md` para blocos comuns reutilizáveis.
-3. `docs/README-SERVICE-API.md` para visão de endpoints e operação da API.
+1. [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md) para contrato técnico completo da AST.
+2. [README-AGENTIC-CONTRATO-COMUM.md](./README-AGENTIC-CONTRATO-COMUM.md) para blocos comuns reutilizáveis.
+3. [README-SERVICE-API.md](./README-SERVICE-API.md) para visão de endpoints e operação da API.
 
 ## 13. Evidência no código
 

@@ -1,28 +1,14 @@
-sequenceDiagram
-    autonumber
-    participant Operador
-    participant Tela as Tela AG-UI
-    participant Sidecar as Sidecar
-    participant API as POST /ag-ui/runs
-    participant Orq as AgUiRunOrchestrator
-    participant Adapter as RetailDemoAgUiAdapter
-    participant Deep as YAML DeepAgent
-    participant Mat as DashboardMaterializationService
-
-    Operador->>Tela: Abre a tela e informa contexto
-    Tela->>Sidecar: Anexa contexto da página
-    Operador->>Sidecar: Envia pedido
-    Sidecar->>API: POST com payload AG-UI
-    API->>Orq: Cria contexto e inicia run
-    Orq-->>Sidecar: RUN_STARTED
-    Orq->>Adapter: Resolve executionKind=retail_demo
-    alt Tela fixa
-        Adapter->>Deep: Usa capability governada
-        Deep-->>Adapter: Resultado autorizado
-        Adapter-->>Sidecar: TOOL_CALL_* + STATE_SNAPSHOT + TEXT_MESSAGE_*
-    else Dashboard dinâmico
-        Adapter->>Mat: Valida e materializa DashboardSpec
-        Mat-->>Sidecar: STATE_SNAPSHOT + CUSTOM + STATE_DELTA
-    end
-    Orq-->>Sidecar: RUN_FINISHED ou RUN_ERROR
-    Sidecar->>Tela: Atualiza store, timeline, mensagens e canvas
+flowchart TD
+    A["Aplicacao cliente envia POST para /ag-ui/runs"] --> B["Router valida permissao e fonte de configuracao"]
+    B --> C["Router resolve correlation_id e cria AgUiRunContext"]
+    C --> D["Orquestrador emite RUN_STARTED"]
+    D --> E["Orquestrador resolve adapter por executionKind"]
+    E --> F{"executionKind atual"}
+    F -- retail_demo capability fixa --> G["Adapter resolve capability e query governada"]
+    F -- retail_demo dashboard_dynamic --> H["Adapter delega para materializacao de DashboardSpec"]
+    G --> I["Eventos de step, tool, snapshot e mensagem"]
+    H --> J["Eventos custom, snapshot, deltas e mensagem de validacao ou prontidao"]
+    I --> K["Encoder serializa BaseEvent em SSE"]
+    J --> K
+    K --> L["Cliente SSE atualiza sidecar e tela"]
+    L --> M["RUN_FINISHED ou RUN_ERROR"]

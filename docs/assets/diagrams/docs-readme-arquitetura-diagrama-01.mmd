@@ -1,25 +1,21 @@
-sequenceDiagram
-    participant Cliente
-    participant API as API FastAPI
-    participant Auth as Auth e Permissões
-    participant Config as Resolução de YAML
-    participant Service as Service de Aplicação
-    participant Queue as RabbitMQ ou Execução Direta
-    participant Worker as Worker
-    participant Obs as Logs e Stores
+flowchart TD
+    A["run.sh"] --> B["Runner API"]
+    A --> C["Runner Worker"]
+    A --> D["Runner Scheduler"]
 
-    Cliente->>API: Request HTTP
-    API->>Auth: valida principal
-    Auth-->>API: contexto autorizado
-    API->>Config: resolve YAML
-    Config-->>API: yaml_config resolvido
-    API->>Service: monta comando
-    alt síncrono
-        Service->>Obs: registra estado e logs
-        Service-->>API: resultado final
-    else assíncrono
-        Service->>Queue: publica job
-        Queue->>Worker: entrega envelope
-        Worker->>Obs: continua execução
-    end
-    API-->>Cliente: resposta com X-Correlation-Id
+    B --> E["Preflight de infraestrutura"]
+    E --> F["FastAPI boundary HTTP"]
+    F --> G["UI estática e páginas web"]
+    F --> H["Routers de domínio e AG-UI"]
+
+    C --> I["Bootstrap compartilhado"]
+    I --> J["Runtime assíncrono"]
+    J --> K["Plano de controle multicanal"]
+
+    D --> L["Bootstrap compartilhado"]
+    L --> M["Coordenação temporal"]
+
+    N["YAML recebido"] --> O["Resolução de configuração"]
+    O --> P["Injeção de catálogo builtin"]
+    P --> F
+    P --> J

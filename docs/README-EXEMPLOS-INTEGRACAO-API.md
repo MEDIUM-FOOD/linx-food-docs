@@ -6,6 +6,33 @@ Esta pasta contém exemplos práticos de como integrar sua aplicação com a API
 
 Explicando de forma simples: o cliente manda uma pergunta e um YAML de configuração. Esse YAML vai criptografado para o servidor, o servidor executa o fluxo RAG e devolve a resposta com fontes.
 
+## O que este manual resolve
+
+Este documento existe para evitar dois erros comuns. O primeiro é tentar
+integrar com a API RAG adivinhando payload, criptografia e ordem das
+chamadas. O segundo é confundir exemplo de cliente com contrato oficial
+do backend.
+
+Aqui, os exemplos servem como ponte prática entre o contrato HTTP e a
+implementação do cliente. O objetivo não é só mostrar código, mas deixar
+claro quando usar cada endpoint, que pré-condições precisam existir e
+como distinguir erro de ambiente, erro de autenticação e erro de
+payload.
+
+## Quando usar este manual
+
+Use este manual quando a dúvida for operacional e prática, por exemplo:
+
+- como montar um cliente novo em Python, Ruby ou JavaScript;
+- como seguir a ordem correta entre `/crypto/session-key` e
+  `/rag/execute`;
+- como validar se a criptografia e o payload estão coerentes;
+- como reproduzir a mesma integração em outra linguagem.
+
+Não use este manual como substituto da documentação conceitual de RAG,
+autenticação ou YAML. Nesses casos, ele é apoio de implementação, não
+fonte única de entendimento.
+
 ## 📚 Arquivos Disponíveis
 
 | Arquivo             | Linguagem          | Descrição                                                           |
@@ -687,6 +714,18 @@ npm uninstall axios
 npm install axios
 ```
 
+## Limites e pegadinhas
+
+- Exemplo funcional não substitui contrato oficial da API. Quando houver
+  dúvida de rota, schema ou campo de resposta, a fonte canônica continua
+  sendo o backend e o inventário HTTP.
+- Health check verde não prova que a integração completa está pronta. A
+  sessão criptográfica, a access key e o YAML ainda podem falhar depois.
+- Conseguir cifrar o YAML não significa que o conteúdo está válido. A
+  criptografia protege transporte, não corrige configuração errada.
+- Um cliente de exemplo pode precisar ajuste de porta ou base URL para o
+  ambiente local real.
+
 ## Leitura relacionada
 
 - 🔐 **[README-SISTEMA-AUTENTICACAO.md](./README-SISTEMA-AUTENTICACAO.md)** - Sistema de autenticação
@@ -718,6 +757,13 @@ Para adicionar exemplos em outras linguagens:
 3. Use a estrutura de payload idêntica ao webchat
 4. Adicione documentação clara e exemplos de uso
 5. Teste com a API em execução
+
+## Checklist de entendimento
+
+- Entendi a ordem entre sessão criptográfica e execução RAG.
+- Entendi a diferença entre exemplo de cliente e contrato oficial da API.
+- Entendi como separar erro de servidor offline, access key, payload e criptografia.
+- Entendi quais manuais consultar quando a dúvida deixa de ser só de integração prática.
 
 ## Encerramento
 

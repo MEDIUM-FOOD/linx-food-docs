@@ -1,5 +1,14 @@
 # Manual técnico, executivo, comercial e estratégico: Dyn SQL
 
+## Leitura especializada recomendada
+
+Este manual continua sendo a porta de entrada geral do tema, mas a trilha especializada agora está separada por finalidade.
+
+1. [README-CONCEITUAL-DYNAMIC-SQL-TOOLS.md](./README-CONCEITUAL-DYNAMIC-SQL-TOOLS.md) para entender Dyn SQL como capability governada, seu valor executivo, comercial e estratégico, seus limites e a diferença para NL2SQL e proc_sql.
+2. [README-TECNICO-DYNAMIC-SQL-TOOLS.md](./README-TECNICO-DYNAMIC-SQL-TOOLS.md) para seguir catálogo builtin, AST, precedência YAML ou registro, guardrails, cache, retry e operação do dyn_sql no runtime.
+
+Se a dúvida for sobre valor, posicionamento e governança, comece pelo conceitual. Se a dúvida for sobre materialização, execução e troubleshooting, use o técnico.
+
 ## 1. O que é esta feature
 
 Dyn SQL é a capacidade da plataforma de transformar uma consulta SQL previamente aprovada em uma tool utilizável por agentes, workflows e experiências AG-UI sem exigir uma implementação nova em Python para cada consulta.
@@ -323,24 +332,7 @@ Esse detalhe é estrategicamente importante: AG-UI consome dado governado, não 
 
 ## 19. Fluxo principal ponta a ponta
 
-```mermaid
-flowchart TD
-    A[YAML ou tela pede dyn_sql<query_id>] --> B[ToolLoader detecta sintaxe parametrizada]
-    B --> C[Injeta query_id no payload da factory]
-    C --> D{Query existe em tools_config.sql_dynamic.queries?}
-    D -->|sim| E[Usa definição local do YAML]
-    D -->|nao| F[Busca query em integrations.sql_query_registry]
-    F --> G[Valida tenant, publish_to_agents, is_active]
-    G --> H[Busca conexão em integrations.sql_connection_registry]
-    H --> I[Valida is_active e read_only]
-    I --> J[Mescla seção resolvida no tools_config.sql_dynamic]
-    E --> K[DynamicSqlToolFactory valida query e conexão]
-    J --> K
-    K --> L[Extrai parâmetros e monta args_schema]
-    L --> M[Resolve URI e cria SQLDatabase com retry]
-    M --> N[Materializa tool e armazena em cache]
-    N --> O[Agente executa consulta com parâmetros controlados]
-```
+![19. Fluxo principal ponta a ponta](assets/diagrams/docs-readme-dynamic-sql-tools-diagrama-01.svg)
 
 Esse diagrama mostra por que o comportamento é governado. A tool não nasce de SQL aleatória. Ela nasce de uma consulta previamente resolvida e validada.
 

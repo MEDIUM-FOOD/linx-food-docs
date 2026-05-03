@@ -1,20 +1,12 @@
-sequenceDiagram
-    participant Cliente
-    participant API as API /rag/ingest
-    participant Queue as RabbitMQ
-    participant Worker as Worker oficial
-    participant Service as IngestionService
-    participant Fanout as DocumentFanoutCoordinator
-    participant Orch as ContentIngestionOrchestrator
-    participant Telemetry as Telemetria e read models
-
-    Cliente->>API: POST /rag/ingest
-    API->>Queue: publica job
-    API-->>Cliente: 202 com task_id
-    Queue->>Worker: entrega mensagem
-    Worker->>Service: inicia execução
-    Service->>Fanout: avalia paralelismo
-    Fanout-->>Service: plano normal ou por documento
-    Service->>Orch: executa pipeline
-    Orch->>Telemetry: persiste progresso e resultado
-    Telemetry-->>Cliente: leitura por /status e /ingestion-runs
+flowchart TD
+  A["web_scraping_urls no IngestionRequest"] --> B["ContentTypeDispatcher registra step content_type:web_scraping"]
+  B --> C["RemoteContentFamily.process_web_scraping"]
+  C --> D["WebScrapingDatasourceMultimodalAdapterClient.get_documents_for_pipeline"]
+  D --> E["Fetch autenticado e escolha de estrategia"]
+  E --> F["Limpeza HTML e montagem do documento web rico"]
+  F --> G["Particao entre paginas, anexos e prefetched_documents"]
+  G --> H["_process_files_with_pipeline com require_prefetched_documents"]
+  H --> I["DataSourceDocumentExecutor reutiliza documento prefetched"]
+  I --> J["WebContentProcessor materializa HTML canônico"]
+  J --> K["Html chunking e domain processing web"]
+  K --> L["Indexacao final e anexacao de attachments"]

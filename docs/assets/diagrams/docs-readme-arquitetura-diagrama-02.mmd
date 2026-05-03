@@ -1,44 +1,20 @@
-flowchart LR
-    subgraph Cliente
-        C1["Cliente HTTP ou UI"]
-    end
+sequenceDiagram
+    participant Operador as Operador
+    participant Launcher as run.sh
+    participant API as Runner API
+    participant Worker as Runner Worker
+    participant Scheduler as Runner Scheduler
+    participant HTTP as FastAPI
+    participant Config as Resolução YAML
 
-    subgraph API
-        A1["Middleware HTTP"]
-        A2["Routers"]
-        A3["Resolução de YAML"]
-        A4["Services"]
-    end
-
-    subgraph Worker
-        W1["WorkerProcessRuntime"]
-        W2["Dramatiq"]
-        W3["Orquestradores"]
-    end
-
-    subgraph Scheduler
-        S1["RuntimeBootstrap"]
-        S2["Jobs temporais"]
-    end
-
-    subgraph Infra
-        I1["PostgreSQL"]
-        I2["Redis"]
-        I3["RabbitMQ"]
-        I4["Vector Store"]
-        I5["Logs"]
-    end
-
-    C1 --> A1 --> A2 --> A3 --> A4
-    A4 --> I1
-    A4 --> I2
-    A4 --> I3
-    A4 --> I4
-    A4 --> I5
-    I3 --> W1 --> W2 --> W3
-    W3 --> I1
-    W3 --> I2
-    W3 --> I4
-    W3 --> I5
-    S1 --> S2 --> I1
-    S2 --> I2
+    Operador->>Launcher: escolhe +a +w +s
+    Launcher->>API: inicia processo API
+    Launcher->>Worker: inicia processo worker
+    Launcher->>Scheduler: inicia processo scheduler
+    API->>API: valida infraestrutura
+    API->>HTTP: sobe boundary HTTP
+    Worker->>Worker: valida infraestrutura
+    Worker->>Worker: executa bootstrap e runtime assíncrono
+    Scheduler->>Scheduler: valida infraestrutura
+    Scheduler->>Scheduler: executa bootstrap temporal
+    HTTP->>Config: resolve YAML e injeta tools builtin quando necessário

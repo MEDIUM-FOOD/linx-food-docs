@@ -1,47 +1,15 @@
-flowchart LR
-    subgraph R1["Operador"]
-        A1["Escolhe a tela"]
-        A2["Informa prompt ou aceita o prompt padrão"]
-    end
+sequenceDiagram
+    participant UI as Tela AG-UI Dashboard
+    participant Router as /ag-ui/runs
+    participant Orch as AgUiRunOrchestrator
+    participant Adapter as RetailDemoAgUiAdapter
+    participant Materializer as DashboardMaterializationService
 
-    subgraph R2["UI estática"]
-        B1["Controller monta contexto da tela"]
-        B2["Sidecar monta o payload do run"]
-        B3["Cliente SSE abre POST /ag-ui/runs"]
-        B4["Store atualiza mensagens, tools e estado"]
-        B5["Renderer atualiza resultado ou canvas"]
-    end
-
-    subgraph R3["API FastAPI"]
-        C1["Router valida permissão e fonte de configuração"]
-        C2["Router cria correlation id"]
-        C3["Orquestrador resolve o adapter"]
-    end
-
-    subgraph R4["Runtime AG-UI"]
-        D1["Adapter interpreta capability"]
-        D2["Consulta governada ou materialização do dashboard"]
-        D3["Eventos canônicos são emitidos"]
-    end
-
-    subgraph R5["Governança"]
-        E1["YAML DeepAgent define supervisor e subagentes"]
-        E2["Query ids dyn_sql aprovados"]
-        E3["Validador bloqueia conteúdo inseguro"]
-    end
-
-    A1 --> A2
-    A2 --> B1
-    B1 --> B2
-    B2 --> B3
-    B3 --> C1
-    C1 --> C2
-    C2 --> C3
-    C3 --> D1
-    D1 --> D2
-    D2 --> D3
-    D3 --> B4
-    B4 --> B5
-    E1 --> D1
-    E2 --> D2
-    E3 --> D2
+    UI->>Router: POST com executionKind=retail_demo e capability=dashboard_dynamic
+    Router->>Orch: run(context)
+    Orch->>Adapter: execute(context)
+    Adapter->>Materializer: build_events(dashboardSpec)
+    Materializer-->>Adapter: snapshot inicial + eventos custom + deltas
+    Adapter-->>Orch: stream de eventos AG-UI
+    Orch-->>Router: RUN_STARTED + eventos do dashboard + RUN_FINISHED
+    Router-->>UI: SSE com correlation_id no header

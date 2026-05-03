@@ -204,22 +204,7 @@ Valor tecnico: torna o chunking observavel e ajustavel, em vez de uma quebra ceg
 
 ## 9. Pipeline principal de ponta a ponta
 
-```mermaid
-flowchart TD
-  A[PDF bruto chega ao processor] --> B[Bootstrap do runtime PDF]
-  B --> C[ValidatePdfBytesStage]
-  C --> D[ApplyDocumentOcrStage]
-  D --> E[ParseViaEngineStage]
-  E --> F[ApplyEngineResultStage]
-  F --> G[Pipeline textual]
-  G --> H[Decisao de OCR basico complementar]
-  H --> I{Documento pede multimodal?}
-  I -->|Nao| J[PdfChunkingService]
-  I -->|Sim| K[PdfMultimodalApplicationService]
-  K --> L[Chunks multimodais ou fallback textual]
-  J --> M[Persistencia e telemetria]
-  L --> M[Persistencia e telemetria]
-```
+![9. Pipeline principal de ponta a ponta](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-01.svg)
 
 O fluxo importa porque mostra a regra principal do desenho: o parse textual nao e o final do pipeline, mas tambem nao pode ser atropelado por OCR e multimodal sem criterio.
 
@@ -699,28 +684,7 @@ Acao recomendada: ajustar a etapa certa em vez de culpar o chunking por um probl
 
 ## 24. Diagramas
 
-```mermaid
-sequenceDiagram
-  participant P as PDFContentProcessor
-  participant R as PdfRuntimeCoordinator
-  participant O as Document OCR
-  participant D as Engine deterministica
-  participant E as Engine concreta
-  participant T as Pipeline textual
-  participant M as Multimodal ou Chunking
-
-  P->>R: Inicializa runtime PDF
-  R-->>P: Serviços e engine principal
-  P->>O: Avalia OCR documental
-  O-->>P: Bytes originais ou regravados
-  P->>D: Executa ParseViaEngineStage
-  D->>E: Tenta engine da fila
-  E-->>D: Resultado canonico ou falha
-  D-->>P: Melhor resultado valido
-  P->>T: Limpa e normaliza texto
-  P->>M: Decide multimodal ou chunking
-  M-->>P: Chunks finais e status operacional
-```
+![24. Diagramas](assets/diagrams/docs-tutorial-101-ingestao-pdf-diagrama-02.svg)
 
 O diagrama mostra que o parser concreto e apenas uma etapa do fluxo. O runtime real envolve coordenacao, OCR, normalizacao, decisao e fechamento operacional.
 

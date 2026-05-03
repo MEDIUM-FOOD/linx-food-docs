@@ -1,5 +1,14 @@
 # Manual técnico, executivo, comercial e estratégico: ETL
 
+## Leitura especializada recomendada
+
+Para a versão completa e separada por finalidade, use estes dois manuais como referência principal.
+
+1. [README-CONCEITUAL-ETL-COMPLETO.md](./README-CONCEITUAL-ETL-COMPLETO.md) para entender conceito, valor, integrações, riscos e impacto do ETL na plataforma.
+2. [README-TECNICO-ETL-COMPLETO.md](./README-TECNICO-ETL-COMPLETO.md) para seguir entrypoints, worker, fan-out, Apify, schema metadata, transformação de dados e troubleshooting.
+
+Este arquivo continua útil como visão geral, mas os dois documentos acima passam a ser a leitura principal para estudo profundo do ETL.
+
 ## 1. O que é esta feature
 
 Neste repositório, ETL é uma capacidade dedicada da plataforma para extrair, transformar e carregar dados estruturados sem passar pelo pipeline documental de ingestão.
@@ -517,49 +526,11 @@ Como confirmar: acompanhar o estado terminal no monitoramento em vez de assumir 
 
 ## 30. Diagramas
 
-```mermaid
-flowchart TD
-    A[POST /rag/etl] --> B[Resolve YAML e autentica permissao ETL]
-    B --> C[Camada de compatibilidade escolhe modo de execucao]
-    C --> D[Publica job em RabbitMQ]
-    D --> E[Worker Dramatiq consome o ETL]
-    E --> F[ExtractTransformLoadService valida configuracao]
-    F --> G[ExtractTransformLoadOrchestrator escolhe pipelines habilitados]
-    G --> H{Mais de um pipeline e fan-out aplicavel?}
-    H -- Sim --> I[Publica jobs filhos por pipeline]
-    H -- Nao --> J[Executa sequencialmente no job atual]
-    I --> K[Consolida resultados do job pai]
-    J --> K
-    K --> L[Status, stream e cancelamento cooperativo]
-```
+![30. Diagramas](assets/diagrams/docs-readme-etl-diagrama-01.svg)
 
 Esse diagrama mostra a espinha dorsal operacional do ETL dedicado. O ponto principal é que o ETL não roda como detalhe escondido do request HTTP. Ele entra em uma malha própria de autenticação, fila, worker, monitoramento e cancelamento.
 
-```mermaid
-sequenceDiagram
-    participant O as Operador
-    participant API as Boundary ETL
-    participant Queue as RabbitMQ
-    participant Worker as Worker Dramatiq
-    participant SVC as ETL Service
-    participant ORCH as ETL Orchestrator
-    participant SM as Schema Metadata
-    participant CAT as Catalogo dbschemas
-    participant NL as schema_rag_sql
-
-    O->>API: Solicita ETL
-    API->>Queue: Publica job
-    Queue->>Worker: Entrega mensagem
-    Worker->>SVC: execute
-    SVC->>ORCH: run
-    ORCH->>SM: Executa schema metadata
-    SM->>CAT: Grava banco, schema, tabelas, colunas, PKs e FKs
-    CAT-->>SM: Catalogo atualizado
-    SM-->>ORCH: Estatisticas e metadata
-    ORCH-->>SVC: Resultado consolidado
-    SVC-->>API: Estado final monitoravel
-    NL->>NL: Usa documentos schema_metadata indexados em vector store
-```
+![30. Diagramas](assets/diagrams/docs-readme-etl-diagrama-02.svg)
 
 Esse diagrama destaca a relação correta com NL2SQL. O ETL atualiza o catálogo técnico relacional. O runtime de geração de SQL fica em outro slice e consome metadados de schema em formato pesquisável no vector store.
 

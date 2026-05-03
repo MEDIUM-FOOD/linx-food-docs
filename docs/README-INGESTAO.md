@@ -4,6 +4,8 @@
 
 O pipeline de ingestão é a esteira que transforma material bruto em acervo utilizável pelo restante da plataforma. Ele não existe só para mover arquivos para um banco vetorial. Ele existe para receber fontes heterogêneas, decidir como cada fonte deve ser tratada, extrair conteúdo de forma especializada, preservar metadados relevantes, persistir o resultado e manter uma leitura operacional confiável do run.
 
+Se a dúvida for especificamente o pipeline de PDF ponta a ponta, com comparação com estado da arte, arquitetura plug-and-play de engines compostas por YAML e troubleshooting detalhado, complemente este manual com [README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-PDF-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-PDF-PIPELINE-COMPLETO.md). Se a dúvida for o pipeline de planilhas, com foco em workbook, detecção estrutural, schema e chunking row-aware, complemente com [README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-EXCEL-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-EXCEL-PIPELINE-COMPLETO.md). Se a dúvida for JSON semi-estruturado, com foco em decode estrito, profiling estrutural, heurística de domínio, perfis de processamento e comparação com parsing streaming e flattening tabular, complemente com [README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-JSON-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-JSON-PIPELINE-COMPLETO.md). Se a dúvida for a ingestão de wiki corporativa, com foco em recursão, visibilidade, autorização, attachments e multimodalidade, complemente com [README-CONCEITUAL-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md). Se a dúvida for ingestão de páginas web, com foco em estratégia básica versus avançada, anexos, prefetch obrigatório e materialização HTML canônica, complemente com [README-CONCEITUAL-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md). Se a dúvida for o slice HTML como tipo de conteúdo, separado da família web e comparado com readability e boilerplate removal, complemente com [README-CONCEITUAL-INGESTAO-HTML-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-HTML-PIPELINE-COMPLETO.md) e [README-TECNICO-INGESTAO-HTML-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-HTML-PIPELINE-COMPLETO.md). Este documento continua sendo o manual amplo da ingestão como capacidade transversal.
+
 No código real, ingestão é uma capacidade sistêmica. Ela combina uma fachada de aplicação, resolução de fontes, orquestração modular, processamento por tipo, persistência, fan-out documental e telemetria. Isso significa que o sistema não pensa em “arquivo” apenas como um blob. Ele pensa em lote, origem, tipo de conteúdo, política de execução, rastreabilidade e qualidade do dado produzido.
 
 ## 2. Que problema ela resolve
@@ -62,6 +64,14 @@ Processor é a peça especialista em transformar um tipo de conteúdo em texto, 
 ### Materialização canônica
 
 Materialização canônica é o momento em que um documento bruto vindo de storage ou fonte remota é convertido para a representação esperada pelo processor. No caso de HTML remoto, por exemplo, isso garante texto limpo e `pages_info` coerente antes do chunking.
+
+### Processamento por domínio na ingestão
+
+No contexto da ingestão, processamento por domínio não significa reescrever a pergunta do usuário nem escolher estratégia de retrieval. Aqui ele é uma camada opcional de enriquecimento do documento já materializado ou dos chunks já produzidos pelo processor. O dono dessa etapa é `DomainProcessingResolver`, que carrega a configuração de `domain_specific_processing`, inicializa os processadores habilitados e decide quais domínios realmente se aplicam ao documento corrente.
+
+Na prática, essa camada existe para acrescentar vocabulário, metadados especializados e pistas de domínio sem poluir o caminho principal de extração. O código lido confirma essa integração em pelo menos quatro famílias relevantes do pipeline de ingestão: PDF, JSON, Web e Confluence. O comportamento é conservador: se o recurso estiver desligado, se nenhum processador estiver habilitado ou se nenhum domínio reconhecer o documento, os chunks originais seguem adiante. Em perfis especiais, como `schema_metadata` no JSON, esse enriquecimento é explicitamente desligado para preservar fidelidade estrutural.
+
+O ponto mais importante para evitar confusão é este: o domain processing da ingestão atua sobre o acervo que está sendo construído. Ele enriquece o conteúdo antes da persistência e da indexação. O domain processing descrito no manual de RAG atua sobre a consulta do usuário durante a recuperação. São camadas relacionadas pelo nome, mas não são a mesma etapa operacional.
 
 ### Fan-out documental
 
@@ -131,6 +141,12 @@ Como diagnosticar: cruzar logs do serviço, do orquestrador e o snapshot operaci
 
 Esta etapa é o centro técnico da ingestão. É aqui que cada família de conteúdo aplica tática e técnica próprias.
 
+#### Camada transversal: processamento por domínio durante a ingestão
+
+Além das diferenças entre PDF, HTML, Web, Confluence e JSON, existe uma camada transversal de pós-processamento por domínio. No desenho real do projeto, ela entra depois que o documento já está em forma canônica e, na maioria dos casos confirmados, depois que os chunks básicos já foram criados. O objetivo não é substituir o parser nem o chunker. O objetivo é enriquecer os chunks com metadados e sinais especializados de domínio quando houver processador configurado e aplicável.
+
+Essa escolha arquitetural é importante porque evita contaminar o parse base com regras especializadas. O parser continua focado em extrair texto e estrutura. O chunker continua focado em particionar o conteúdo. O domain processing entra como etapa adicional, acionada por configuração, para acrescentar inteligência de domínio sem tornar o pipeline principal rígido ou hardcoded.
+
 #### 8.4.1. PDF
 
 Conceito: PDF é o tipo mais sensível da ingestão porque mistura texto, layout, páginas, imagens, tabelas, anexos e, em alguns casos, necessidade de OCR.
@@ -183,20 +199,7 @@ Fluxo prático: URL entra como fonte remota, vira documento web rico e indexado 
 
 ##### Pipeline detalhado da ingestão HTML Web Scraping
 
-```mermaid
-flowchart TD
-  A[web_scraping_urls no IngestionRequest] --> B[ContentTypeDispatcher registra step content_type:web_scraping]
-  B --> C[RemoteContentFamily.process_web_scraping]
-  C --> D[WebScrapingDatasourceMultimodalAdapterClient.get_documents_for_pipeline]
-  D --> E[Fetch autenticado e escolha de estrategia]
-  E --> F[Limpeza HTML e montagem do documento web rico]
-  F --> G[Particao entre paginas, anexos e prefetched_documents]
-  G --> H[_process_files_with_pipeline com require_prefetched_documents]
-  H --> I[DataSourceDocumentExecutor reutiliza documento prefetched]
-  I --> J[WebContentProcessor materializa HTML canônico]
-  J --> K[Html chunking e domain processing web]
-  K --> L[Indexacao final e anexacao de attachments]
-```
+![Pipeline detalhado da ingestão HTML Web Scraping](assets/diagrams/docs-readme-ingestao-diagrama-01.svg)
 
 O diagrama mostra a ideia central do desenho: o web scraping prepara o documento antes da esteira genérica de arquivo. O pipeline comum continua cuidando de chunking, persistência e telemetria, mas não reexecuta a captura da página.
 
@@ -331,18 +334,7 @@ Fluxo prático: um arquivo `.xlsx` ou `.xls` entra no pipeline como `StorageDocu
 
 ##### Pipeline detalhado da ingestão Excel
 
-```mermaid
-flowchart TD
-  A[Arquivo .xlsx ou .xls entregue ao pipeline] --> B[FileSystemDataSource lê bytes e infere ContentType]
-  B --> C[PreparedFilePipelineDocument recebe StorageDocument]
-  C --> D[ContentProcessorFactory resolve ExcelContentProcessor]
-  D --> E[Validação do contrato do arquivo]
-  E --> F[Carregamento do workbook com openpyxl ou xlrd]
-  F --> G[Análise estrutural de abas, cabeçalhos e tabelas]
-  G --> H[Construção do ExcelDocument com metadados ricos]
-  H --> I[Chunking adaptativo por linhas]
-  I --> J[Indexação final no pipeline comum]
-```
+![Pipeline detalhado da ingestão Excel](assets/diagrams/docs-readme-ingestao-diagrama-02.svg)
 
 O diagrama mostra o ponto central do desenho atual: o pipeline Excel está pronto da etapa de `StorageDocument` em diante, mas o contrato principal do request ainda não oferece um campo top-level dedicado para planilhas locais. Por isso a documentação precisa separar claramente “processor Excel pronto” de “entrada principal já exposta no contrato”.
 
@@ -523,18 +515,7 @@ Além disso, `ContentClientFactory` registra clients adaptadores multimodais par
 
 ##### Pipeline detalhado da ingestão multimodal
 
-```mermaid
-flowchart TD
-  A[Entry point por tipo: imagem, PDF, DOCX, PPT, web ou Confluence] --> B[Resolvedor valida contrato YAML e mescla config compartilhada e por origem]
-  B --> C[MultimodalComponentFactory cria extractor, OCR, descritor e embedding provider]
-  C --> D[MultimodalContentProcessor inicia o run e prepara status]
-  D --> E[Extração de imagens]
-  E --> F[Filtro por tamanho, deduplicação e seleção por prioridade]
-  F --> G[Para cada imagem: contexto, descrição, OCR, tags e embedding visual]
-  G --> H[Texto base é enriquecido com evidências visuais]
-  H --> I[Chunks base recebem imagens, metadata visual e embedding agregado]
-  I --> J[Status, stage reports e artefatos seguem para a esteira comum]
-```
+![Pipeline detalhado da ingestão multimodal](assets/diagrams/docs-readme-ingestao-diagrama-03.svg)
 
 Esse diagrama resume o que o código confirma: o multimodal não substitui o processor principal do tipo. Ele entra depois da materialização textual mínima e antes da criação final dos chunks enriquecidos.
 
@@ -741,18 +722,7 @@ Fluxo prático: o JSON entra na família local como caminho de arquivo, vira `St
 
 ##### Pipeline detalhado da ingestão JSON
 
-```mermaid
-flowchart TD
-  A[json_file_paths no IngestionRequest] --> B[ContentTypeDispatcher registra step content_type:json]
-  B --> C[LocalContentFamily.process_json]
-  C --> D[_process_files_with_pipeline e FilePipelineBatchCoordinator]
-  D --> E[JsonFileClient busca StorageDocument no FileSystemDataSource]
-  E --> F[JsonMetadataBuilder resolve contrato YAML e valida bytes]
-  F --> G[TextDocument JSON com metadados estruturais]
-  G --> H[JsonContentProcessor seleciona perfil e normaliza o payload]
-  H --> I[Chunking JSON-aware e domain processing opcional]
-  I --> J[Finalizacao do arquivo e indexacao dos chunks]
-```
+![Pipeline detalhado da ingestão JSON](assets/diagrams/docs-readme-ingestao-diagrama-04.svg)
 
 O diagrama mostra a ordem real do fluxo. O ponto central é este: a plataforma não manda o JSON direto para chunking. Antes disso ela decide se a entrada é realmente JSON, materializa o documento com integridade validada e enriquece a estrutura para que a indexação não trabalhe às cegas.
 
@@ -891,21 +861,7 @@ Visão estratégica: a ingestão JSON fortalece a plataforma YAML-first porque c
 
 ## 9. Pipeline ou fluxo principal
 
-```mermaid
-flowchart TD
-  A[Boundary aceita o pedido] --> B[IngestionService resolve contexto e paralelismo]
-  B --> C[Resolvers montam IngestionRequest]
-  C --> D{Fan-out documental?}
-  D -->|Sim| E[Coordenacao pai-filhos]
-  D -->|Nao| F[ContentIngestionOrchestrator]
-  E --> F
-  F --> G[Resolucao da familia de fonte]
-  G --> H[Materializacao canonica quando necessaria]
-  H --> I[Processor especifico por tipo]
-  I --> J[Chunking e enriquecimento]
-  J --> K[Persistencia e indexacao]
-  K --> L[Telemetria e fechamento operacional]
-```
+![9. Pipeline ou fluxo principal](assets/diagrams/docs-readme-ingestao-diagrama-05.svg)
 
 O diagrama mostra a ideia central da ingestão: a plataforma primeiro organiza a execução, depois resolve a origem e só então entra no processamento técnico do conteúdo.
 
@@ -1154,27 +1110,7 @@ Ação recomendada: revisar o perfil específico do tipo no YAML.
 
 ## 24. Diagramas
 
-```mermaid
-sequenceDiagram
-  participant B as Boundary
-  participant S as IngestionService
-  participant R as Source Resolvers
-  participant O as Orchestrator
-  participant P as Processor do Tipo
-  participant V as Vector Store e Persistencia
-  participant T as Telemetria
-
-  B->>S: Pedido de ingestao
-  S->>R: Resolve fontes e monta IngestionRequest
-  R-->>S: Fontes agregadas
-  S->>O: Executa lote direto ou fan-out
-  O->>P: Materializa e processa por tipo
-  P-->>O: Conteudo estruturado e chunks
-  O->>V: Persiste e indexa
-  O->>T: Atualiza estado operacional
-  O-->>S: Resultado consolidado
-  S-->>B: Aceite e retorno operacional
-```
+![24. Diagramas](assets/diagrams/docs-readme-ingestao-diagrama-06.svg)
 
 Este diagrama mostra a fronteira principal da ingestão: serviço prepara, orquestrador coordena, processor interpreta, persistência consolida e telemetria conta a história.
 
@@ -1188,6 +1124,16 @@ Pelo código lido, a ingestão depende de quatro pré-condições básicas.
 - Para fontes remotas, autenticação, anti-bot e parâmetros da origem configurados quando necessários.
 
 O sinal operacional mais claro de funcionamento é ver o pedido aceito, o `IngestionRequest` montado, os tipos processados com steps explícitos e o fechamento do run com métricas e resultado coerentes.
+
+## Leituras relacionadas
+
+- [README.md](./README.md): índice por intenção para navegar a documentação do domínio.
+- [README-ARQUITETURA.md](./README-ARQUITETURA.md): explica a separação entre boundary HTTP, worker e scheduler usada pela ingestão.
+- [README-SERVICE-API.md](./README-SERVICE-API.md): mostra como o pedido entra na plataforma antes da continuação assíncrona.
+- [README-ETL.md](./README-ETL.md): ajuda a diferenciar produção de acervo documental e transformação estruturada.
+- [README-RAG.md](./README-RAG.md): mostra como o acervo produzido aqui é consumido na resposta final.
+- [README-LOGGING.md](./README-LOGGING.md): aprofunda o diagnóstico por correlation_id e família de logs.
+- [tutorial-101-processo-completo-de-ingestao-e-rag.md](./tutorial-101-processo-completo-de-ingestao-e-rag.md): reconta a história ponta a ponta em linguagem 101.
 
 ## 26. Checklist de entendimento
 

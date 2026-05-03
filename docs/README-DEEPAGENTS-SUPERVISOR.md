@@ -158,18 +158,7 @@ Durante a execução, o supervisor registra eventos, telemetria de tools, interr
 
 ## 9. Pipeline ou fluxo principal
 
-```mermaid
-flowchart TD
-    A[YAML com selected_supervisor e multi_agents] --> B[Parser DeepAgent filtra execution.type deepagent]
-    B --> C[AST DeepAgent + validação semântica]
-    C --> D[DeepAgentSupervisor carrega contexto e factories]
-    D --> E[Resolve cache, tools, modelo e prompt]
-    E --> F[Resolve deepagent_memory, backend e store]
-    F --> G[Compõe pilha governada de middlewares]
-    G --> H[Cria ou reutiliza artefato DeepAgent]
-    H --> I[Executa invoke com thread_id e telemetria]
-    I --> J[Normaliza resposta, HIL, timeline e tools_usage]
-```
+![9. Pipeline ou fluxo principal](assets/diagrams/docs-readme-deepagents-supervisor-diagrama-01.svg)
 
 O diagrama mostra a ordem macro real. A lógica importante é que a execução não começa na chamada do modelo. Ela começa na validação do contrato e na montagem do ambiente governado.
 
@@ -635,23 +624,7 @@ Ação recomendada: investigar mudanças reais de configuração e sinais de inv
 
 ## 24. Diagramas
 
-```mermaid
-sequenceDiagram
-    participant YAML as YAML ativo
-    participant Parser as Parser DeepAgent
-    participant Validator as Validador semântico
-    participant Supervisor as DeepAgentSupervisor
-    participant Store as Store/Backend
-    participant Runtime as Runtime DeepAgent
-
-    YAML->>Parser: multi_agents + execution.type deepagent
-    Parser->>Validator: AST DeepAgent
-    Validator-->>Supervisor: contrato aceito
-    Supervisor->>Store: resolve deepagent_memory e backend
-    Supervisor->>Runtime: cria ou reutiliza agente governado
-    Runtime-->>Supervisor: resultado ou interrupção HIL
-    Supervisor-->>YAML: envelope com resposta, timeline e tools_usage
-```
+![24. Diagramas](assets/diagrams/docs-readme-deepagents-supervisor-diagrama-02.svg)
 
 O diagrama mostra que o runtime útil nasce depois da validação, não antes. Isso importa porque grande parte da governança do DeepAgent está na preparação e não apenas na execução final.
 

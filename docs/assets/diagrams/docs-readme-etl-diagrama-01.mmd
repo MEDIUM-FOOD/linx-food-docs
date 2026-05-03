@@ -1,18 +1,13 @@
-sequenceDiagram
-    participant Cliente
-    participant API as API /rag/etl
-    participant Queue as RabbitMQ
-    participant Worker as Worker oficial
-    participant Service as ExtractTransformLoadService
-    participant Orch as ExtractTransformLoadOrchestrator
-    participant Pipelines as Pipelines ETL
-    participant Status as /status
-
-    Cliente->>API: POST /rag/etl
-    API->>Queue: publica job
-    API-->>Cliente: 202 com task_id
-    Queue->>Worker: entrega mensagem
-    Worker->>Service: execute
-    Service->>Orch: run
-    Orch->>Pipelines: executa pipelines habilitados
-    Pipelines-->>Status: progresso e estado final
+flowchart TD
+    A["POST /rag/etl"] --> B["Resolve YAML e autentica permissao ETL"]
+    B --> C["Camada de compatibilidade escolhe modo de execucao"]
+    C --> D["Publica job em RabbitMQ"]
+    D --> E["Worker Dramatiq consome o ETL"]
+    E --> F["ExtractTransformLoadService valida configuracao"]
+    F --> G["ExtractTransformLoadOrchestrator escolhe pipelines habilitados"]
+    G --> H{"Mais de um pipeline e fan-out aplicavel?"}
+    H -- Sim --> I["Publica jobs filhos por pipeline"]
+    H -- Nao --> J["Executa sequencialmente no job atual"]
+    I --> K["Consolida resultados do job pai"]
+    J --> K
+    K --> L["Status, stream e cancelamento cooperativo"]

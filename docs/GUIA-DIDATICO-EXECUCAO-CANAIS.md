@@ -375,42 +375,14 @@ ASYNC_JOB_CONSUMER_RUNTIME=dramatiq.
 
 Este diagrama mostra a separação de papéis confirmada no código.
 
-```mermaid
-flowchart LR
-    A[Cliente] --> B[API HTTP]
-    B --> C[Resposta síncrona]
-    B --> D[Aceitação assíncrona]
-    D --> E[Worker oficial]
-    F[Scheduler dedicado] --> G[Jobs por tempo]
-    E --> H[Plano de controle multicanal]
-    E --> I[Runtime RabbitMQ + Dramatiq]
-    I --> J[Ingestão e ETL]
-```
+![Topologia operacional macro](assets/diagrams/docs-guia-didatico-execucao-canais-diagrama-01.svg)
 
 ### Sequência simplificada de bootstrap do worker
 
 Este diagrama mostra por que o worker só fica pronto depois de duas
 etapas distintas: controle multicanal e runtime assíncrono.
 
-```mermaid
-sequenceDiagram
-    participant WR as Worker Runner
-    participant RB as RuntimeBootstrap
-    participant WPR as WorkerProcessRuntime
-    participant CP as Control Plane
-    participant AR as Async Runtime
-
-    WR->>RB: start()
-    RB-->>WR: bootstrap compartilhado pronto
-    WR->>WPR: start()
-    WPR->>CP: start_control_plane()
-    CP-->>WPR: supervisor pronto
-    WPR->>AR: start()
-    AR-->>WPR: ingestão e ETL prontos
-    WPR-->>WR: snapshot ready
-    WR-->>WR: MULTICHANNEL_SUPERVISOR_READY
-    WR-->>WR: WORKER_READY
-```
+![Sequência simplificada de bootstrap do worker](assets/diagrams/docs-guia-didatico-execucao-canais-diagrama-02.svg)
 
 ## 25. Mapa de navegação conceitual
 

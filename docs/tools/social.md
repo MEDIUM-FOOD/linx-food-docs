@@ -129,18 +129,7 @@ Ferramentas confirmadas:
 
 ## 9. Pipeline principal
 
-```mermaid
-flowchart LR
-    A[Intenção do usuário ou do agente] --> B{Objetivo}
-    B -->|Enviar mensagem| C[WhatsApp ou Instagram DM]
-    B -->|Publicar conteúdo| D[Instagram Publish]
-    B -->|Operar atendimento| E[Chatwoot]
-    B -->|Escutar canal| F[Twitter/X]
-    C --> G[Resposta normalizada]
-    D --> G
-    E --> G
-    F --> G
-```
+![9. Pipeline principal](../assets/diagrams/docs-tools-social-diagrama-01.svg)
 
 O valor do fluxo está em separar ação de publicação, ação de atendimento e ação de pesquisa. Misturar esses objetivos geralmente gera automações frágeis.
 

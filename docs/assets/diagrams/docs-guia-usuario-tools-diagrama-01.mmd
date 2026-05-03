@@ -1,6 +1,11 @@
-flowchart LR
-        A["YAML resolvido"] --> B["ConfigurationFactory injeta tools_library"]
-        B --> C["ToolsFactory indexa o catálogo"]
-        C --> D["ToolLoader resolve sintaxe parametrizada"]
-        D --> E["Factory específica constrói a tool"]
-        E --> F["Tool executa recurso interno ou externo"]
+flowchart TD
+    A["Código-fonte das tools"] --> B["ToolsLibraryBuilder descobre implementações"]
+    B --> C["Builder adiciona factories parametrizadas base"]
+    C --> D["BuiltinToolCatalogSynchronizer normaliza e sincroniza"]
+    D --> E["integrations.builtin_tool_registry"]
+    E --> F["ToolsLibraryCache carrega snapshot global"]
+    F --> G["ConfigurationFactory recebe YAML"]
+    G --> H{"tools_library existe e está vazia?"}
+    H -->|"não"| I["Falha fechada"]
+    H -->|"sim"| J["Injeta tools builtin ativas"]
+    J --> K["Assembly e runtime resolvem tools"]

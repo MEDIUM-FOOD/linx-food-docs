@@ -1,5 +1,7 @@
 # Manual técnico, executivo, comercial e estratégico: AG-UI
 
+> Este manual continua como porta de entrada ampla do tema, mas agora foi complementado por dois manuais especializados para leitura mais profunda do protocolo com referencial oficial e uso em ERP: [README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-CONCEITUAL-AG-UI-GOOGLE-MICROSOFT-ERP.md) e [README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md](./README-TECNICO-AG-UI-GOOGLE-MICROSOFT-ERP.md). Use os dois novos arquivos quando a necessidade for entender a relação com o ecossistema AG-UI oficial, a implementação real no projeto, o uso em telas ERP e os casos de negócio comprovados no código.
+
 ## 1. O que é esta feature
 
 AG-UI, neste projeto, é um protocolo de interface agentic orientado por eventos. Ele foi implementado para permitir que uma aplicação cliente envie um pedido de execução, mantenha uma conexão HTTP aberta e receba a história da execução em tempo real: início do run, etapas, chamadas de tool, snapshots e deltas de estado, texto incremental do assistente, erros e encerramento.
@@ -281,44 +283,13 @@ Esse é o caso mais rico do slice AG-UI atual porque mostra o protocolo servindo
 
 ## 16. Pipeline ou fluxo principal
 
-```mermaid
-flowchart TD
-    A[Aplicacao cliente envia POST para /ag-ui/runs] --> B[Router valida permissao e fonte de configuracao]
-    B --> C[Router resolve correlation_id e cria AgUiRunContext]
-    C --> D[Orquestrador emite RUN_STARTED]
-    D --> E[Orquestrador resolve adapter por executionKind]
-    E --> F{executionKind atual}
-    F -- retail_demo capability fixa --> G[Adapter resolve capability e query governada]
-    F -- retail_demo dashboard_dynamic --> H[Adapter delega para materializacao de DashboardSpec]
-    G --> I[Eventos de step, tool, snapshot e mensagem]
-    H --> J[Eventos custom, snapshot, deltas e mensagem de validacao ou prontidao]
-    I --> K[Encoder serializa BaseEvent em SSE]
-    J --> K
-    K --> L[Cliente SSE atualiza sidecar e tela]
-    L --> M[RUN_FINISHED ou RUN_ERROR]
-```
+![16. Pipeline ou fluxo principal](assets/diagrams/docs-readme-ag-ui-diagrama-01.svg)
 
 Esse fluxo mostra um detalhe importante: a UI sempre fala com a mesma rota, mas o backend decide como traduzir aquela execução para eventos AG-UI.
 
 ## 17. Sequência do dashboard dinâmico
 
-```mermaid
-sequenceDiagram
-    participant UI as Tela AG-UI Dashboard
-    participant Router as /ag-ui/runs
-    participant Orch as AgUiRunOrchestrator
-    participant Adapter as RetailDemoAgUiAdapter
-    participant Materializer as DashboardMaterializationService
-
-    UI->>Router: POST com executionKind=retail_demo e capability=dashboard_dynamic
-    Router->>Orch: run(context)
-    Orch->>Adapter: execute(context)
-    Adapter->>Materializer: build_events(dashboardSpec)
-    Materializer-->>Adapter: snapshot inicial + eventos custom + deltas
-    Adapter-->>Orch: stream de eventos AG-UI
-    Orch-->>Router: RUN_STARTED + eventos do dashboard + RUN_FINISHED
-    Router-->>UI: SSE com correlation_id no header
-```
+![17. Sequência do dashboard dinâmico](assets/diagrams/docs-readme-ag-ui-diagrama-02.svg)
 
 Essa sequência explica por que o dashboard dinâmico acelera outras aplicações: o consumidor não precisa conhecer a lógica de materialização; ele só consome o stream.
 
@@ -516,6 +487,15 @@ Sintoma: estado `validation_failed` ou ausência de widgets.
 Causa provável: `DashboardSpec` inválido ou inseguro.
 
 Como confirmar: revisar os erros estruturados de validação retornados no stream.
+
+## Leituras relacionadas
+
+- [README.md](./README.md): índice por intenção para navegar para slices vizinhos.
+- [README-ARQUITETURA.md](./README-ARQUITETURA.md): contextualiza AG-UI dentro da superfície HTTP e dos papéis operacionais.
+- [README-SERVICE-API.md](./README-SERVICE-API.md): aprofunda o boundary que publica `POST /ag-ui/runs`.
+- [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md): explica o contrato de interrupção e retomada que AG-UI pode transportar.
+- [README-LOGGING.md](./README-LOGGING.md): detalha correlation_id e rastreabilidade do stream.
+- [tutorial-101-generative-ui.md](./tutorial-101-generative-ui.md): explica a experiência em linguagem 101.
 
 ## 27. Checklist de entendimento
 

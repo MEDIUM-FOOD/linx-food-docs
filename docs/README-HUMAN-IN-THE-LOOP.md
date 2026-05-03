@@ -4,6 +4,13 @@
 
 Human-in-the-Loop, ou HIL, é a capacidade da plataforma de interromper uma execução agentic em um ponto sensível, publicar um contrato formal de revisão humana e retomar exatamente a mesma execução depois que uma pessoa decide aprovar, editar ou rejeitar a ação pendente.
 
+Quando o foco for a variante em execução agendada e background, com run
+durável, scheduler universal e canais de aprovação, complemente este
+manual com
+[README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-CONCEITUAL-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md)
+e
+[README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md](./README-TECNICO-AGENDAMENTO-AGENTIC-BACKGROUND-HIL.md).
+
 Nesta base de código, HIL não é um texto de resposta do modelo e não é um fluxo manual improvisado por fora do runtime. É uma capacidade de execução com contrato tipado, preservação de thread, registro de pausa, retomada formal e, em parte dos fluxos, notificação assíncrona para aprovadores externos.
 
 Em linguagem simples, HIL é o freio oficial do motor agentic. Ele pausa no ponto certo, guarda onde parou, mostra o que precisa ser decidido e continua do mesmo lugar quando a decisão chega.
@@ -180,44 +187,13 @@ Valor entregue: uma mesma experiência de revisão humana pode ser reutilizada e
 
 ## 12. Fluxo principal do HIL síncrono
 
-```mermaid
-flowchart TD
-    A[Cliente chama /agent/execute] --> B[Backend resolve YAML, usuario e supervisor]
-    B --> C[Runtime encontra tool ou etapa sensivel]
-    C --> D[Execucao pausa e estado fica ancorado no checkpointer]
-    D --> E[Router publica thread_id, metrics paused e envelope hil]
-    E --> F[UI monta painel de revisao com action_requests e review_configs]
-    F --> G[Operador aprova, edita ou rejeita]
-    G --> H[Cliente chama /agent/continue]
-    H --> I[Backend valida pausa registrada e decisoes permitidas]
-    I --> J[Supervisor recebe Command resume na mesma thread]
-    J --> K[Execucao conclui ou pausa novamente]
-```
+![12. Fluxo principal do HIL síncrono](assets/diagrams/docs-readme-human-in-the-loop-diagrama-01.svg)
 
 Esse fluxo mostra a essência da feature: a execução não é recriada depois da decisão. Ela é retomada.
 
 ## 13. Fluxo de confirmação assíncrona
 
-```mermaid
-sequenceDiagram
-    participant Exec as DeepAgent em background
-    participant Router as agent_router
-    participant BG as HilBackgroundApprovalService
-    participant Repo as Repositorio HIL
-    participant Notify as NotificationService
-    participant Approver as Aprovador externo
-    participant Decide as HilApprovalDecisionService
-    participant Continue as AgentHilContinuationService
-
-    Exec->>Router: pausa HIL em execucao assincrona
-    Router->>BG: dispatch(async_approval)
-    BG->>Repo: create_pending com token e metadata
-    BG->>Notify: enviar aprovacao por whatsapp ou email
-    Approver->>Decide: responde por token ou canal
-    Decide->>Repo: validar pendencia, expiracao e aprovador
-    Decide->>Continue: retomar execucao original
-    Continue-->>Approver: resultado consolidado da continuacao
-```
+![13. Fluxo de confirmação assíncrona](assets/diagrams/docs-readme-human-in-the-loop-diagrama-02.svg)
 
 Esse é o ponto em que HIL deixa de ser apenas uma pausa interativa na tela e passa a ser uma capacidade de operação distribuída.
 

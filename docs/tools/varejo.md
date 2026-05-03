@@ -147,18 +147,7 @@ Risco principal: tentar usar uma tool de integração onde o caso exige dyn_sql 
 
 ## 9. Fluxo principal de uso
 
-```mermaid
-flowchart TD
-    A[Problema de varejo] --> B{Tipo de necessidade}
-    B -->|Canal externo| C[Tool concreta de provider]
-    B -->|Operação de ecommerce| D[Toolkit Shopify, WooCommerce ou VTEX]
-    B -->|Food delivery| E[Toolkit de pedidos, eventos ou cardápio]
-    B -->|Analytics interna| F[dyn_sql ou UCP discovery]
-    C --> G[Resposta normalizada ao agente]
-    D --> G
-    E --> G
-    F --> G
-```
+![9. Fluxo principal de uso](../assets/diagrams/docs-tools-varejo-diagrama-01.svg)
 
 O ponto importante do fluxo é que o projeto não trata todo problema de varejo do mesmo jeito. A solução muda conforme o dado é externo, operacional ou governado.
 

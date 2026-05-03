@@ -533,47 +533,11 @@ Como confirmar: revisar os eventos bm25_cache_status em log.
 
 ## 26. Diagramas
 
-```mermaid
-flowchart TD
-    A[Recurso solicitado] --> B{Familia de cache existe?}
-    B -- Nao --> C[Constroi recurso]
-    B -- Sim --> D[Deriva chave e namespace]
-    D --> E{Backend local ou distribuido?}
-    E -- Local --> F[Consulta cache em processo]
-    E -- Distribuido --> G[Consulta Redis ou backend vetorial]
-    F --> H{Hit?}
-    G --> H
-    H -- Sim --> I[Reutiliza recurso]
-    H -- Nao --> C
-    C --> J[Armazena no cache apropriado]
-    J --> K[Segue execucao]
-    I --> K
-```
+![26. Diagramas](assets/diagrams/docs-readme-caching-diagrama-01.svg)
 
 Esse fluxo mostra o comportamento macro: a plataforma decide primeiro se existe uma família de cache aplicável, depois escolhe a chave e o backend correto, e só constrói o recurso se não houver reaproveitamento válido.
 
-```mermaid
-sequenceDiagram
-    participant Cliente as Requisicao ou Job
-    participant Pool as WarmResourcePool ou Cache Manager
-    participant Redis as Redis
-    participant Admin as Admin Cache
-
-    Cliente->>Pool: solicita recurso
-    Pool->>Redis: consulta backend compartilhado quando aplicavel
-    Redis-->>Pool: hit ou miss
-    alt hit valido
-        Pool-->>Cliente: retorna recurso reutilizado
-    else miss
-        Pool->>Pool: constroi recurso caro
-        Pool->>Redis: persiste quando necessario
-        Pool-->>Cliente: retorna recurso novo
-    end
-    Admin->>Redis: publica sinal global de invalidacao
-    Cliente->>Pool: nova solicitacao
-    Pool->>Redis: consulta timestamp de invalidacao
-    Pool->>Pool: limpa cache local se sinal mudou
-```
+![26. Diagramas](assets/diagrams/docs-readme-caching-diagrama-02.svg)
 
 Esse diagrama mostra por que o sistema combina cache local com coordenação distribuída: a limpeza administrativa precisa alcançar outros processos sem depender apenas de memória local.
 

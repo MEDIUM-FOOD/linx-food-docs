@@ -1,29 +1,17 @@
 sequenceDiagram
-  participant U as Cliente
-  participant API as workflow_router
-  participant SVC as WorkflowExecutionService
-  participant ORCH as WorkflowOrchestrator
-  participant AW as AgentWorkflow
-  participant RT as LangGraph Runtime
+    participant API as API /workflow/execute
+    participant Service as WorkflowExecutionService
+    participant Orch as WorkflowOrchestrator
+    participant Runtime as AgentWorkflow
+    participant Graph as StateGraph
 
-  U->>API: /workflow/execute
-  API->>SVC: execute_sync/execute_async
-  SVC->>ORCH: executar workflow
-  ORCH->>AW: run(message, thread_id)
-  AW->>RT: invoke grafo
-
-  alt node exige aprovacao humana
-    RT-->>AW: __interrupt__
-    AW-->>ORCH: pausado + thread_id
-    ORCH-->>API: resposta de pausa
-    U->>API: /workflow/continue (mesmo thread_id)
-    API->>ORCH: continue_execution(...)
-    ORCH->>AW: invoke(Command(resume=...), thread_id)
-    AW->>RT: resume checkpoint
-  end
-
-  RT-->>AW: estado final
-  AW-->>ORCH: final_response + metadata
-  ORCH-->>SVC: resultado consolidado
-  SVC-->>API: WorkflowResponse
-  API-->>U: resposta final
+    API->>Service: hidrata YAML e sessão
+    Service->>Orch: execute(message, thread_id)
+    Orch->>Runtime: initialize()
+    Runtime->>Runtime: parser, integridade, factories, cache
+    Runtime->>Graph: compila node-driven ou edge-first
+    Orch->>Runtime: run(message, thread_id)
+    Runtime->>Graph: ainvoke(initial_state)
+    Graph-->>Runtime: state final
+    Runtime-->>Orch: final_response e metadata
+    Orch-->>API: response normalizada

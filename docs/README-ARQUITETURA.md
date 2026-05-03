@@ -395,6 +395,8 @@ Cenário: a operação precisa abrir páginas administrativas e também chamar e
 
 Como a arquitetura ajuda: o mesmo app HTTP serve estáticos e expõe routers web e programáticos.
 
+Evidência prática: a UI administrativa de ingestão também é servida pelo mesmo app, incluindo o arquivo `app/ui/static/js/admin-ingestao.js`.
+
 Valor prático: menos duplicação de deploy e menos pontos de integração entre frontend e backend.
 
 ### 20.3. Aceitar um fluxo longo sem travar a API
@@ -476,56 +478,22 @@ Onde investigar: resolução de configuração e injeção do catálogo builtin.
 
 ## 24. Diagramas
 
-```mermaid
-flowchart TD
-    A[run.sh] --> B[Runner API]
-    A --> C[Runner Worker]
-    A --> D[Runner Scheduler]
-
-    B --> E[Preflight de infraestrutura]
-    E --> F[FastAPI boundary HTTP]
-    F --> G[UI estática e páginas web]
-    F --> H[Routers de domínio e AG-UI]
-
-    C --> I[Bootstrap compartilhado]
-    I --> J[Runtime assíncrono]
-    J --> K[Plano de controle multicanal]
-
-    D --> L[Bootstrap compartilhado]
-    L --> M[Coordenação temporal]
-
-    N[YAML recebido] --> O[Resolução de configuração]
-    O --> P[Injeção de catálogo builtin]
-    P --> F
-    P --> J
-```
+![24. Diagramas](assets/diagrams/docs-readme-arquitetura-diagrama-01.svg)
 
 Esse diagrama mostra a lógica macro da plataforma: entrada explícita por papéis, boundary HTTP unificado e execução operacional distribuída.
 
-```mermaid
-sequenceDiagram
-    participant Operador as Operador
-    participant Launcher as run.sh
-    participant API as Runner API
-    participant Worker as Runner Worker
-    participant Scheduler as Runner Scheduler
-    participant HTTP as FastAPI
-    participant Config as Resolução YAML
-
-    Operador->>Launcher: escolhe +a +w +s
-    Launcher->>API: inicia processo API
-    Launcher->>Worker: inicia processo worker
-    Launcher->>Scheduler: inicia processo scheduler
-    API->>API: valida infraestrutura
-    API->>HTTP: sobe boundary HTTP
-    Worker->>Worker: valida infraestrutura
-    Worker->>Worker: executa bootstrap e runtime assíncrono
-    Scheduler->>Scheduler: valida infraestrutura
-    Scheduler->>Scheduler: executa bootstrap temporal
-    HTTP->>Config: resolve YAML e injeta tools builtin quando necessário
-```
+![24. Diagramas](assets/diagrams/docs-readme-arquitetura-diagrama-02.svg)
 
 Esse diagrama mostra a ordem real de inicialização observada no código: cada papel sobe de forma explícita e o runtime de configuração agentic entra como parte da operação, não como detalhe secundário.
+
+## Leituras relacionadas
+
+- [README.md](./README.md): índice por intenção para continuar a navegação.
+- [README-SERVICE-API.md](./README-SERVICE-API.md): detalha o boundary HTTP que materializa a arquitetura.
+- [README-SCHEDULER.md](./README-SCHEDULER.md): aprofunda a coordenação temporal descrita aqui.
+- [README-LOGGING.md](./README-LOGGING.md): explica correlation_id, saídas de log e investigação operacional.
+- [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md): aprofunda a resolução de configuração que a arquitetura consome.
+- [README-INGESTAO.md](./README-INGESTAO.md): mostra um fluxo assíncrono real executado sobre essa topologia.
 
 ## 25. Checklist de entendimento
 

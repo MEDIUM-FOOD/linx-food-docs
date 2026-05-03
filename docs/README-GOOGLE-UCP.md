@@ -552,47 +552,11 @@ Como confirmar: revisar logs do dispatcher e a disponibilidade do webhook.
 
 ## 30. Diagramas
 
-```mermaid
-flowchart TD
-    A[Consumidor UCP] --> B[Well-known UCP e OAuth]
-    A --> C[Checkout Sessions]
-    C --> D{PDV HTTP configurado?}
-    D -- Sim --> E[Cliente PDV]
-    D -- Nao --> F[Fallback banco varejo]
-    E --> G[Resposta UCP validada]
-    F --> G
-    A --> H[Order Events]
-    H --> I[Dispatcher de webhook]
-```
+![30. Diagramas](assets/diagrams/docs-readme-google-ucp-diagrama-01.svg)
 
 Esse diagrama mostra o desenho macro da feature: discovery, checkout e pós-compra, com bifurcação entre PDV remoto e fallback.
 
-```mermaid
-sequenceDiagram
-    participant P as Parceiro UCP
-    participant API as API Prometeu
-    participant PDV as PDV HTTP
-    participant FB as Fallback Banco
-    participant WH as Webhook Pedido
-
-    P->>API: GET /.well-known/ucp
-    API-->>P: Business Profile
-
-    P->>API: POST /ucp/v1/checkout-sessions
-    alt PDV configurado
-        API->>PDV: create checkout
-        PDV-->>API: checkout calculado
-    else fallback ativo
-        API->>FB: montar checkout no schema varejo
-        FB-->>API: checkout reconstruido
-    end
-    API-->>P: resposta UCP
-
-    P->>API: POST /ucp/v1/order-events
-    API->>WH: dispatch webhook
-    WH-->>API: 2xx
-    API-->>P: 202 Accepted
-```
+![30. Diagramas](assets/diagrams/docs-readme-google-ucp-diagrama-02.svg)
 
 Esse diagrama mostra a ordem real das interações mais importantes.
 

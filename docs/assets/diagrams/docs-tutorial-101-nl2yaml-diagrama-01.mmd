@@ -1,27 +1,16 @@
 flowchart TD
-    A["Objetivo em linguagem natural"] --> B{"Qual entrada voce escolheu?"}
-    B -->|"Direta"| C["UI NL2YAML Studio"]
-    B -->|"Guiada"| D["UI Admin Assembly AST"]
-
-    C --> E["/POST /config/assembly/objective-to-yaml/"]
-    D --> F["/POST /config/assembly/preflight/"]
-    F --> G["/POST /config/assembly/draft/"]
-    G --> H["/POST /config/assembly/validate/"]
-    H --> I["/POST /config/assembly/confirm com apply=false/"]
-    I --> J["Preview final"]
-    J --> K["/POST /config/assembly/confirm com apply=true/"]
-    K --> L["YAML salvo"]
-
-    E --> M["AgenticAssemblyService.objective_to_yaml"]
-    M --> N{"Preflight pronto?"}
-    N -->|"Nao"| O["blocking_stage = preflight"]
-    N -->|"Sim"| P["Draft"]
-    P --> Q{"Ha questions ou erros?"}
-    Q -->|"Sim"| R["blocking_stage = draft"]
-    Q -->|"Nao"| S["Validate"]
-    S --> T{"Valido?"}
-    T -->|"Nao"| U["blocking_stage = validate"]
-    T -->|"Sim"| V["Confirm dry-run"]
-    V --> W{"Saiu final_yaml?"}
-    W -->|"Nao"| X["blocking_stage = confirm"]
-    W -->|"Sim"| J
+    A["Briefing em linguagem natural"] --> B["Router objective-to-yaml"]
+    B --> C["Resolve correlation_id, permissao e feature flag"]
+    C --> D["Resolve target e YAML base"]
+    D --> E["Preflight"]
+    E -->|"bloqueado"| F["Retorna blocking_stage preflight"]
+    E -->|"pronto"| G["Draft AST"]
+    G -->|"faltam decisoes"| H["Retorna questions e blocking_stage draft"]
+    G -->|"rascunho consistente"| I["Validate"]
+    I -->|"invalido"| J["Retorna blocking_stage validate"]
+    I -->|"valido"| K["Confirm dry-run"]
+    K -->|"falha"| L["Retorna blocking_stage confirm"]
+    K -->|"sucesso"| M["Retorna final_yaml, texto, diff e rastro"]
+    M --> N["Studio revisa preview"]
+    N --> O["Confirm com apply true"]
+    O --> P["Normaliza output_path em app/yaml e salva"]

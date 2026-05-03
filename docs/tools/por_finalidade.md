@@ -33,15 +33,7 @@ Isso significa que a plataforma trabalha em três níveis ao mesmo tempo.
 
 O fluxo técnico resumido é este.
 
-```mermaid
-flowchart LR
-    A[Código com @tool e @tool_factory] --> B[Builder descobre tools]
-    B --> C[Catálogo builtin persistido]
-    C --> D[Cache compartilhado]
-    D --> E[Injeção em tools_library]
-    E --> F[Resolver de catálogo por escopo]
-    F --> G[Agente, workflow, supervisor ou AG-UI]
-```
+![4. Visão técnica](../assets/diagrams/docs-tools-por-finalidade-diagrama-01.svg)
 
 O diagrama mostra por que a plataforma consegue organizar as mesmas tools por vários prismas. A mesma tool pode aparecer no catálogo alfabético, na visão por finalidade e em um manual de domínio, sem perder consistência com o runtime.
 

@@ -574,50 +574,11 @@ O que o sistema faz: aplica merge seletivo para preservar slices laterais por id
 
 ## 25. Diagramas
 
-```mermaid
-flowchart TD
-    A[Base YAML ou Prompt] --> B[Preflight]
-    B --> C[Draft AST]
-    C --> D[Validate]
-    D --> E[Confirm]
-    E --> F[Final YAML]
-    E --> G[Persistência canônica em app/yaml]
-    C --> H[Questions]
-    D --> I[Drift e diagnóstico]
-    J[Schema e Catalog] --> C
-    J --> D
-    J --> K[Designer e Tooling]
-    L[Language Server] --> K
-```
+![25. Diagramas](assets/diagrams/docs-readme-ast-agentic-designer-diagrama-01.svg)
 
 Esse diagrama mostra a lógica macro da feature: a AST fica no centro e o designer deixa de ser uma edição direta de texto para virar esteira governada.
 
-```mermaid
-sequenceDiagram
-    participant Operador as Operador ou UI
-    participant Router as /config/assembly
-    participant Service as AgenticAssemblyService
-    participant Parser as Parsers AST
-    participant Validator as DocumentSemanticValidator
-    participant Compiler as DocumentCompiler
-    participant Editor as CanonicalYamlEditor
-
-    Operador->>Router: preflight
-    Router->>Service: preflight
-    Service-->>Operador: checks e diagnostics
-    Operador->>Router: draft
-    Router->>Service: draft
-    Service->>Parser: parse ou geração assistida
-    Service->>Validator: validação semântica
-    Service->>Compiler: fragmento e preview
-    Service-->>Operador: ast_draft, diff_preview, questions
-    Operador->>Router: confirm
-    Router->>Service: confirm
-    Service->>Validator: revalida
-    Service->>Compiler: merge seletivo
-    Service->>Editor: salva quando apply=true
-    Service-->>Operador: final_yaml e saved_path
-```
+![25. Diagramas](assets/diagrams/docs-readme-ast-agentic-designer-diagrama-02.svg)
 
 Esse diagrama mostra a ordem real da operação: a publicação só acontece depois de parse, validação e merge controlado.
 

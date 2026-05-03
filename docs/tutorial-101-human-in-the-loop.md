@@ -50,7 +50,7 @@ Quando AG-UI entra no jogo, ele nao substitui esse contrato de HIL. Ele muda a f
 
 ## 4) Mapa de navegacao do repo
 
-- `docs/README-HUMAN-IN-THE-LOOP.md` -> manual tecnico principal do assunto -> mexa primeiro quando a duvida for contrato, limites ou comportamento real.
+- [README-HUMAN-IN-THE-LOOP.md](./README-HUMAN-IN-THE-LOOP.md) -> manual tecnico principal do assunto -> mexa primeiro quando a duvida for contrato, limites ou comportamento real.
 - `src/api/routers/agent_router.py` -> boundary HTTP de DeepAgent HIL -> mexa quando o problema for `/agent/execute`, `/agent/continue` ou envelope `hil`.
 - `src/api/routers/workflow_router.py` -> boundary HTTP de workflow -> mexa quando a retomada vier de `/workflow/continue`.
 - `src/agentic_layer/supervisor/deep_agent_supervisor.py` -> runtime DeepAgent e normalizacao de `interrupt_on` -> mexa quando a pausa for de tool-call no supervisor.

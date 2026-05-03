@@ -1,5 +1,12 @@
 # Manual técnico, executivo, comercial e estratégico: Pipeline de RAG
 
+## Leitura complementar obrigatória
+
+Este README continua sendo a visão unificada do tema RAG dentro do catálogo principal da pasta docs. Para aprofundamento novo e separado por finalidade, use também os dois manuais dedicados abaixo.
+
+- [README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md](./README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md): visão conceitual, executiva, comercial, estratégica e comparação com estado da arte.
+- [README-TECNICO-RAG-PIPELINE-COMPLETO.md](./README-TECNICO-RAG-PIPELINE-COMPLETO.md): fluxo executável, configuração, troubleshooting e diagnóstico ponta a ponta.
+
 ## 1. O que é esta feature
 
 O pipeline de RAG desta plataforma é a capacidade que recebe uma pergunta em linguagem natural, escolhe a melhor forma de procurar evidência no acervo e só depois pede ao modelo para redigir a resposta. O ponto central é que o sistema não trata RAG como “buscar alguns trechos e mandar para o LLM”. O runtime real separa entendimento da pergunta, expansão de domínio, roteamento, retrieval, enriquecimento lexical, fusão, controle de acesso e geração.
@@ -83,6 +90,8 @@ Domain Processing, no runtime real deste projeto, não é um bloco mágico. Ele 
 
 Em outras palavras, processamento de domínio aqui significa ajudar o pipeline a falar a linguagem do acervo especializado antes de recuperar a evidência.
 
+É importante separar isso do processamento por domínio da ingestão. Na ingestão, o `DomainProcessingResolver` atua sobre documento e chunks para enriquecer o acervo antes da indexação. No RAG, o processamento por domínio atua sobre a pergunta e sobre a estratégia de recuperação. O nome é parecido porque ambos tentam aproximar linguagem e acervo, mas o ponto do pipeline é diferente: ingestão enriquece a base; RAG enriquece a consulta.
+
 ### Self-Query por domínio
 
 Self-query é a tentativa de transformar a pergunta em filtros estruturados, especialmente úteis quando a resposta depende de atributos do documento, não apenas do texto livre. No contexto deste projeto, isso fica ligado ao módulo domain_specific_rag e ao resolvedor de self-query por domínio.
@@ -158,6 +167,8 @@ Valor para o conjunto: impede que o roteamento trate consultas comparativas, est
 ### 8.4. Domain Processing
 
 Esta etapa existe para adaptar a pergunta à linguagem real do domínio. No código lido, isso não é uma única classe. É uma família de mecanismos.
+
+Ela não substitui o enriquecimento por domínio que pode ter acontecido na ingestão. O que a ingestão fez foi melhorar o acervo persistido. O que esta etapa faz é melhorar a formulação da consulta e os sinais usados pelo retrieval no momento da busca.
 
 Primeiro, o QueryAnalyzer carrega auto_detection_keywords a partir de domain_specific_rag.domains e usa esses termos como sinal adicional para detectar domínio técnico. Depois, o RetrievalEngine integra o snapshot de vocabulário BM25 ao bloco domain_specific_rag por meio do DomainQueryExpansionConfigService. Isso mescla palavras de detecção, vocabulário de expansão e estatísticas operacionais dentro da configuração ativa. Por fim, quando existe etapa registrada e habilitada, o runtime cria um DomainQueryExpansionStep concreto, como DnitQueryExpansionStep.
 
@@ -349,20 +360,7 @@ Valor para o conjunto: só responde depois que a evidência foi consolidada.
 
 ## 9. Pipeline principal de ponta a ponta
 
-```mermaid
-flowchart TD
-    A[Pergunta recebida] --> B[Montagem do runtime]
-    B --> C[Query rewrite controlado]
-    C --> D[Query analysis]
-    D --> E[Domain processing]
-    E --> F[Roteamento adaptativo]
-    F --> G[Retrieval principal]
-    G --> H[FTS augment ou fallback]
-    H --> I[Fusion quando exigida]
-    I --> J[ACL e normalizacao]
-    J --> K[Generation Engine]
-    K --> L[Resposta e metricas]
-```
+![9. Pipeline principal de ponta a ponta](assets/diagrams/docs-readme-rag-diagrama-01.svg)
 
 O diagrama mostra a lógica real do runtime. O ponto importante é que Hybrid Search, BM25, FTS, Multi-Query e Domain Processing não são features soltas. Eles entram no meio do pipeline para influenciar a qualidade da evidência antes da geração.
 
@@ -462,37 +460,330 @@ Risco mitigado: uma fonte dominar o ranking sem merecer.
 
 ## 11. Configurações que mudam o comportamento
 
-### rag_system.retriever.vector_store
+No retrieval moderno, a configuração YAML não está concentrada em uma chave única porque o pipeline separa problemas diferentes: busca vetorial, combinação lexical, reforço por banco, reescrita da pergunta, expansão em múltiplas consultas, cache semântico e reranking. O ponto operacional importante é que ausência de caminho, bloco vazio e valor inválido não produzem o mesmo efeito. Em alguns pontos o runtime usa defaults seguros. Em outros ele falha cedo para impedir uma estratégia inconsistente. Em outros ele apenas desliga um recurso auxiliar e segue com a busca principal.
 
-Controla o bloco vetorial obrigatório do retriever moderno. Se esta seção estiver ausente ou vazia, o runtime falha explicitamente. Valor padrão não confirmado no código lido.
+Outro detalhe crítico: o arquivo modelo ajuda a enxergar a convenção de escrita, mas a fonte de verdade do contrato é o código que lê essas chaves. Por isso, esta seção documenta apenas caminhos confirmados no runtime lido.
 
-### rag_system.retriever.hybrid.search_type
+### 11.1 Mapa canônico das estratégias de retrieval
 
-Controla o modo de Hybrid Search. O código lido reconhece, no mínimo, os modos manual, nativo e desligado. Quando o valor é inválido, o engine cai para manual.
+Os blocos YAML realmente lidos para controlar estratégias de retrieval ficam nestes caminhos:
 
-### rag_system.retriever.fts
+- `rag_system.retriever.vector_store`: retrieval semântico principal.
+- `rag_system.retriever.hybrid`: pesos, modo de hybrid search, BM25, adaptive router e fusão final.
+- `rag_system.retriever.fts`: reforço lexical via PostgreSQL full-text search.
+- `rag_system.retriever.caching`: cache semântico de consultas.
+- `qa_system.query_rewrite`: reescrita da pergunta antes da recuperação.
+- `intelligent_pipeline.multi_query`: expansão da pergunta em múltiplas consultas.
+- `qa_system.reranker`: reranking neural depois da recuperação.
 
-Controla habilitação do FTS, modo, DSN, schema, tabela, top_k, statement_timeout, tamanho do pool e parâmetros de gatilho para fallback. O modo default inferido no RetrievalEngine é augment.
+Na prática, isso significa que “estratégia de retrieval” na plataforma não é apenas escolher entre vetor e BM25. É controlar a cadeia inteira de preparação da pergunta, recuperação, fusão, reaproveitamento e reordenação dos documentos.
 
-### configuração moderna de extração BM25
+### 11.2 rag_system.retriever.vector_store
 
-Controla se BM25 está habilitado, se há extração de keywords, bucketização e integração do vocabulário persistido. Se BM25 estiver desligado, o pipeline continua apenas com vector search. Alguns valores padrão específicos não foram confirmados no código lido desta rodada.
+Este é o núcleo semântico do retrieval moderno. Ele define quantos documentos o retriever vetorial busca e qual é o corte mínimo de similaridade aceito antes de a evidência seguir adiante.
 
-### qa_system.query_rewrite
+Campos confirmados no runtime:
 
-Controla habilitação e política de reescrita. O runtime só usa reescrita quando a configuração e o LLM permitem.
+- `k`
+- `similarity_threshold`
+- `use_mmr`
+- `mmr_fetch_k`
+- `mmr_lambda`
 
-### intelligent_pipeline
+Comportamento confirmado:
 
-Controla a habilitação do pipeline inteligente, tempo máximo total, logging de decisões e políticas gerais de fallback.
+- Se o caminho inteiro estiver ausente, o helper aplica defaults seguros: `k=10`, `similarity_threshold=0.5`, `use_mmr=false`, `mmr_fetch_k=20`, `mmr_lambda=0.5`.
+- Se o bloco existir, mas vier vazio, o runtime falha explicitamente.
+- Se o bloco existir sem `k` ou sem `similarity_threshold`, o runtime falha explicitamente.
+- `use_mmr` ativa diversidade na lista recuperada. Na prática, isso reduz repetição de chunks muito parecidos, mas pode trocar um pouco de precisão local por cobertura mais ampla.
 
-### domain_specific_rag
+Impacto prático: este bloco não é um detalhe cosmético. Ele define o comportamento mínimo da busca semântica. Se ele estiver fraco, todo o resto do pipeline trabalha sobre evidência ruim.
 
-Controla domínios ativos, auto_detection_keywords, query_expansion, bm25_detection, vocabulário específico e self-query por domínio.
+### 11.3 rag_system.retriever.hybrid
 
-### rag_system.retriever.caching
+O bloco híbrido existe para combinar sinal vetorial com sinal lexical. Isso é importante quando a pergunta mistura semântica com termos literais fortes, como códigos, siglas, nomes próprios, nomenclaturas normativas e expressões técnicas exatas.
 
-Controla o cache semântico. O efeito prático é reduzir custo e latência para consultas semanticamente próximas, quando o retriever é compatível.
+Campos confirmados no runtime:
+
+- `vector_weight`
+- `text_weight`
+- `combine_strategy`
+- `enabled`
+- `search_type`
+
+Comportamento confirmado:
+
+- Se `rag_system.retriever.hybrid` não existir, o helper retorna pesos padrão de `0.5` e `0.5` com `combine_strategy=weighted`.
+- Se o bloco existir, mas vier vazio, o runtime falha explicitamente.
+- Se o bloco existir sem `vector_weight` ou sem `text_weight`, o runtime falha explicitamente.
+- Os pesos são normalizados automaticamente. Se a soma vier `0`, o runtime volta para `0.5` e `0.5`.
+- O híbrido é considerado ativo quando `hybrid.enabled=true` ou quando `rag_system.retriever.type=hybrid`.
+
+O campo `search_type` controla como a combinação acontece:
+
+- `manual`: o runtime faz a composição pela própria engine.
+- `nativo`: o runtime tenta usar o modo híbrido nativo do backend compatível.
+- `desligado`: a execução híbrida é desligada.
+
+Quando `search_type` vem inválido, o engine cai para `manual`. Isso evita quebra por typo, mas também pode esconder intenção errada do YAML se ninguém observar os logs.
+
+### 11.4 rag_system.retriever.hybrid.adaptive_router
+
+Este bloco decide quando o sistema deve continuar em semantic search puro, quando deve reforçar BM25 e quando vale estruturar a decisão com self-query. Ele não serve para recuperar documentos diretamente. Ele serve para escolher a estratégia de recuperação mais adequada para o perfil da pergunta.
+
+Campos confirmados no runtime:
+
+- `confidence_threshold`
+- `complexity_threshold`
+- `decision_strategy.thresholds.hybrid_threshold`
+- `decision_strategy.thresholds.bm25_only_threshold`
+- `decision_strategy.thresholds.vector_only_threshold`
+- `decision_strategy.default_strategy`
+- `decision_strategy.log_decisions`
+- `decision_strategy.include_analysis_in_response`
+
+Comportamento confirmado:
+
+- O bloco `decision_strategy` pode estar ausente e, nesse caso, o runtime usa defaults seguros para thresholds e estratégia padrão.
+- Se `decision_strategy` existir, mas vier vazio, o runtime falha explicitamente.
+- Se `decision_strategy.thresholds` existir, mas vier vazio, o runtime falha explicitamente.
+- Quando o `AdaptiveQueryRouter` é inicializado, `confidence_threshold` e `complexity_threshold` são obrigatórios dentro de `rag_system.retriever.hybrid.adaptive_router`. Se faltarem, a inicialização falha com erro explícito.
+- O campo `default_strategy` aceita aliases reais do runtime: `hybrid`, `hybrid_with_selfquery`, `selfquery`, `self_query`, `bm25`, `semantic`, `vector` e `vector_only`.
+- Se `default_strategy` vier inválido, o router cai para `hybrid`.
+
+O impacto prático é direto: esse bloco controla a política de decisão. Ele não altera só pesos; ele altera o tipo de recuperação que o pipeline tenta executar.
+
+### 11.5 rag_system.retriever.hybrid.fusion
+
+Depois que múltiplas fontes devolvem documentos, a plataforma precisa consolidar o ranking. O bloco de fusion existe para impedir que cada fonte “vença” sozinha por ordem de chegada.
+
+Campos confirmados no runtime:
+
+- `default_algorithm`
+- `weighted_rrf.k`
+- `weighted_rrf.bm25_weight`
+- `weighted_rrf.vector_weight`
+- `linear.bm25_weight`
+- `linear.vector_weight`
+- `general.final_top_k`
+- `general.remove_duplicates`
+- `general.similarity_threshold`
+- `general.min_final_score`
+- `general.normalize_final_scores`
+
+Defaults confirmados no helper:
+
+- algoritmo padrão `weighted_rrf`
+- `weighted_rrf.k=60`
+- pesos base de `0.5` para BM25 e vetor
+- `general.final_top_k=10`
+- deduplicação ativada
+- `general.similarity_threshold=0.95`
+- `general.min_final_score=0.1`
+- normalização final ativada
+
+Esse bloco também influencia a quantidade final de documentos entregue ao resto do pipeline. Quando o híbrido está ativo, o `top_k` operacional prioriza `rag_system.retriever.hybrid.fusion.general.final_top_k` antes de qualquer outro caminho.
+
+### 11.6 rag_system.retriever.hybrid.bm25
+
+O BM25 é o braço lexical da estratégia híbrida. Ele não substitui a busca vetorial. Ele complementa a recuperação quando a literalidade do termo importa mais do que similaridade semântica ampla.
+
+O resolvedor do BM25 confirma que o bloco canônico fica em `rag_system.retriever.hybrid.bm25`.
+
+Campos confirmados nesta rodada:
+
+- `enabled`
+- `extraction.max_documents`
+- `extraction.batch_size`
+- `keyword_extractor.max_total_keywords`
+- `keyword_extractor.max_content_keywords`
+- `keyword_extractor.max_synonyms`
+- `rake_extractor.max_phrases`
+- `rake_extractor.max_words_per_phrase`
+- `rake_extractor.min_chars`
+- `factory.caching.redis.enabled`
+- `factory.caching.redis.ttl_seconds`
+- `factory.caching.redis.key_prefix`
+
+Comportamento confirmado:
+
+- `enabled=false` desliga o gerenciamento BM25 para o alvo atual.
+- `extraction.max_documents` e `extraction.batch_size` têm default `5000`. O batch nunca ultrapassa o limite total.
+- Se `keyword_extractor` estiver ausente, o extrator genérico registra warning e usa defaults `max_total_keywords=20`, `max_content_keywords=10` e `max_synonyms=12`.
+- Se `rake_extractor` estiver ausente, o extrator RAKE registra warning e usa defaults `max_phrases=12`, `max_words_per_phrase=4` e `min_chars=4`.
+- O cache Redis do BM25 usa `ttl_seconds` com normalização e `key_prefix` padrão `bm25:index`.
+
+Há um limite importante de arquitetura aqui: o backend físico do índice BM25 não vem deste bloco de retrieval. O DSN, schema, tabela e política de conexão do armazenamento PostgreSQL do índice são resolvidos da configuração global de banco. Em outras palavras, o YAML do retrieval liga a estratégia e regula extração e cache. Ele não define sozinho onde o índice físico mora.
+
+### 11.7 rag_system.retriever.fts
+
+O FTS existe como reforço lexical via PostgreSQL para cenários em que a recuperação semântica não alcança cobertura suficiente ou precisa de apoio textual exato.
+
+Campos confirmados no runtime:
+
+- `enabled`
+- `mode`
+- `top_k`
+- `fallback_min_results`
+- `semantic_score_threshold`
+- `pg_dsn`
+- `pg_schema`
+- `table`
+- `ts_config`
+- `statement_timeout_ms`
+- `pg_pool_min_size`
+- `pg_pool_max_size`
+- `pg_pool_max_idle`
+- `pg_pool_timeout_seconds`
+- `pg_retry_attempts`
+- `pg_retry_min_seconds`
+- `pg_retry_max_seconds`
+
+Defaults confirmados no helper:
+
+- `enabled=true`
+- `mode=augment`
+- `top_k=12`
+- `fallback_min_results=3`
+- `semantic_score_threshold=0.35`
+- `table=ingestion_document_chunks`
+- `ts_config=portuguese`
+- `statement_timeout_ms=5000`
+
+Comportamento confirmado:
+
+- O helper normaliza pool e retry para impedir tamanhos inválidos e intervalos negativos.
+- Se o YAML usar `pq_schema`, o runtime falha explicitamente e manda usar `pg_schema`.
+- O código lido trabalha com `augment` e `fallback` como modos esperados. Nesta rodada não foi confirmada uma validação semântica rígida do valor de `mode` dentro do helper.
+- Se `pg_dsn` vier vazio, o pipeline não tem como materializar o reforço FTS e segue sem esse componente auxiliar.
+
+Na prática, FTS não é a estratégia principal do RAG. Ele é um reforço lexical governado, útil principalmente para perguntas com forte literalidade e para cenários de cobertura insuficiente.
+
+### 11.8 rag_system.retriever.caching
+
+Este bloco controla o cache semântico de consultas. Ele existe para reduzir latência e custo quando perguntas semanticamente próximas reaproveitam um conjunto equivalente de documentos.
+
+Campos confirmados no runtime:
+
+- `semantic_cache_enabled`
+- `semantic_cache_distance_threshold`
+- `semantic_cache_ttl_seconds`
+- `semantic_cache_max_items`
+- `semantic_cache_backend`
+- `cache_ttl_seconds`
+- `cache_size`
+
+Comportamento confirmado:
+
+- Defaults do helper: cache desabilitado, `distance_threshold=0.2`, `ttl_seconds=1800`, `max_items=1000`, backend `redisearch`.
+- `cache_ttl_seconds` funciona como alias para TTL quando `semantic_cache_ttl_seconds` não vier.
+- `cache_size` funciona como alias para capacidade quando `semantic_cache_max_items` não vier.
+- Backends aceitos: `redisearch`, `qdrant`, `azure_search`, `azure` e `disabled`.
+- `azure` é normalizado para `azure_search`.
+- `off`, `disabled` e `none` são normalizados para `disabled`.
+- Se o backend for `disabled`, o runtime força `enabled=false`.
+
+Um detalhe importante para evitar documentação enganosa: o YAML modelo contém chaves adicionais de warming, mas nesta rodada o helper central lido para cache semântico não confirmou consumo operacional dessas chaves no contrato principal de retrieval.
+
+### 11.9 qa_system.query_rewrite
+
+Este bloco controla a reescrita da pergunta antes do retrieval. O objetivo não é “embelezar” a consulta. O objetivo é corrigir, parafrasear ou expandir a pergunta quando isso aumentar a chance de recuperar evidência útil.
+
+Campos confirmados no runtime:
+
+- `enabled`
+- `enable_paraphrase`
+- `enable_correction`
+- `enable_expansion`
+- `max_variations`
+- `min_similarity`
+- `max_output_chars`
+- `retry_attempts`
+- `retry_wait_min`
+- `retry_wait_max`
+
+Defaults confirmados:
+
+- reescrita desabilitada por padrão
+- paráfrase, correção e expansão habilitadas quando a reescrita está ativa
+- `max_variations=3`
+- `min_similarity=0.6`
+- `max_output_chars=600`
+- `retry_attempts=3`
+- espera exponencial entre `0.5` e `3.0` segundos
+
+Comportamento confirmado:
+
+- Se `enabled=false`, a pergunta passa intacta.
+- Se o LLM estiver indisponível, a pergunta passa intacta.
+- Se a similaridade da versão reescrita ficar abaixo do mínimo, a pergunta original é mantida.
+
+O ganho prático é reduzir consultas malformadas. O risco controlado aqui é não deixar uma reescrita agressiva mudar o sentido da pergunta sem evidência suficiente.
+
+### 11.10 intelligent_pipeline.multi_query
+
+Este bloco controla a expansão de uma pergunta em várias consultas relacionadas. Ele existe para aumentar cobertura, especialmente quando uma única formulação da pergunta não representa todos os termos relevantes do domínio.
+
+Campos confirmados no runtime:
+
+- `enabled`
+- `max_expansions`
+- `expansion_strategy`
+- `parallel_execution`
+- `deduplication_threshold`
+- `max_concurrent_queries`
+- `query_timeout_seconds`
+- `cache_size`
+
+Defaults confirmados:
+
+- `enabled=true`
+- `max_expansions=3`
+- `expansion_strategy=mixed`
+- execução paralela ativada
+- `deduplication_threshold=0.85`
+- `max_concurrent_queries=5`
+- `query_timeout_seconds=30`
+- `cache_size=100`
+
+Na prática, este bloco regula custo e cobertura. Mais expansões aumentam a chance de achar evidência, mas também aumentam consumo de tempo, concorrência e deduplicação posterior.
+
+### 11.11 qa_system.reranker
+
+O reranker reorganiza a lista de documentos depois que a recuperação já aconteceu. Ele não busca documentos novos. Ele tenta ordenar melhor os que já chegaram.
+
+Campos confirmados no helper central:
+
+- `enabled`
+- `provider`
+- `model`
+- `fallback_model`
+- `top_k`
+- `feedback_field`
+- `feedback_weight`
+- `vision_weight`
+
+Defaults confirmados:
+
+- desabilitado por padrão
+- `provider=huggingface`
+- `model=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`
+- `fallback_model=cross-encoder/ms-marco-MiniLM-L-6-v2`
+- `top_k=8`
+- pesos de feedback e visão zerados
+
+O builder de settings também aceita aliases adicionais usados em runtime, como `reranker_model`, `reranker_device`, `reranker_max_length`, `reranker_feedback_field`, `reranker_feedback_weight` e `reranker_vision_weight`. Se os pesos vierem inválidos, o runtime falha explicitamente.
+
+### 11.12 Prioridades e heranças entre blocos
+
+Nem toda configuração fica isolada no seu próprio bloco. O runtime também aplica prioridades entre caminhos.
+
+- O `top_k` principal prioriza `rag_system.retriever.hybrid.fusion.general.final_top_k` quando o híbrido está ativo.
+- Se o híbrido não estiver ativo, o `top_k` cai para `rag_system.retriever.vector_store.k`.
+- Se o bloco vetorial não definir `k`, o runtime ainda pode herdar `llm.openai.top_k_docs`.
+- O threshold principal de similaridade prioriza `rag_system.retriever.vector_store.similarity_threshold` e só depois consulta `llm.openai.search_strategy.similarity_threshold`.
+
+Essa hierarquia importa porque evita dois erros comuns: acreditar que o valor do LLM sempre governa o retrieval e acreditar que o YAML híbrido altera apenas o ranking final. No runtime lido, o híbrido pode mudar inclusive o tamanho efetivo da evidência entregue para geração.
 
 ## 12. Contratos, entradas e saídas
 
@@ -751,32 +1042,7 @@ Ação recomendada: separar claramente se o gargalo está no retrieval ou na ACL
 
 ## 24. Diagramas
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant O as Orquestrador
-    participant A as Analyzer
-    participant D as Domain Processing
-    participant R as Retrieval Engine
-    participant F as FTS e Fusion
-    participant C as ACL
-    participant G as Generation Engine
-
-    U->>O: Pergunta
-    O->>A: Analisa a query
-    A-->>O: QueryFeatures
-    O->>D: Enriquecimento de dominio
-    D-->>O: QueryFeatures enriquecidas
-    O->>R: Escolhe e executa retrieval
-    R-->>O: Documentos primarios
-    O->>F: Aplica FTS e fusion quando necessario
-    F-->>O: Ranking consolidado
-    O->>C: Filtra por ACL
-    C-->>O: Documentos autorizados
-    O->>G: Gera resposta final
-    G-->>O: Resposta e metricas
-    O-->>U: Resultado final
-```
+![24. Diagramas](assets/diagrams/docs-readme-rag-diagrama-02.svg)
 
 Este diagrama mostra a ordem lógica de responsabilidade. A parte crítica é perceber que BM25, FTS, Multi-Query e Fusion não ficam depois da geração. Eles existem para melhorar a evidência antes da resposta.
 
@@ -857,6 +1123,16 @@ O que observar: expansão lexical e self-query resolvem problemas diferentes.
 
 Resposta esperada: domain processing lexical melhora a linguagem da pergunta; self-query tenta estruturar a busca.
 
+## Leituras relacionadas
+
+- [README.md](./README.md): índice por intenção para continuar a leitura.
+- [README-ARQUITETURA.md](./README-ARQUITETURA.md): mostra a topologia que sustenta API, worker e runtime de consulta.
+- [README-INGESTAO.md](./README-INGESTAO.md): explica como o acervo consultado aqui é produzido.
+- [README-CACHING.md](./README-CACHING.md): aprofunda reaproveitamento, invalidação e efeitos de cache no fluxo.
+- [README-CONFIGURACAO-YAML.md](./README-CONFIGURACAO-YAML.md): detalha os blocos YAML que governam o runtime do RAG.
+- [README-SQL-SCHEMA-RAG-TOOL.md](./README-SQL-SCHEMA-RAG-TOOL.md): mostra um uso especializado de retrieval semântico aplicado a schema SQL.
+- [README-LOGGING.md](./README-LOGGING.md): ajuda a investigar se um problema de resposta nasceu no retrieval, na ACL ou na geração.
+
 ## 28. Checklist de entendimento
 
 - Entendi o que esta feature faz e por que ela não é só uma chamada ao LLM.
@@ -874,6 +1150,56 @@ Resposta esperada: domain processing lexical melhora a linguagem da pergunta; se
 - Entendi o valor técnico, executivo, comercial e estratégico desta feature.
 
 ## 29. Evidências no código
+
+- src/qa_layer/rag_engine/config_utils.py
+  - Motivo da leitura: confirmar o contrato YAML central de vector store, híbrido, fusion, FTS, cache semântico e reranker.
+  - Símbolos relevantes: get_modern_retriever_vector_config, get_modern_hybrid_config, get_modern_hybrid_decision_config, get_modern_hybrid_bm25_extraction_config, get_modern_hybrid_fusion_config, get_fts_retriever_config, get_semantic_cache_config, get_reranker_config, get_retrieval_top_k.
+  - Comportamento confirmado: o helper diferencia defaults seguros, blocos obrigatórios, normalização de pesos, aliases de cache e prioridade de top_k.
+
+- src/qa_layer/rag_engine/adaptive_router.py
+  - Motivo da leitura: confirmar thresholds obrigatórios, aliases de estratégia e fallback do roteamento adaptativo.
+  - Símbolos relevantes: \_get\_complexity\_threshold, \_get\_confidence\_threshold, \_resolve\_strategy\_alias.
+  - Comportamento confirmado: confidence_threshold e complexity_threshold são obrigatórios quando o router é inicializado; alias inválido de estratégia cai para hybrid.
+
+- src/qa_layer/rag_engine/query_rewriter.py
+  - Motivo da leitura: confirmar o contrato YAML real da reescrita de consulta.
+  - Símbolos relevantes: QueryRewriteConfig, QueryRewriteConfig.from_yaml.
+  - Comportamento confirmado: a reescrita lê qa_system.query_rewrite, usa defaults próprios e preserva a query original quando a política, o LLM ou a similaridade não permitem reescrever com segurança.
+
+- src/qa_layer/rag_engine/multi_query_retriever.py
+  - Motivo da leitura: confirmar o contrato YAML de expansão em múltiplas consultas.
+  - Símbolos relevantes: MultiQueryRetriever.__init__, ExpansionStrategy.
+  - Comportamento confirmado: intelligent_pipeline.multi_query controla quantidade de expansões, paralelismo, deduplicação, timeout e cache local das expansões.
+
+- src/qa_layer/rag_engine/reranker.py
+  - Motivo da leitura: confirmar como o YAML do reranker é convertido em configuração executável.
+  - Símbolos relevantes: build_reranker_settings.
+  - Comportamento confirmado: o runtime aceita aliases de chaves de reranker e falha explicitamente quando pesos numéricos vêm inválidos.
+
+- src/core/bm25_runtime/config_resolver.py
+  - Motivo da leitura: confirmar o caminho canônico do bloco BM25 no YAML.
+  - Símbolo relevante: resolve_bm25_config.
+  - Comportamento confirmado: a configuração BM25 válida é resolvida em rag_system.retriever.hybrid.bm25.
+
+- src/core/bm25_runtime/index_manager.py
+  - Motivo da leitura: confirmar habilitação do BM25, cache Redis e dependência da configuração global do backend físico.
+  - Símbolos relevantes: BM25IndexManager.\_\_init\_\_, \_read\_bm25\_config, \_build\_storage, \_RedisCache.
+  - Comportamento confirmado: o YAML de retrieval liga o BM25 e regula cache, mas o armazenamento PostgreSQL do índice vem da configuração global de banco.
+
+- src/core/bm25_runtime/generic_keyword_extractor.py
+  - Motivo da leitura: confirmar as chaves e defaults do enriquecimento lexical genérico do BM25.
+  - Símbolos relevantes: GenericKeywordExtractor.__init__, _resolve_keyword_extractor_config.
+  - Comportamento confirmado: keyword_extractor usa defaults quando o subbloco está ausente e emite warning explícito.
+
+- src/core/bm25_runtime/rake_keyword_extractor.py
+  - Motivo da leitura: confirmar as chaves e defaults do extrator RAKE.
+  - Símbolos relevantes: RakeKeywordExtractor.__init__, _resolve_rake_config.
+  - Comportamento confirmado: rake_extractor usa defaults quando o subbloco está ausente e emite warning explícito.
+
+- app/yaml/system/rag-config-modelo.yaml
+  - Motivo da leitura: confirmar a convenção de escrita do YAML modelo usada para o runtime de RAG.
+  - Símbolos relevantes: rag_system.retriever.vector_store, rag_system.retriever.hybrid, rag_system.retriever.caching, rag_system.retriever.fts, intelligent_pipeline.multi_query.
+  - Comportamento confirmado: o modelo materializa os caminhos canônicos consumidos pelo runtime moderno, mas não substitui a leitura do código como fonte de verdade.
 
 - src/qa_layer/rag_engine/intelligent_orchestrator.py
   - Motivo da leitura: confirmar a ordem macro do pipeline, inicialização dos componentes e integração entre retrieval e geração.
