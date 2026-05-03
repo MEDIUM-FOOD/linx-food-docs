@@ -1,80 +1,49 @@
-# Manual técnico, executivo, comercial e estratégico: DeepAgent Supervisor completo
+# Manual técnico e operacional: DeepAgent Supervisor completo
 
 ## 1. Escopo técnico deste manual
 
-Este manual descreve o caminho técnico real do DeepAgent Supervisor no repositório. O foco aqui é explicar o ciclo YAML para AST, a seleção do supervisor ativo, a montagem governada do runtime, o contrato de middlewares, memória Redis, HIL, subagentes, execução síncrona, execução assíncrona e continuação por thread_id.
+Este manual documenta o funcionamento técnico real do DeepAgent Supervisor no código atual. O foco aqui é o ciclo YAML para AST, parser, validator, resolução do supervisor ativo, bootstrap do runtime, toolset, filesystem, shell, todo_list, memória Redis, HIL, aprovação assíncrona, subagentes, background execution, contratos HTTP de continuação e observabilidade.
 
-## 2. Onde o DeepAgent Supervisor entra no sistema
+O objetivo não é listar arquivos. O objetivo é explicar como a feature realmente funciona, quais recursos avançados ela expõe, quais restrições o contrato impõe e por que esse desenho é especialmente adequado para agentes que executam processos duráveis em background.
 
-O DeepAgent Supervisor entra no sistema em quatro pontos principais.
+## 2. Onde o DeepAgent entra na arquitetura
 
-- No assembly agentic, quando o alvo é deepagent_supervisor.
-- No resolver de configuração, quando o supervisor ativo tem modo deepagent.
-- No router de agente, quando o request informa mode deepagent ou quando o YAML resolve esse modo.
-- No runtime de background e na continuação HIL, quando uma execução já iniciada precisa ser retomada ou executada fora do ciclo síncrono.
+O DeepAgent Supervisor entra na arquitetura em seis pontos conectados.
 
-## 3. Ciclo YAML até runtime
+1. O YAML declara execution.type igual a deepagent dentro de multi_agents.
+2. O assembly agentic detecta o alvo deepagent_supervisor.
+3. O parser converte o supervisor para DeepAgentSupervisorAST.
+4. O validator semântico verifica coerência entre middlewares, permissions, HIL, checkpointer, memory e subagentes.
+5. O resolver de configuração produz um ActiveSupervisorContext com o supervisor selecionado.
+6. O runtime DeepAgentSupervisor monta a factory governada, middlewares, store, backend, checkpointer, tools e subagentes, e então executa o agente.
 
-O caminho confirmado no código é este.
+Em paralelo, o mesmo supervisor também pode ser chamado pelo runtime canônico de background execution, e a continuação HIL pode ocorrer por /agent/continue ou /agent/hil/decisions.
 
-### 3.1 Detecção do alvo
+## 3. Ciclo YAML para runtime
 
-O assembly olha para multi_agents e identifica itens cujo execution.type é deepagent. Em modo AUTO, isso faz o alvo deepagent_supervisor aparecer como candidato válido.
+```mermaid
+flowchart TD
+    A[YAML multi_agents execution.type=deepagent] --> B[DeepAgentParser]
+    B --> C[DeepAgentSupervisorAST]
+    C --> D[DeepAgentSemanticValidator]
+    D --> E[SupervisorConfigResolver]
+    E --> F[ActiveSupervisorContext]
+    F --> G[DeepAgentSupervisor]
+    G --> H[create_governed_deep_agent]
+    H --> I[Execução síncrona]
+    H --> J[Background runtime]
+    H --> K[HIL e continuação]
+```
 
-### 3.2 AST dedicada
+Esse diagrama mostra a ideia central: o DeepAgent não nasce diretamente do YAML cru. Ele passa por contrato tipado, validação semântica e resolução de contexto antes de virar runtime executável.
 
-O parser DeepAgent produz DeepAgentSupervisorAST. Essa AST inclui campos específicos que o supervisor clássico não tem como contrato principal.
+## 4. Contrato declarativo especializado
 
-Principais blocos confirmados:
+O contrato AST especializado do DeepAgent expõe recursos que o supervisor clássico não carrega da mesma forma.
 
-- middlewares
-- skills
-- response_format
-- interrupt_on
-- permissions
-- agents especializados
-- async_subagents
-- deepagent_memory herdada da estrutura de supervisor
+## 4.1. Middlewares governados
 
-### 3.3 Validação semântica
-
-Depois da AST, o validator semântico impõe regras de coerência operacional. Ele não apenas checa tipos. Ele verifica compatibilidade entre recursos.
-
-Regras confirmadas no código:
-
-- middlewares.filesystem.enabled igual a true exige permissions explícitas no mesmo escopo.
-- permissions só podem existir quando filesystem está habilitado.
-- interrupt_on só pode existir quando HIL está habilitado.
-- HIL habilitado exige interrupt_on no supervisor.
-- HIL habilitado exige memory.checkpointer.enabled igual a true no YAML.
-- middlewares.skills.enabled exige skills top-level.
-- skills top-level sem middlewares.skills.enabled são rejeitadas.
-- deepagent_memory.enabled exige middlewares.memory.enabled.
-- deepagent_memory.backend deve ser redis.
-- scope aceita apenas user, agent ou org.
-- scope org exige user_session.tenant_id.
-- policy aceita apenas read_only ou read_write.
-- async_subagents precisam de name, description e graph_id válidos.
-- headers de async_subagents exigem URL explícita.
-
-### 3.4 Resolução do supervisor ativo
-
-SupervisorConfigResolver prepara um ActiveSupervisorContext. Ele aplica selected_supervisor, enabled, defaults e merge de camadas relevantes. O DeepAgent Supervisor consome esse contexto em vez de ler o YAML cru diretamente em toda parte.
-
-O que isso entrega na prática:
-
-- id do supervisor ativo
-- modo deepagent
-- agentes resolvidos
-- tools_library efetiva
-- deepagent_memory já anexada ao contexto
-- skills, response_format, interrupt_on, permissions e middlewares do supervisor
-
-## 4. Contrato declarativo do supervisor DeepAgent
-
-### 4.1 Middlewares governados
-
-O bloco middlewares do supervisor DeepAgent possui estes toggles explícitos na AST.
+O bloco middlewares contém a fonte de verdade dos toggles principais.
 
 - filesystem
 - shell
@@ -87,119 +56,305 @@ O bloco middlewares do supervisor DeepAgent possui estes toggles explícitos na 
 - todo_list
 - skills
 
-Esses toggles são a fonte de verdade do comportamento do runtime. O parser também rejeita tentativas de usar campos removidos do contrato antigo, como planner e capabilities.
+Defaults confirmados no AST:
 
-### 4.2 Permissions
+- filesystem.enabled = true
+- shell.enabled = false
+- memory.enabled = true
+- subagents.enabled = true
+- background_execution_subagent.enabled = false
+- human_in_the_loop.enabled = false
+- summarization.enabled = false
+- pii.enabled = true
+- todo_list.enabled = true
+- skills.enabled = false
 
-Permissions são regras declarativas de filesystem com:
+## 4.2. Features top-level do supervisor
 
-- operations contendo apenas read e write
-- paths absolutos sem pontos duplos
-- mode allow ou deny
+O supervisor DeepAgent também aceita explicitamente:
 
-O runtime converte essas regras em FilesystemPermission apenas quando a factory suporta o parâmetro permissions e quando filesystem está habilitado.
+- skills
+- response_format
+- interrupt_on
+- permissions
+- agents especializados
+- async_subagents
+- deepagent_memory herdada da estrutura de supervisor
 
-### 4.3 Interrupt_on
+## 4.3. Campos removidos ou não suportados
 
-Interrupt_on mapeia tool para bool ou para um objeto com allowed_decisions. As decisões aceitas são approve, edit e reject. O validator cruza essas tools com o catálogo efetivo do escopo para impedir referências a ferramentas inexistentes.
+O parser e o runtime rejeitam ou marcam como erro campos que não pertencem mais ao contrato efetivo.
 
-### 4.4 deepagent_memory
+- planner
+- capabilities
+- memory no topo do supervisor
+- context_schema no topo do supervisor
 
-deepagent_memory é um bloco separado do middleware toggle. Ele não substitui middlewares.memory. Os dois precisam estar coerentes.
+Isso é importante porque a plataforma tenta evitar drift entre YAML antigo e runtime atual.
 
-No runtime lido, ele aceita:
+## 5. Parser e validação semântica
+
+## 5.1. Parser
+
+O DeepAgentParser filtra apenas supervisores cujo execution.type seja deepagent. Para cada item válido, ele:
+
+- aplica id padrão se necessário;
+- normaliza enabled para true por default;
+- força execution.type para deepagent;
+- coleta diagnósticos de contrato obsoleto;
+- parseia tools_library com o ToolDefinitionsParser;
+- converte para DeepAgentSupervisorAST.
+
+## 5.2. Regras semânticas mais importantes
+
+O DeepAgentSemanticValidator impõe coerência operacional, não apenas forma.
+
+Regras confirmadas:
+
+- middlewares.filesystem.enabled=true exige permissions explícitas no mesmo escopo;
+- permissions só podem existir com filesystem habilitado;
+- interrupt_on só pode existir quando HIL está habilitado;
+- HIL habilitado exige interrupt_on;
+- HIL habilitado exige memory.checkpointer.enabled=true no YAML;
+- middlewares.skills.enabled exige skills top-level;
+- skills top-level sem middlewares.skills.enabled são rejeitadas;
+- deepagent_memory.enabled exige middlewares.memory.enabled;
+- deepagent_memory.backend deve ser redis;
+- deepagent_memory.scope aceita apenas user, agent ou org;
+- scope org exige user_session.tenant_id;
+- deepagent_memory.policy aceita apenas read_only ou read_write;
+- async_subagents exigem name, description e graph_id válidos;
+- headers em async_subagents exigem URL explícita;
+- permissions aceitam apenas operações read e write;
+- permissions aceitam apenas mode allow ou deny;
+- response_format precisa conter chaves válidas de JSON Schema.
+
+Conclusão técnica: o runtime não aceita “quase configurado”. A feature é desenhada para falhar cedo quando a governança declarativa está incoerente.
+
+## 6. Bootstrap do DeepAgentSupervisor
+
+O DeepAgentSupervisor.initialize segue um fluxo rígido.
+
+1. Carrega a configuração ativa.
+2. Inicializa ToolsFactory e MemoryFactory compartilhadas.
+3. Resolve a factory governada do runtime DeepAgent.
+4. Compõe a pilha extra de middlewares do produto.
+5. Constrói backend e store persistente do DeepAgent quando deepagent_memory está habilitada.
+6. Resolve o checkpointer.
+7. Cria o agente final.
+
+Se qualquer uma dessas etapas falha com erro estrutural, o supervisor retorna erro de inicialização em vez de continuar degradado.
+
+## 7. Superfície completa de recursos avançados
+
+## 7.1. Toolset efetivo
+
+O método _collect_tools percorre todos os agentes do contexto, resolve as tools de cada um via _resolve_agent_tools e deduplica por nome. Na prática, o supervisor principal recebe um conjunto único de ferramentas, evitando repetição entre subagentes.
+
+Isso importa porque:
+
+- reduz ambiguidade para o modelo;
+- evita exposição duplicada da mesma tool;
+- mantém o supervisor principal alinhado ao contrato real do YAML.
+
+## 7.2. Prompt por agente com placeholders obrigatórios
+
+Cada subagente recebe system_prompt próprio. Se o template não trouxer placeholders mínimos de descrição e ferramentas disponíveis, o runtime injeta essas seções. Isso reduz risco de subagentes nascerem com prompt incompleto ou opaco.
+
+## 7.3. Middleware de todo_list
+
+O middleware TodoListMiddleware é ligado por default. Ele pode receber system_prompt e tool_description específicos. O efeito prático é permitir que o agente mantenha uma lista de tarefas operacionais durante execuções complexas.
+
+## 7.4. Middleware de PII
+
+Quando pii.enabled=true, o runtime monta PIIMiddleware a partir de regras declarativas. Se não houver regras explícitas, o supervisor ainda normaliza um conjunto default para email, credit_card, ip, mac_address e url.
+
+Estratégias aceitas:
+
+- block
+- redact
+- mask
+- hash
+
+## 7.5. Middleware de skills
+
+Se middlewares.skills.enabled=true, o runtime exige skills top-level e injeta SkillsMiddleware com backend e sources. O mesmo padrão vale para subagentes que definem skills próprias.
+
+## 7.6. Filesystem governado
+
+O FilesystemMiddleware é injetado quando filesystem.enabled=true. Nesse momento, o runtime também exige permissions válidas e ativa _PermissionMiddleware mais tarde.
+
+Contrato de permissions:
+
+- operations: apenas read e write;
+- paths: caminhos absolutos e sem ..;
+- mode: allow ou deny.
+
+Efeito prático: o agente pode operar sobre arquivos, mas somente no que foi declarado.
+
+## 7.7. Shell persistente governado
+
+O ShellToolMiddleware é criado quando shell.enabled=true. A política de execução pode ser:
+
+- host
+- docker
+- codex_sandbox
+
+Parâmetros suportados no contrato:
+
+- workspace_root
+- startup_commands
+- shutdown_commands
+- tool_name
+- env
+- execution_policy.command_timeout
+- execution_policy.startup_timeout
+- execution_policy.termination_timeout
+- execution_policy.max_output_lines
+- execution_policy.max_output_bytes
+- execution_policy.cpu_time_seconds
+- execution_policy.memory_bytes
+- execution_policy.create_process_group
+- execution_policy.binary
+- execution_policy.image
+- execution_policy.remove_container_on_exit
+- execution_policy.network_enabled
+- execution_policy.extra_run_args
+- execution_policy.cpus
+- execution_policy.read_only_rootfs
+- execution_policy.user
+- execution_policy.platform
+- execution_policy.config_overrides
+
+Isso transforma o shell em ferramenta governada, não em escape hatch livre.
+
+## 7.8. Summarization
+
+Quando summarization.enabled=true, o runtime injeta SummarizationMiddleware ou create_summarization_middleware, dependendo do contrato disponível no runtime carregado.
+
+Parâmetros observados:
+
+- trigger
+- keep
+- summary_prompt
+- trim_tokens_to_summarize
+- truncate_args_settings
+
+Essa etapa é especialmente útil para execuções longas, porque ajuda a comprimir contexto sem perder histórico essencial.
+
+## 7.9. Memory middleware de prompt
+
+Quando middlewares.memory.enabled=true, o runtime injeta MemoryMiddleware com backend e sources. Se a assinatura suportar, também injeta add_cache_control=true. Isso é memória operacional disponível ao agente durante a execução, distinta da persistência durável do deepagent_memory.
+
+## 7.10. deepagent_memory em Redis
+
+O bloco deepagent_memory aciona persistência durável via DeepAgentRedisStore e StoreBackend.
+
+Contrato confirmado:
 
 - enabled
-- backend igual a redis
-- scope igual a user, agent ou org
-- policy igual a read_only ou read_write
+- backend = redis
+- scope = user | agent | org
+- policy = read_only | read_write
 - redis.url obrigatório
-- redis.key_prefix opcional, com default deepagent_memory
-- redis.ttl_seconds opcional e positivo
+- redis.key_prefix opcional com default deepagent_memory
+- redis.ttl_seconds opcional > 0
 
-## 5. Bootstrap do DeepAgentSupervisor
+Detalhes relevantes do store:
 
-O método initialize do DeepAgentSupervisor executa esta sequência.
+- usa BaseStore do LangGraph;
+- aplica retry externo central em operações Redis;
+- exige que deepagent_memory.redis.url coincida com REDIS_PROMETEU_GENERIC_RAG_URL enquanto usar o Redis global;
+- recusa cliente Redis assíncrono nesse store síncrono;
+- bloqueia escrita quando policy=read_only;
+- organiza namespace por user, agent ou org.
 
-1. Carrega o contexto ativo e AppConfig.
-2. Inicializa ToolsFactory e MemoryFactory compartilhadas.
-3. Resolve a factory governada do DeepAgent.
-4. Compõe a pilha extra de middlewares do produto.
-5. Constrói backend e store Redis se deepagent_memory estiver habilitada.
-6. Obtém checkpointer.
-7. Cria o agente DeepAgent sob contrato governado.
+## 7.11. Structured output
 
-Se qualquer etapa falhar, o supervisor registra evento de lifecycle, stack trace e erro de inicialização antes de propagar a falha.
+Se o runtime create_agent aceitar response_format, o supervisor injeta o JSON Schema top-level do supervisor. O mesmo vale para subagentes que definem response_format local.
 
-## 6. Cache e reutilização do DeepAgent
+## 7.12. HIL e interrupt_on
 
-O supervisor usa WarmResourcePool com chave baseada em:
+O DeepAgent suporta interrupt_on em nível de supervisor e subagente. As decisões aceitas são:
 
-- shared_tenant_key derivado do hash canônico do YAML
-- supervisor_id
-- hash do YAML
-- versão de cache do supervisor
+- approve
+- edit
+- reject
 
-Se houver hit com hash e versão compatíveis, o artefato DeepAgent é reutilizado. Se houver incompatibilidade, a entrada é invalidada e o agente é recriado.
+Quando human_in_the_loop.enabled=true, o runtime injeta HumanInTheLoopMiddleware. Se interrupt_on não estiver configurado, isso falha cedo.
 
-Isso é importante porque a montagem do runtime DeepAgent é cara. O cache evita reconstrução desnecessária do mesmo supervisor dentro do mesmo contexto de tenant e configuração.
+## 7.13. Async approval
 
-## 7. Resolução da factory e dependências obrigatórias
+O contrato de async approval é validado por HilAsyncApprovalContract.
 
-O método _resolve_deep_agent_factory não aceita qualquer runtime parcialmente instalado. Ele verifica a presença de referências consideradas obrigatórias.
+Campos confirmados:
 
-Dependências exigidas no runtime lido:
+- enabled
+- ttl_seconds
+- expiration_policy = expire | fail_run
+- require_approver_match
+- channels
+- approvers
 
-- FilesystemMiddleware
-- SubAgentMiddleware
-- AsyncSubAgentMiddleware
-- PatchToolCallsMiddleware
-- _PermissionMiddleware
-- _ToolExclusionMiddleware
+Canais aceitos:
 
-Se alguma delas estiver ausente, o supervisor falha com ImportError explícito. O objetivo é impedir que um YAML válido aparente funcionar sobre uma instalação incompleta do runtime.
+- whatsapp
+- email
 
-## 8. Montagem governada do agente
+Regras confirmadas:
 
-O coração do comportamento está em _create_governed_deep_agent. Esse método monta a pilha final obedecendo ao contrato governado do produto.
+- canal habilitado exige template_id;
+- enabled=true exige ao menos um canal habilitado;
+- approvers precisam de user_email ou user_code;
+- require_approver_match controla validação de identidade do aprovador.
 
-### 8.1 Pré-condições
+## 7.14. Subagentes síncronos
 
-Antes de montar, o método valida condições como:
+Cada item em agents do contexto vira um subagente com:
 
-- filesystem habilitado exige backend
-- subagents habilitado exige backend
-- skills habilitado exige backend
-- memory habilitado exige backend
-- summarization habilitado exige backend
-- permissions exige backend
+- name
+- description
+- system_prompt
+- tools
+- middleware de limites e retry
+- model opcional
+- skills opcionais
+- response_format opcional
+- interrupt_on opcional
+- permissions opcionais
 
-### 8.2 Ordem lógica da pilha
+Depois, no runtime governado, esses subagentes ainda podem receber filesystem, shell, PII, summarization, skills, tool exclusion e permission middleware herdados da política principal.
 
-O método acrescenta middlewares em uma ordem controlada, combinando recursos do produto com recursos da biblioteca.
+## 7.15. Async subagents
 
-Componentes relevantes confirmados:
+O DeepAgent também suporta async_subagents no supervisor. Eles são validados e convertidos em especificações contendo name, description, graph_id e, quando configurado, URL, headers e demais parâmetros do contrato externo.
 
-- TodoListMiddleware
-- PIIMiddleware
-- SkillsMiddleware
-- FilesystemMiddleware
-- ShellToolMiddleware
-- SubAgentMiddleware
-- AsyncSubAgentMiddleware
-- SummarizationMiddleware
-- PatchToolCallsMiddleware
-- middlewares extras do produto já compostos antes
-- middlewares extras resolvidos pelo perfil do runtime, quando presentes
-- prompt caching para modelos Anthropic, quando a referência existe
-- middleware de exclusão de tools
-- middleware de permissões
+Na montagem final, esses itens entram por AsyncSubAgentMiddleware.
 
-### 8.3 Middlewares extras do produto
+## 7.16. Background execution subagent automático
 
-Além dos middlewares do runtime DeepAgent, o supervisor adiciona uma pilha própria.
+Quando middlewares.background_execution_subagent.enabled=true, o supervisor cria um subagente automático chamado background_execution.
 
-Ela inclui:
+Esse subagente usa exatamente estas tools governadas:
+
+- schedule_background_execution_request
+- list_scheduled_background_requests
+- cancel_scheduled_background_request
+- reschedule_background_execution_request
+- get_last_background_execution_result
+- get_background_execution_result
+- list_recent_background_executions
+- list_running_background_agents
+
+Ele só é permitido quando middlewares.subagents.enabled=true.
+
+Isso é um dos pontos mais fortes do desenho para ERP: o próprio agente passa a saber orquestrar sua fila de trabalho em segundo plano.
+
+## 8. Pilha de middlewares do runtime
+
+O schema service expõe a distinção entre middlewares oficiais do DeepAgent e middlewares da plataforma.
+
+Middlewares oficiais confirmados:
 
 - ToolCallLimitMiddleware
 - ModelCallLimitMiddleware
@@ -208,324 +363,290 @@ Ela inclui:
 - ModelRetryMiddleware
 - ContextEditingMiddleware
 - ClearToolUsesEdit
+- FilesystemMiddleware
+- ShellToolMiddleware
+- MemoryMiddleware
+- SubAgentMiddleware
+- AsyncSubAgentMiddleware
+- HumanInTheLoopMiddleware
+- SummarizationMiddleware
+- PIIMiddleware
+- TodoListMiddleware
+- SkillsMiddleware
+- PatchToolCallsMiddleware
+
+Middlewares de plataforma confirmados:
+
 - ToolSelectionAuditMiddleware
 - ToolExecutionMiddleware
 - ResponsePostProcessingMiddleware
 - ErrorHandlingMiddleware
 
-O supervisor valida a ordem esperada dos middlewares principais para evitar drift silencioso.
+Na prática, isso significa que o runtime combina disciplina de execução do framework com telemetria, auditoria e pós-processamento específicos do produto.
 
-## 9. Ferramentas e subagentes
+## 9. Cache, limites e robustez operacional
 
-### 9.1 Coleta de tools do supervisor
+## 9.1. Cache do supervisor
 
-O supervisor percorre os agentes configurados e resolve tools únicas via ToolsFactory e resolve_agent_tools_with_context. Isso impede duplicação desnecessária de ferramentas no conjunto agregado.
+O _create_agent usa cache por:
 
-### 9.2 Subagentes síncronos
+- supervisor_id
+- hash do YAML
+- SUPERVISOR_CACHE_VERSION
 
-Cada subagente síncrono pode receber:
+Se houver hit válido, o agente é reutilizado. Se a versão ou o hash mudam, o cache é invalidado e o agente é recriado.
 
-- name ou id
-- description
-- model opcional
-- skills opcionais
-- response_format opcional
-- interrupt_on opcional
-- permissions opcionais
-- tools
+## 9.2. Limites e retry
 
-O runtime reaplica a governança nesses subagentes, inclusive filesystem, shell, summarization, skills, prompt caching e restrição de tools.
+O supervisor monta middlewares de limite e retry tanto para o runtime principal quanto para subagentes.
 
-### 9.3 Async subagents
+Itens confirmados:
 
-Async subagents seguem um contrato próprio com:
+- ToolCallLimitMiddleware
+- ModelCallLimitMiddleware
+- ToolRetryMiddleware
+- ModelRetryMiddleware
 
-- name obrigatório
-- description obrigatória
-- graph_id obrigatório
-- url opcional
-- headers opcionais, mas só quando url existe
+## 9.3. Prompt caching
 
-O objetivo é permitir delegação para grafos ou runtimes externos sem misturar esse transporte com o contrato dos subagentes locais.
+Se disponível no runtime carregado, o supervisor injeta AnthropicPromptCachingMiddleware com unsupported_model_behavior=ignore.
 
-### 9.4 Subagente automático de background execution
+## 9.4. Observabilidade do ciclo de vida
 
-Quando middlewares.background_execution_subagent.enabled está on e middlewares.subagents também está on, o supervisor injeta automaticamente um subagente chamado background_execution com tools específicas de agendamento, cancelamento, reprogramação e consulta de solicitações agentic em background.
+O supervisor registra eventos de lifecycle como:
 
-## 10. Memória persistente DeepAgent
+- runtime.init
+- runtime.initialize.start
+- runtime.initialize.success
+- runtime.run.start
+- runtime.run.error
 
-### 10.1 Resolução do bloco
+E ainda registra telemetria de tool, resposta pós-processada, middleware error, resume e known_subagents via DeepAgentRuntimeTelemetry.
 
-O runtime lê deepagent_memory a partir do ActiveSupervisorContext. Se o bloco estiver ausente ou desabilitado, store e backend não são criados.
+## 10. Entrada, execução e continuação
 
-### 10.2 Backend Redis obrigatório
+## 10.1. Execução síncrona e assíncrona HTTP
 
-Quando a memória está habilitada, o runtime exige backend redis e um objeto redis com URL válida. Placeholders do tipo ${VAR} ou {$VAR} podem ser resolvidos via security_keys.
+O boundary HTTP oficial fica em /agent/execute. A descrição do endpoint já documenta que o backend decide entre execução direta e assíncrona e que mode=deepagent força o supervisor DeepAgents.
 
-### 10.3 Escopos
+O contrato também já documenta:
 
-O namespace do StoreBackend é derivado do escopo.
+- thread_id para continuidade;
+- hil para pausa Human in the Loop;
+- envelope assíncrono com task_id, polling_url, stream_url e cancel_url.
 
-- user usa user_email
-- agent usa supervisor_id
-- org usa tenant_id
+## 10.2. Continuação HIL
 
-Se o escopo for org, o runtime exige user_session.tenant_id explícito.
+O endpoint /agent/continue reaproveita correlation_id e exige o mesmo thread_id da pausa anterior. Internamente ele executa um comando de continuação tipado, não uma reinicialização improvisada.
 
-### 10.4 Política de escrita
+## 10.3. Decisão HIL assíncrona por POST seguro
 
-O store respeita policy read_only ou read_write. Em read_only, tentativas de PutOp falham com PermissionError.
+O endpoint /agent/hil/decisions recebe token, decisão e contexto resolvido, valida status, expiração e aprovador, resolve o pedido e executa a continuação. O design explicitamente evita GET para não permitir aprovação acidental por scanner de link.
 
-### 10.5 Contrato do DeepAgentRedisStore
+## 11. Runtime canônico de background
 
-DeepAgentRedisStore implementa BaseStore sobre Redis e usa retry externo central em todas as operações Redis relevantes. Ele também exige que deepagent_memory.redis.url coincida com REDIS_PROMETEU_GENERIC_RAG_URL enquanto o DeepAgent usa o Redis global do projeto.
+O AgenticBackgroundExecutionRuntime suporta explicitamente target_type deepagent.
 
-O store mantém:
+Fluxo confirmado:
 
-- chaves namespaced por prefixo e namespace lógico
-- set de namespaces conhecidos
-- TTL configurável
-- refresh de TTL quando o item é lido com refresh_ttl
+1. Obtém BackgroundExecutionRunContext do repositório.
+2. Reconstrói YAML a partir de yaml_snapshot obrigatório.
+3. Injeta correlation_id, user_email, user_code e tenant_id no YAML.
+4. Reidrata security_keys quando o snapshot veio redigido.
+5. Resolve thread_id e persiste esse vínculo no repositório.
+6. Instancia DeepAgentSupervisor.
+7. Inicializa e executa run(requested_command, thread_id=thread_id).
+8. Normaliza o resultado.
+9. Se o resultado estiver waiting_hil, pode disparar o fluxo durável de aprovação assíncrona.
 
-## 11. Checkpointer
+Detalhes críticos:
 
-O checkpointer é resolvido via MemoryFactory reutilizando o mesmo mecanismo de memória do ecossistema de supervisor. No contrato lido, ele é obrigatório para HIL funcionar corretamente. O validator semântico trata sua ausência como erro quando HIL está habilitado.
+- yaml_snapshot ausente é erro; não há fallback implícito;
+- se workflow entrar em waiting_hil, o runtime barra porque a retomada de workflow background ainda não está suportada da mesma forma;
+- para deepagent, waiting_hil pode seguir pelo caminho durável de approval dispatcher.
 
-## 12. Execução do DeepAgent
+## 12. Por que isso é muito forte para processos background de ERP
 
-### 12.1 Input normal
+Do ponto de vista técnico, a combinação abaixo é rara e poderosa.
 
-Quando a mensagem não é um Command resume, o supervisor constrói payload com messages contendo HumanMessage.
+- thread_id durável
+- correlation_id propagado
+- checkpointer obrigatório quando HIL existe
+- store durável em Redis
+- possibilidade de async approval
+- subagente automático de background execution
+- structured output
+- filesystem e shell governados
+- memória por escopo
+- toolset do tenant
 
-### 12.2 Continuação
+Isso permite montar agentes que trabalham ao longo do tempo, suportam revisão humana parcial, mantêm rastreabilidade e continuam do ponto certo sem reiniciar a investigação inteira.
 
-Quando a mensagem é um Command com resume, o supervisor reutiliza esse payload diretamente.
+## 13. Casos de uso ERP complexos explicados tecnicamente
 
-### 12.3 Invoke
+Os cenários abaixo são exemplos reais de uso corporativo possíveis com esse runtime, desde que o tenant publique tools de domínio adequadas no catálogo.
 
-O invoke usa config configurável construída pelo próprio supervisor, versão v2 e timeout resolvido por InvokeTimeoutGuard.
+### 13.1. Fechamento financeiro com exceções e aprovação posterior
 
-### 12.4 Normalização da saída
+Recursos usados:
 
-Depois do invoke, o supervisor normaliza o resultado para um dicionário padrão com:
+- background_execution_subagent para agendar e acompanhar o job;
+- subagentes de análise financeira e compliance;
+- todo_list para etapas do fechamento;
+- response_format para saída tabular de exceções;
+- HIL assíncrono para aprovar decisões fora do horário.
 
-- final_response
-- metadata
-- metrics
-- thread_id
-- mode deepagent
-- success
-- execution_timeline
-- tools_usage
-- diagnostics quando houver
-- hil quando houver interrupção humana
+Por que o runtime aguenta isso: ele suporta processo longo, pausa formal, structured output e continuação no mesmo thread_id.
 
-Se houver HIL e não houver final_response explícita, o supervisor preenche a resposta com a mensagem de pausa aguardando decisão humana.
+### 13.2. Auditoria de compras recorrente com memória organizacional
 
-## 13. Contrato HTTP público
+Recursos usados:
 
-### 13.1 POST /agent/execute
+- deepagent_memory.scope=org para manter histórico por tenant;
+- PII middleware para sanitizar dados sensíveis;
+- async_subagents para delegar a fluxos externos de análise;
+- schedule_background_execution_request para rodar periodicamente.
 
-É o endpoint público para iniciar execução agentic. Quando o request informa mode deepagent, o router direciona para DeepAgentSupervisor. O endpoint pode devolver:
+Por que o runtime aguenta isso: ele preserva contexto entre execuções e consegue agir como camada durável de vigilância operacional.
 
-- resposta final síncrona
-- pausa HIL normalizada com thread_id e hil
-- envelope assíncrono com task_id e URLs de acompanhamento
+### 13.3. Reconciliação de estoque e evidências em arquivos
 
-### 13.2 POST /agent/continue
+Recursos usados:
 
-É o endpoint público para retomar uma execução pausada. Ele exige o mesmo thread_id da pausa anterior, reaproveita o YAML original e executa Command resume no supervisor correto, agent ou deepagent.
+- filesystem com permissions allow/deny;
+- shell governado para automação operacional controlada;
+- subagentes especialistas de logística, fiscal e supply;
+- HIL para decisões críticas;
+- structured output para encaminhar divergências.
 
-### 13.3 POST /agent/hil/decisions
+Por que o runtime aguenta isso: ele combina operação sobre arquivos, delegação multiagente, memória e continuidade segura.
 
-É o endpoint para decisão HIL externa segura. Ele recebe token de aprovação, valida status e expiração, resolve a decisão de forma atômica e dispara a continuação sem depender de um GET inseguro.
+## 14. Erros e falhas confirmadas no código
 
-## 14. Execução assíncrona e background
+Principais falhas que o runtime trata explicitamente:
 
-O router possui um caminho dedicado para execução assíncrona do DeepAgentSupervisor. Nesse fluxo:
+- create_agent ausente ou runtime DeepAgent incompleto gera ImportError;
+- skills top-level sem suporte da factory gera erro explícito;
+- response_format sem suporte da factory gera erro explícito;
+- interrupt_on sem suporte da factory gera erro explícito;
+- permissions sem suporte da factory gera erro explícito;
+- filesystem, memory, skills, subagents ou summarization sem backend gera ValueError;
+- deepagent_memory.backend diferente de redis gera ValueError;
+- scope org sem tenant_id gera ValueError;
+- background_execution_subagent ligado com subagents desligado gera ValueError;
+- HIL habilitado sem interrupt_on gera ValueError;
+- async_approval.enabled sem HIL gera ValueError;
+- permissions ausentes quando filesystem está habilitado geram ValueError.
 
-1. O callback de progresso é criado.
-2. O YAML é preparado com correlation_id e user_email.
-3. O supervisor é inicializado.
-4. O run ocorre em executor.
-5. O resultado é normalizado.
-6. Se houver HIL, a pausa pode disparar notificação de aprovação assíncrona.
+Em resumo: o DeepAgent do projeto favorece falha fechada para configuração inconsistente.
 
-O runtime de background execution também consegue instanciar DeepAgentSupervisor diretamente para executar runs agendados em background.
+## 15. Troubleshooting
 
-## 15. Continuação HIL
+### 15.1. O supervisor não sobe
 
-AgentHilContinuationService decide qual supervisor retomar com base no supervisor_mode. Quando o modo é deepagent, ele usa a factory de DeepAgentSupervisor, monta Command resume e executa o run no thread_id original.
+Causa provável: runtime DeepAgent incompleto, create_agent ausente ou middleware obrigatório não encontrado.
 
-Isso garante que a continuação não seja um atalho textual improvisado. Ela é uma retomada formal do estado pausado.
+Onde investigar:
 
-## 16. Caminho feliz
+- logs de initialize
+- _resolve_deep_agent_factory
+- lista de middlewares obrigatórios importados
 
-Um cenário feliz típico é este.
+### 15.2. Filesystem não funciona
 
-1. O YAML declara um supervisor deepagent habilitado.
-2. O assembly valida a configuração.
-3. O request chega em /agent/execute com mode deepagent.
-4. O supervisor resolve contexto, tools, middlewares, store e checkpointer.
-5. O agente é criado ou reaproveitado do cache.
-6. O invoke retorna resposta final ou pausa HIL coerente.
-7. Se houver pausa, /agent/continue ou /agent/hil/decisions retomam a execução com o mesmo thread_id.
+Causa provável: permissions ausentes, filesystem desligado ou paths inválidos.
 
-## 17. Cenários de erro confirmados
+Onde investigar:
 
-### Campo removido no YAML
+- middlewares.filesystem.enabled
+- permissions do supervisor ou subagente
+- _normalize_permissions_config
 
-Sintoma: parser ou validator falha.
+### 15.3. HIL assíncrono não dispara
 
-Causa confirmada: uso de planner, capabilities, memory top-level ou context_schema no supervisor DeepAgent.
+Causa provável: async_approval mal configurado, canal sem template_id, HIL desligado ou approver inválido.
 
-### Filesystem sem permissions
+Onde investigar:
 
-Sintoma: validator rejeita o supervisor.
+- middlewares.human_in_the_loop.async_approval
+- HilAsyncApprovalContract
+- repositório de agent_hil_approval_requests
 
-Causa confirmada: middlewares.filesystem.enabled igual a true sem permissions explícitas.
+### 15.4. Memória Redis não persiste
 
-### HIL sem checkpointer
+Causa provável: backend diferente de redis, URL inválida, mismatch com REDIS_PROMETEU_GENERIC_RAG_URL ou policy read_only bloqueando escrita.
 
-Sintoma: validator semântico rejeita a configuração.
+Onde investigar:
 
-Causa confirmada: middlewares.human_in_the_loop.enabled igual a true sem memory.checkpointer.enabled.
+- deepagent_memory
+- DeepAgentRedisStore
+- logs de deepagent store configurado
 
-### deepagent_memory incompatível
+### 15.5. Job background não continua após aprovação
 
-Sintoma: validator ou runtime falha cedo.
+Causa provável: pedido HIL não foi resolvido corretamente, token inválido, aprovador incorreto ou problema na continuação.
 
-Causa confirmada: backend diferente de redis, URL ausente, escopo inválido, policy inválida ou tenant_id ausente em escopo org.
+Onde investigar:
 
-### Runtime DeepAgent incompatível
+- /agent/hil/decisions
+- HilApprovalDecisionService
+- AgentHilApprovalRequestsRepository
+- thread_id e correlation_id persistidos no pedido HIL
 
-Sintoma: ImportError na inicialização.
+## 16. Explicação 101
 
-Causa confirmada: ausência de middlewares ou classes obrigatórias no ambiente instalado.
+Tecnicamente, o DeepAgent Supervisor é um coordenador de trabalho agentic com mais ferramentas e mais disciplina. Ele não só conversa: ele monta equipe de subagentes, usa uma lista de tarefas, lembra contexto, sabe operar em background, pausa quando precisa de humano e continua depois.
 
-## 18. Observabilidade e diagnóstico
+O que o torna forte não é “ter muita feature”. O que o torna forte é que essas features foram conectadas por contrato, validação e runtime governado.
 
-Para investigar DeepAgent Supervisor, os pontos principais são estes.
-
-### 18.1 Logs de bootstrap
-
-Eles mostram seleção da factory, middlewares registrados, plano de runtime, configuração do store Redis e cache hit ou miss do supervisor.
-
-### 18.2 Timeline de execução
-
-O payload final inclui execution_timeline combinando lifecycle trace e DeepAgentRuntimeTelemetry.
-
-### 18.3 tools_usage
-
-O supervisor devolve resumo de uso de tools, o que ajuda a separar falha de ferramenta de falha de orquestração.
-
-### 18.4 correlation_id e thread_id
-
-Correlation_id reconstrói a execução ponta a ponta. Thread_id identifica a conversa ou a pausa HIL específica que precisa ser retomada.
-
-## 19. Como colocar para funcionar
-
-Com base no código lido, o caminho mínimo é este.
-
-1. Declarar um supervisor em multi_agents com execution.type deepagent.
-2. Garantir selected_supervisor coerente quando houver mais de um supervisor habilitado.
-3. Configurar middlewares explicitamente conforme a capacidade desejada.
-4. Se HIL estiver habilitado, ligar memory.checkpointer.enabled e declarar interrupt_on.
-5. Se deepagent_memory estiver habilitada, configurar Redis global e deepagent_memory.redis.url coerente com REDIS_PROMETEU_GENERIC_RAG_URL.
-6. Chamar /agent/execute com mode deepagent ou deixar o router resolver esse modo pelo YAML ativo.
-
-## 20. Exemplos práticos guiados
-
-### Exemplo 1: DeepAgent síncrono com HIL
-
-Cenário: o cliente envia /agent/execute com mode deepagent e o supervisor possui human_in_the_loop habilitado.
-
-Processamento: o invoke chega até uma tool mapeada em interrupt_on, a execução pausa e o payload final inclui hil e thread_id.
-
-Saída: o cliente usa /agent/continue ou /agent/hil/decisions para retomar.
-
-### Exemplo 2: DeepAgent com memória persistente por usuário
-
-Cenário: deepagent_memory.enabled está on com scope user.
-
-Processamento: o runtime monta StoreBackend sobre DeepAgentRedisStore usando namespace user e user_email.
-
-Saída: o agente reaproveita memória dentro desse escopo, respeitando a política de escrita.
-
-### Exemplo 3: execução assíncrona com pausa humana
-
-Cenário: /agent/execute decide ou recebe execução assíncrona.
-
-Processamento: o callback de progresso registra running, depois paused quando surge HIL. O sistema pode disparar aprovação assíncrona por canal governado.
-
-Saída: a operação acompanha o estado pela task e pela correlação do run.
-
-## 21. Explicação 101
-
-O DeepAgent Supervisor é como um coordenador de equipe com acesso a ferramentas, memória e especialistas, mas trabalhando dentro de um manual interno obrigatório. Ele não pode simplesmente fazer qualquer coisa porque a biblioteca permite. Ele só faz o que o contrato do produto diz que é permitido, o que a validação aprova e o que a infraestrutura realmente suporta.
-
-## 22. Limites e pegadinhas
-
-- selected_supervisor mal configurado pode impedir a seleção correta do modo deepagent.
-- A AST aceitar uma forma estrutural não significa que a combinação semântica está correta.
-- deepagent_memory não substitui checkpointer; são responsabilidades diferentes.
-- Thread_id é obrigatório para continue; não pode ser reconstruído por aproximação.
-- O cache do supervisor economiza custo, mas não substitui validação de contrato.
-
-## 23. Checklist de entendimento
-
-- Entendi o caminho YAML até AST.
-- Entendi as regras do validator semântico.
-- Entendi como o SupervisorConfigResolver prepara o contexto ativo.
-- Entendi a pilha governada de middlewares do runtime.
-- Entendi o papel de deepagent_memory e do DeepAgentRedisStore.
-- Entendi o papel do checkpointer.
-- Entendi os endpoints de execute, continue e hil decisions.
-- Entendi como o background execution também aciona o DeepAgent Supervisor.
-
-## 24. Evidências no código
-
-- src/config/agentic_assembly/ast/deepagent.py
-  - Motivo da leitura: confirmar o contrato AST do DeepAgent Supervisor.
-  - Símbolos relevantes: DeepAgentSupervisorAST, DeepAgentMiddlewaresAST, DeepAgentAgentAST.
-  - Comportamento confirmado: estrutura tipada dos campos deepagent.
-
-- src/config/agentic_assembly/parsers/deepagent_parser.py
-  - Motivo da leitura: confirmar filtragem por execution.type e bloqueio de campos removidos.
-  - Símbolos relevantes: parse, collect_supervisor_contract_diagnostics.
-  - Comportamento confirmado: parser dedicado ao alvo deepagent.
-
-- src/config/agentic_assembly/validators/deepagent_semantic_validator.py
-  - Motivo da leitura: confirmar coerência obrigatória do contrato.
-  - Símbolos relevantes: DeepAgentSemanticValidator, \_validate_permissions_list, \_validate_hil_checkpointer.
-  - Comportamento confirmado: regras de HIL, permissions, skills, memory e async_subagents.
-
-- src/agentic_layer/supervisor/config_resolver.py
-  - Motivo da leitura: confirmar seleção do supervisor ativo e contexto executável.
-  - Símbolos relevantes: SupervisorConfigResolver, ActiveSupervisorContext.
-  - Comportamento confirmado: selected_supervisor, enabled e modo deepagent resolvidos antes do runtime.
+## 17. Evidências no código
 
 - src/agentic_layer/supervisor/deep_agent_supervisor.py
-  - Motivo da leitura: confirmar bootstrap, cache, invoke e montagem governada do agente.
-  - Símbolos relevantes: initialize, run, _create_governed_deep_agent, _build_deepagent_store_backend, _import_deepagents.
-  - Comportamento confirmado: runtime DeepAgent governado com cache, memória, HIL e middleware stack controlada.
+  - Motivo da leitura: runtime principal e montagem governada do DeepAgent.
+  - Símbolos relevantes: initialize, run, _create_agent, _create_governed_deep_agent, _build_subagents_spec,_build_background_execution_subagent_spec, _build_deepagent_store_backend, _compose_deepagents_extra_middleware, _collect_tools.
+  - Comportamento confirmado: cache por YAML hash, toolset deduplicado, filesystem, shell, memory, HIL, todo_list, PII, skills, summarization, background subagent e telemetria.
 
-- src/agentic_layer/supervisor/deepagent_redis_store.py
-  - Motivo da leitura: confirmar store Redis da memória persistente.
-  - Símbolos relevantes: DeepAgentRedisStore, \_assert_write_allowed, \_refresh_ttl.
-  - Comportamento confirmado: BaseStore com TTL, retry, namespace e política de escrita.
+- src/config/agentic_assembly/ast/deepagent.py
+  - Motivo da leitura: contrato AST oficial do DeepAgent.
+  - Símbolos relevantes: DeepAgentMiddlewaresAST, DeepAgentFilesystemPermissionAST, DeepAgentAsyncApprovalAST, DeepAgentSupervisorAST.
+  - Comportamento confirmado: lista oficial de middlewares e campos especializados.
 
-- src/api/routers/agent_router.py
-  - Motivo da leitura: confirmar fronteira pública do DeepAgent.
-  - Símbolos relevantes: /agent/execute, /agent/continue, /agent/hil/decisions, _execute_agent_with_deepagent_supervisor.
-  - Comportamento confirmado: execução, pausa, retomada e uso assíncrono do DeepAgent Supervisor.
+- src/config/agentic_assembly/parsers/deepagent_parser.py
+  - Motivo da leitura: parser dedicado do modo deepagent.
+  - Símbolo relevante: DeepAgentParser.parse.
+  - Comportamento confirmado: filtragem por execution.type, defaults, parse de tools_library e rejeição de campos antigos.
 
-- src/api/services/agent_hil_continuation_service.py
-  - Motivo da leitura: confirmar retomada formal por supervisor_mode.
-  - Símbolos relevantes: _build_supervisor, _run_supervisor.
-  - Comportamento confirmado: DeepAgentSupervisor é recriado e retomado por Command resume.
+- src/config/agentic_assembly/validators/deepagent_semantic_validator.py
+  - Motivo da leitura: coerência operacional do contrato.
+  - Símbolos relevantes: validações de permissions, HIL, skills, deepagent_memory e async approval.
+  - Comportamento confirmado: fail-fast para configurações incoerentes.
+
+- src/config/agentic_assembly/schema_service.py
+  - Motivo da leitura: catálogo de middlewares e recursos publicados do DeepAgent.
+  - Símbolo relevante: deepagent_middlewares, deepagent_official_middlewares, deepagent_platform_middlewares.
+  - Comportamento confirmado: distinção entre middlewares do runtime e middlewares do produto.
 
 - src/agentic_layer/background_execution/runtime.py
-  - Motivo da leitura: confirmar integração com execução agentic em background.
-  - Símbolos relevantes: _execute_deepagent.
-  - Comportamento confirmado: background execution também instancia DeepAgentSupervisor e chama run.
+  - Motivo da leitura: execução canônica de deepagent em segundo plano.
+  - Símbolos relevantes: execute_run,_execute_deepagent,_build_execution_yaml.
+  - Comportamento confirmado: snapshot obrigatório, reidratação de security_keys, thread_id durável e HIL background.
+
+- src/agentic_layer/tools/system_tools/background_execution.py
+  - Motivo da leitura: ferramenta canônica de background execution.
+  - Símbolos relevantes: BACKGROUND_EXECUTION_TOOL_IDS, create_background_execution_tools.
+  - Comportamento confirmado: tools para agendar, listar, cancelar, reagendar e consultar execuções background.
+
+- src/api/routers/agent_router.py
+  - Motivo da leitura: contratos HTTP oficiais.
+  - Símbolos relevantes: /agent/execute, /agent/continue, /agent/hil/decisions.
+  - Comportamento confirmado: execução DeepAgent por mode, continuação por thread_id e resolução segura de aprovação HIL.
+
+- src/agentic_layer/supervisor/hil_async_approval_contract.py
+  - Motivo da leitura: contrato de aprovação HIL assíncrona.
+  - Símbolo relevante: HilAsyncApprovalContract.normalize.
+  - Comportamento confirmado: canais permitidos, TTL, política de expiração, aprovadores e validações.
+
+- src/agentic_layer/supervisor/deepagent_redis_store.py
+  - Motivo da leitura: persistência durável de memória do DeepAgent.
+  - Símbolo relevante: DeepAgentRedisStore.
+  - Comportamento confirmado: BaseStore em Redis com retry, TTL, escopo e policy de escrita.

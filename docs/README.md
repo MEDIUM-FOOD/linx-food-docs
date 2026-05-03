@@ -23,10 +23,13 @@ arquivo.
 ## 2. Se você quer entender a plataforma inteira
 
 Comece pelo [README principal](../README.md) para visão executiva e por
-[README-ARQUITETURA.md](./README-ARQUITETURA.md) para a mecânica real da
-plataforma. O manual de arquitetura explica a separação entre API,
-worker e scheduler, o papel do YAML, o uso de correlation_id e a
-diferença entre produção de acervo, consulta e execução assíncrona.
+[README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md](./README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md)
+e
+[README-TECNICO-ARQUITETURA-STACK-PROJETO.md](./README-TECNICO-ARQUITETURA-STACK-PROJETO.md)
+para a mecânica real da plataforma. Esse par explica a separação entre
+API, worker e scheduler, a stack confirmada, o papel do YAML, a
+infraestrutura mandatória e a diferença entre produção de acervo,
+consulta e execução assíncrona.
 
 Depois leia [README-INGESTAO.md](./README-INGESTAO.md), [README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-PDF-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-PDF-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-PDF-PIPELINE-COMPLETO.md), [README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-EXCEL-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-EXCEL-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-EXCEL-PIPELINE-COMPLETO.md), [README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-JSON-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-JSON-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-JSON-PIPELINE-COMPLETO.md), [README-CONCEITUAL-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-CONFLUENCE-PIPELINE-COMPLETO.md), [README-CONCEITUAL-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-WEBSCRAP-PIPELINE-COMPLETO.md), [README-CONCEITUAL-INGESTAO-HTML-PIPELINE-COMPLETO.md](./README-CONCEITUAL-INGESTAO-HTML-PIPELINE-COMPLETO.md), [README-TECNICO-INGESTAO-HTML-PIPELINE-COMPLETO.md](./README-TECNICO-INGESTAO-HTML-PIPELINE-COMPLETO.md), [README-RAG.md](./README-RAG.md), [README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md](./README-CONCEITUAL-RAG-PIPELINE-COMPLETO.md) e [README-TECNICO-RAG-PIPELINE-COMPLETO.md](./README-TECNICO-RAG-PIPELINE-COMPLETO.md). Essa sequência é importante porque PDF, Excel, JSON, Confluence, Web Scraping e HTML são partes críticas da produção de acervo e porque os manuais especializados explicam os pipelines completos sob perspectivas complementares antes de entrar no consumo via RAG.
 
@@ -71,6 +74,8 @@ Esse assunto precisa ser lido pela lógica de decisão, não por jargão.
 
 - [README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-CONCEITUAL-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md) explica o que a plataforma realmente configura por YAML, o que pode ser feito sem programação e onde termina esse limite.
 - [README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md](./README-TECNICO-CONFIGURACAO-YAML-AGENTES-WORKFLOW-ETL.md) mostra o ciclo técnico de carga, AST, seleção de alvos, tools_library e ETL declarativo.
+- [README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md](./README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md) explica o MCP como capability governada por YAML, o valor de negócio da integração por protocolo e os limites reais do desenho atual.
+- [README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md](./README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md) descreve merge por escopo, catálogo efetivo, proxy stdio em /mcp, autenticação, cache e troubleshooting operacional do MCP.
 - [README-AGENTIC-INICIANTES.md](./README-AGENTIC-INICIANTES.md) explica o modelo mental.
 - [README-AST-AGENTIC-DESIGNER.md](./README-AST-AGENTIC-DESIGNER.md) explica por que a AST existe e como ela governa edição, validação e compilação.
 - [README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md](./README-CONCEITUAL-DEEPAGENT-SUPERVISOR-COMPLETO.md) explica o DeepAgent Supervisor como capacidade governada, seu valor, seus limites e sua relação com HIL, memória e subagentes.
@@ -133,7 +138,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 ### 9.1 Plataforma, arquitetura e operação
 
 - [../README.md](../README.md): visão executiva da plataforma e catálogo mestre consolidado.
-- [README-ARQUITETURA.md](./README-ARQUITETURA.md): visão macro da plataforma, separação entre API, worker, scheduler, YAML-first e contratos transversais.
+- [README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md](./README-CONCEITUAL-ARQUITETURA-STACK-PROJETO.md): manual conceitual, executivo, comercial e estratégico da arquitetura macro e da stack do projeto.
+- [README-TECNICO-ARQUITETURA-STACK-PROJETO.md](./README-TECNICO-ARQUITETURA-STACK-PROJETO.md): manual técnico e operacional da topologia multiprocesso, infraestrutura obrigatória e stack confirmada do projeto.
 - [README-SERVICE-API.md](./README-SERVICE-API.md): boundary HTTP, responsabilidades da API e como o runtime expõe capacidades para clientes e operação.
 - [README-LOGGING.md](./README-LOGGING.md): rastreabilidade, correlação e leitura operacional de logs.
 - [README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md](./README-CONCEITUAL-ARQUITETURA-LOGGING-CORRELATION-ID.md): manual conceitual, executivo, comercial e estratégico da arquitetura de logging com correlation_id, arquivo local e providers remotos.
@@ -217,7 +223,8 @@ Além das trilhas por intenção, este índice também precisa cumprir uma funç
 - [README-SCHEMA-BANCO.md](./README-SCHEMA-BANCO.md): organização e papel do schema do banco.
 - [README-SQL-SCHEMA-RAG-TOOL.md](./README-SQL-SCHEMA-RAG-TOOL.md): tool especializada no schema SQL do RAG.
 - [README-GOOGLE-UCP.md](./README-GOOGLE-UCP.md): integração e contrato do fluxo Google UCP.
-- [README-MCP.md](./README-MCP.md): capacidades ligadas ao ecossistema MCP.
+- [README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md](./README-CONCEITUAL-MCP-INTEGRACAO-USO-SISTEMA.md): manual conceitual, executivo, comercial e estratégico do MCP como capability governada e expansível por YAML.
+- [README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md](./README-TECNICO-MCP-INTEGRACAO-USO-SISTEMA.md): manual técnico e operacional do MCP, incluindo resolução por escopo, proxy stdio em /mcp, autenticação, cache e troubleshooting.
 - [README-INTEGRACOES-GOVERNADAS.md](./README-INTEGRACOES-GOVERNADAS.md): integração com controles e governança explícita.
 - [README-EXEMPLOS-INTEGRACAO-API.md](./README-EXEMPLOS-INTEGRACAO-API.md): documento explicitamente voltado a exemplos completos de uso de APIs.
 - [tutorial-101-exemplos-api-deepagent-hil-execute-continue.md](./tutorial-101-exemplos-api-deepagent-hil-execute-continue.md): tutorial de exemplos completos de API para deepagent com pausa humana.

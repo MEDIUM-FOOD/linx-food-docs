@@ -1,19 +1,56 @@
-# Manual técnico e operacional: Pipeline RAG completo
+# Manual técnico e operacional: Pipeline RAG de recuperação avançada
 
-## 1. Escopo e fonte de verdade
+## 1. Escopo e recorte técnico
 
-Este documento descreve o pipeline RAG completo com base no código real lido nesta sessão. A documentação existente do repositório não foi usada como fonte de verdade para comportamento. Onde algum ponto de estado da arte não pôde ser confirmado no código lido, ele é marcado como não confirmado.
+Este documento descreve o caminho online do RAG moderno do projeto, isto é, o pipeline que começa na pergunta e termina na resposta. O recorte é propositalmente restrito à recuperação avançada e à geração final apoiada por evidência. Ingestão, chunking, OCR, indexação e ETL não fazem parte do fluxo principal explicado aqui.
 
-O foco técnico aqui é cobrir:
+Quando algum detalhe de corpus aparece, ele aparece apenas como pré-condição técnica para entender uma decisão do retrieval. Este manual não documenta a produção do corpus.
 
-- como o corpus é produzido,
-- como a pergunta entra,
-- como o retrieval é decidido e executado,
-- como a resposta é gerada,
-- quais configurações mudam o comportamento,
-- como diagnosticar falhas reais.
+## 2. Entry points reais
 
-## 2. Visão geral do fluxo técnico
+### 2.1. Fachada pública da consulta
+
+O ponto de entrada lido para consultas compartilhadas é QuestionService.execute.
+
+Responsabilidades confirmadas:
+
+- validar e registrar a consulta;
+- decodificar imagem base64 opcional;
+- inicializar o ContentQASystem com cache global de pipeline;
+- aplicar InvokeTimeoutGuard;
+- chamar qa_system.ask_question(...);
+- extrair métricas de retrieval via PipelineDiagnosticsBuilder;
+- registrar telemetria via QuestionTelemetryRecorder;
+- enriquecer fontes e documentos de origem.
+
+Implicação prática: a API não fala diretamente com o retriever. Ela fala com uma fachada estável que encapsula inicialização, timeout, telemetria e pós-processamento.
+
+### 2.2. Sistema de QA
+
+O ContentQASystem é a montagem do runtime. Ele valida o layout moderno, monta LLM, embeddings, vector store, cadeia QA, memória e pipeline inteligente.
+
+Pontos confirmados no código:
+
+- usa QARuntimeAssembly quando o modo moderno está disponível;
+- valida que intelligent_pipeline deve ficar na raiz do YAML;
+- pode reutilizar instância de pipeline via PipelineCacheManager;
+- carrega qa_system pelo CredentialManager;
+- instancia QAQuestionProcessor como boundary interno da pergunta.
+
+### 2.3. Boundary da pergunta
+
+O QAQuestionProcessor.ask_question é quem decide se o fluxo segue para o orchestrator inteligente.
+
+Regras relevantes confirmadas:
+
+- pergunta vazia falha cedo;
+- SecurityKeysValidator roda antes do pipeline principal;
+- se o modo moderno estiver ativo e o intelligent_orchestrator não existir, o código falha fechado;
+- fallback silencioso foi removido do caminho moderno.
+
+Esse é um ponto arquitetural importante: no recorte moderno, ausência do pipeline inteligente é erro de contrato, não “degradação natural”.
+
+## 3. Fluxo executável de ponta a ponta
 
 ```mermaid
 sequenceDiagram
@@ -21,664 +58,682 @@ sequenceDiagram
     participant QS as QuestionService
     participant CQA as ContentQASystem
     participant QP as QAQuestionProcessor
-    participant IO as IntelligentOrchestrator
+    participant IO as IntelligentRAGOrchestrator
     participant RE as RetrievalEngine
     participant GE as GenerationEngine
 
-    U->>QS: pergunta
+    U->>QS: pergunta + filtros + imagem opcional
     QS->>CQA: ask_question
-    CQA->>QP: processar pergunta
+    CQA->>QP: ask_question
     QP->>IO: intelligent_retrieve
     IO->>IO: query rewrite
-    IO->>IO: query analysis e routing
+    IO->>IO: query analysis + routing
     IO->>RE: executar estrategia
+    RE->>RE: cache, FTS, fusao, rerank, especializacoes
     RE-->>IO: documentos
-    IO->>IO: ACL e normalizacao
-    IO->>GE: gerar resposta
-    GE-->>IO: answer e fontes
+    IO->>IO: ACL + normalize_documents
+    IO->>GE: generate_intelligent_answer
+    GE-->>IO: resposta + tempo de LLM
     IO-->>QP: payload final
-    QP-->>CQA: resultado
+    QP-->>CQA: resultado com diagnosticos
     CQA-->>QS: resposta estruturada
 ```
 
-O diagrama mostra só a metade online da inferência. O retrieval depende de uma metade offline ou assíncrona anterior: a produção do corpus.
+Esse fluxo já mostra a separação central do projeto: retrieval é uma etapa própria, com decisão, pós-processamento e rastreamento, e não apenas um detalhe antes do prompt final.
 
-## 3. Pipeline de produção do corpus
+## 4. Ordem real da execução
 
-### 3.1. Entrada da ingestão
-
-O ponto de entrada lido é a classe IngestionService. Ela registra início, monta o IngestionRequest, pode avaliar fanout por documento e delega a execução ao ContentIngestionOrchestrator.
-
-O que essa etapa recebe:
-
-- YAML completo,
-- contexto de tenant e sessão,
-- parâmetros de paralelismo documental,
-- callback opcional de progresso.
-
-O que ela entrega:
-
-- payload final de execução da ingestão com análise de resultado,
-- correlation_id,
-- snapshot do runtime moderno extraído da configuração.
-
-Valor técnico: separar a fachada operacional do pipeline interno de ingestão.
-
-### 3.2. Resolução de fontes e clientes
-
-O slice lido da IngestionService mostra que a requisição usa resolvers especializados para múltiplas fontes, como local, S3, Azure Blob, Google Drive, fontes dinâmicas, scraping e YouTube. A ContentClientFactory registra clientes builtin por tipo de conteúdo e a ContentProcessorFactory seleciona o processador adequado.
-
-O ponto importante aqui é que o pipeline não trata tudo como arquivo genérico. Ele resolve tipo de conteúdo e só então escolhe cliente e processador.
-
-### 3.3. Contrato de chunk
-
-O contrato comum do ecossistema RAG está em src/shared/rag_contracts/data_models.py e src/shared/rag_contracts/metadata.py.
-
-O que fica explícito:
-
-- ContentChunk exige conteúdo não vazio, document_id, chunk_index válido e source_type.
-- Os metadados passam por normalização canônica, reduzindo divergência entre ingestão, retrieval e exibição de fontes.
-
-Na prática, isso evita que cada processador invente seu próprio formato de metadado relevante.
-
-### 3.4. Chunking por tipo de conteúdo
-
-#### Texto simples
-
-O TxtContentProcessor usa chunk_size, chunk_overlap, max_chunks_per_document e separador de parágrafo. Ele tenta primeiro o caminho de paragraph_group. Se não houver separador de parágrafo útil ou se não forem gerados chunks válidos, cai para sentence_group.
-
-O que isso significa na prática:
-
-- o pipeline preserva estrutura quando ela existe,
-- mas não bloqueia o processamento quando essa estrutura é fraca.
-
-#### PDF
-
-O PDF não usa um chunking único. O PdfChunkingService registra uma sequência de estratégias ordenadas. Quando page boundaries e preservação de estrutura estão habilitados, a estratégia por página entra primeiro. Depois vêm seção, parágrafo e sentença. Se nenhuma estratégia conseguir produzir chunks úteis, o serviço cria fallback chunks.
-
-O que isso significa na prática:
-
-- PDFs estruturados podem manter mais contexto organizacional,
-- PDFs ruins ou heterogêneos ainda passam por fallback controlado,
-- o pipeline registra qual estratégia foi usada.
-
-#### Multimodalidade em PDF
-
-O slice lido do PdfContentProcessor confirma:
-
-- reaproveitamento de conteúdo textual quando já existe,
-- extração de texto de bytes crus quando necessário,
-- OCR básico opcional para páginas vazias ou PDFs sem texto,
-- suporte a extração visual antes do chunking final.
-
-Não foi confirmado no código lido um retrieval multimodal de late interaction ou multi-vector no runtime de consulta, mas a ingestão PDF já prepara sinais ricos de conteúdo.
-
-### 3.5. Persistência e geração ativa
-
-O DocumentPersistenceManager é a peça central da metade corpus. O slice lido confirma:
-
-- conceito de prepared generation para sobrescrita controlada,
-- resolução de physical_vector_target e physical_bm25_target,
-- bootstrap de dataset e manifesto,
-- persistência de documentos, páginas, imagens e chunks,
-- chamada explícita de prepare_for_ingestion no vector store,
-- indexação dos chunks e sincronismo com BM25.
-
-Isso é tecnicamente importante porque o projeto não trata vetorial e lexical como pipelines independentes. Eles aparecem como conjunto operacional coordenado.
-
-## 4. Pipeline de pergunta e resposta
-
-### 4.1. Entry point HTTP e serviço de pergunta
-
-O router de RAG delega a pergunta para o serviço de runtime compatível, que usa QuestionService como fachada reutilizável. Esse serviço:
-
-- inicializa o ContentQASystem,
-- aplica timeout guard,
-- executa ask_question,
-- analisa qualidade da resposta,
-- extrai métricas de retrieval,
-- enriquece fontes e telemetria.
-
-### 4.2. ContentQASystem e montagem do runtime
-
-O ContentQASystem não assume um runtime implícito. Ele passa pela montagem formal do QARuntimeAssembly e do QASetupManager.
-
-O que o slice lido confirmou:
-
-- validação do layout moderno,
-- setup de LLM via resource pool,
-- setup de embeddings,
-- setup de vector store,
-- criação de chain LCEL,
-- acoplamento opcional com histórico de mensagens e memória persistente do usuário,
-- setup do pipeline inteligente.
-
-### 4.3. QAQuestionProcessor
-
-O QAQuestionProcessor é o boundary técnico da pergunta dentro da camada QA. Ele:
-
-- valida entrada,
-- resolve include_sources,
-- valida security_keys,
-- falha fechado se o runtime moderno obrigatório não estiver disponível,
-- encaminha a consulta ao intelligent_orchestrator quando o pipeline inteligente está ativo.
-
-## 5. Execução do pipeline inteligente
-
-### 5.1. Ordem real da execução
-
-O método intelligent_retrieve mostra a ordem principal da inferência online.
+Dentro de IntelligentRAGOrchestrator.intelligent_retrieve, a ordem confirmada é esta.
 
 1. Validar a pergunta.
-2. Resolver top_k a partir do YAML.
-3. Registrar início do pipeline e telemetria.
-4. Inicializar lazy components na primeira execução.
-5. Executar query rewrite.
-6. Analisar a pergunta e gerar routing decision.
-7. Executar a estratégia escolhida.
-8. Aplicar ACL e normalização dos documentos.
-9. Montar o resultado final, incluindo geração com LLM.
-10. Anexar retrieval_trace e token_usage quando existirem.
+2. Resolver top_k via get_retrieval_top_k.
+3. Construir access_context a partir do payload.
+4. Registrar início do pipeline e telemetria.
+5. Se o intelligent_pipeline estiver desabilitado, executar pipeline de fallback.
+6. Fazer inicialização lazy dos componentes na primeira execução.
+7. Executar query rewrite.
+8. Rodar análise e roteamento da query.
+9. Executar o processador escolhido.
+10. Aplicar AccessControlEvaluator.filter_documents.
+11. Normalizar documentos.
+12. Montar resultado final com geração via LLM.
+13. Anexar token_usage e retrieval_trace.
+14. Atualizar métricas e registrar conclusão.
 
-Essa ordem importa porque separa claramente preprocessamento da pergunta, retrieval, pós-retrieval e geração.
+Essa ordem importa porque o projeto distingue claramente:
 
-### 5.2. Query rewrite
+- preparação da pergunta;
+- decisão de recuperação;
+- recuperação;
+- filtragem de segurança;
+- geração final.
+
+## 5. Configurações que mudam o comportamento
 
-O QueryRewriter lê sua configuração de qa_system.query_rewrite. O slice lido confirma estes controles:
+## 5.1. query rewrite
+
+Lido em qa_system.query_rewrite.
 
-- enabled,
-- enable_paraphrase,
-- enable_correction,
-- enable_expansion,
-- max_variations,
-- min_similarity,
-- max_output_chars,
-- retry_attempts e janela de backoff.
+Chaves confirmadas:
 
-O comportamento relevante é este:
+- enabled
+- enable_paraphrase
+- enable_correction
+- enable_expansion
+- max_variations
+- min_similarity
+- max_output_chars
+- retry_attempts
+- retry_wait_min
+- retry_wait_max
 
-- se estiver desabilitado, a pergunta passa intacta,
-- se não houver LLM, a pergunta passa intacta com motivo explícito,
-- se a reescrita gerada ficar abaixo do threshold de similaridade, o sistema rejeita a reescrita e usa a original.
+Efeito prático:
 
-Isso evita uma expansão agressiva que distorça a intenção do usuário.
+- se disabled=false, a pergunta segue intacta;
+- se não houver LLM, a etapa devolve passthrough com motivo explícito;
+- se a similaridade entre original e reescrita ficar abaixo do mínimo, a reescrita é rejeitada.
 
-### 5.3. Query analysis e adaptive routing
+## 5.2. retriever vetorial moderno
 
-O QueryAnalyzer extrai:
+Lido em rag_system.retriever.vector_store.
 
-- query_type,
-- data_type,
-- domain,
-- entities,
-- keywords,
-- complexity,
-- intent,
-- technical_terms,
-- hints de contexto.
+Chaves confirmadas:
 
-O AdaptiveQueryRouter usa esses sinais e a configuração de rag_system.retriever.hybrid.adaptive_router.decision_strategy para decidir a RetrievalStrategy. O slice lido confirma thresholds para hybrid, bm25 e semantic, além de default_strategy, log_decisions e include_analysis_in_response.
+- k
+- similarity_threshold
+- use_mmr
+- mmr_fetch_k
+- mmr_lambda
 
-Observação importante: o AdaptiveQueryRouter ainda aplica um fallback local de vector_store default para conseguir inicializar. Isso existe no código lido e precisa ser entendido como proteção do componente, não como contrato ideal do produto.
+Observação importante: o código considera k e similarity_threshold como obrigatórios no modo moderno.
 
-### 5.4. RoutingDecision
+## 5.3. híbrido e router adaptativo
 
-Depois da análise, o pipeline produz uma RoutingDecision com:
+Lido em rag_system.retriever.hybrid e rag_system.retriever.hybrid.adaptive_router.decision_strategy.
 
-- processor_type,
-- retriever_strategy,
-- confidence,
-- should_expand_query,
-- requires_fusion,
-- fallback_processor,
-- query_features.
+Chaves confirmadas:
 
-Esse objeto governa a execução concreta da etapa seguinte.
+- vector_weight
+- text_weight
+- combine_strategy
+- thresholds.hybrid_threshold
+- thresholds.bm25_only_threshold
+- thresholds.vector_only_threshold
+- default_strategy
+- log_decisions
+- include_analysis_in_response
 
-## 6. Estratégias de retrieval confirmadas no código
+Efeito prático:
 
-### 6.1. Retrieval tradicional
+- define pesos da combinação híbrida;
+- controla thresholds da decisão do router;
+- define estratégia padrão quando nada mais se destaca.
 
-É o caminho padrão quando não há necessidade de processamento mais especializado. O engine tenta, em ordem, retrievers como vector_search, semantic_search e default.
+## 5.4. fusão
 
-Quando encontra um retriever disponível:
+Lido em rag_system.retriever.hybrid.fusion.
 
-- executa com run_retriever_with_trace,
-- registra telemetria e tentativa,
-- pode enriquecer o resultado com FTS.
+Chaves confirmadas:
 
-### 6.2. Hybrid processor
+- default_algorithm
+- weighted_rrf.k
+- weighted_rrf.bm25_weight
+- weighted_rrf.vector_weight
+- linear.bm25_weight
+- linear.vector_weight
+- general.final_top_k
+- general.remove_duplicates
+- general.similarity_threshold
+- general.min_final_score
+- general.normalize_final_scores
 
-O execute_hybrid_processor confirma um fluxo em camadas.
+Efeito prático: controla o motor HybridFusion, principalmente quando a estratégia exige combinação formal de múltiplos rankings.
 
-1. Avalia se hybrid está desligado.
-2. Avalia se o vector store suporta hybrid nativo.
-3. Enriquece a query com technical_terms quando fizer sentido.
-4. Tenta native_hybrid_search se o modo e o backend permitirem.
-5. Se falhar ou não for possível, cai para o hybrid retriever manual.
-6. Após isso, ainda pode enriquecer com FTS.
+## 5.5. FTS
 
-O resultado prático é um hybrid que não assume que todo backend sabe fazer a mesma coisa.
+Lido em rag_system.retriever.fts.
 
-### 6.3. Self-query processor
+Chaves confirmadas:
 
-O execute_self_query_processor confirma dois caminhos.
+- enabled
+- mode
+- top_k
+- fallback_min_results
+- semantic_score_threshold
+- pg_dsn
+- pg_schema
+- table
+- ts_config
+- statement_timeout_ms
+- pool e retry do Postgres
 
-- Primeiro tenta um resolvedor de domínio, se ele estiver habilitado e detectar necessidade de busca estruturada.
-- Se isso não produzir documentos úteis, tenta o retriever self_query registrado.
-- Se ele não existir, cai para o retrieval tradicional.
+Efeito prático:
 
-Isso mostra que self-query é tratado como capacidade especializada, não como default universal.
+- mode=augment executa FTS como enriquecimento explícito;
+- mode=fallback executa FTS só quando o gatilho indica poucos resultados ou score fraco;
+- se o retriever FTS não estiver registrado, o pipeline apenas ignora a etapa.
 
-### 6.4. Multi-query processor
+## 5.6. cache semântico
 
-O execute_multi_query_processor confirma três possibilidades.
+Lido em rag_system.retriever.caching.
 
-- usar o multi_query_retriever já configurado,
-- instanciar um retriever temporário com base vetorial + LLM,
-- ou cair para retrieval tradicional.
+Chaves confirmadas:
 
-O MultiQueryRetriever configurável usa:
+- semantic_cache_enabled
+- semantic_cache_distance_threshold
+- semantic_cache_ttl_seconds ou cache_ttl_seconds
+- semantic_cache_max_items ou cache_size
+- semantic_cache_backend
 
-- max_expansions,
-- expansion_strategy,
-- parallel_execution,
-- deduplication_threshold,
-- max_concurrent_queries,
-- query_timeout_seconds,
-- cache de expansões.
+Backends confirmados:
 
-### 6.5. JSON specialized processor
+- redisearch
+- qdrant
+- azure_search
+- disabled
 
-O slice lido mostra que o runtime ainda tem um caminho especializado para JSON e Excel estruturado. Esse caminho tenta processadores JSON específicos antes de desistir para o tradicional.
+## 5.7. reranker
 
-O valor técnico desse slice é separar casos em que texto livre não é a melhor representação da resposta.
+Lido em qa_system.reranker.
 
-### 6.6. FTS enrichment
+Chaves confirmadas:
 
-Embora o slice completo de _maybe_enrich_with_fts não tenha sido aberto integralmente nesta sessão, o retrieval engine e o resolvedor de configuração confirmam que existe FTS configurável e acoplado ao retrieval moderno.
+- enabled
+- provider
+- model
+- fallback_model
+- top_k
+- feedback_field
+- feedback_weight
+- vision_weight
 
-O que está confirmado:
+## 5.8. especialização Excel
 
-- FTS lê de rag_system.retriever.fts,
-- há configuração de pool e modo,
-- o engine considera FTS como camada complementar da recuperação.
+Lido em json_specialized_rag_excel.
 
-## 7. BM25, fusão e reranking
+Chaves confirmadas:
 
-### 7.1. BM25 vocabulary snapshot
+- enabled
+- min_keyword_matches
+- keywords
+- content_type_filter
+- max_documents
+- max_rows_sample
+- direct_scan_batch_size
+- require_exhaustive_ingestion
+- direct_scan_max_documents
 
-O RetrievalEngine.merge_bm25_vocabulary_config confirma um guardrail importante.
+## 5.9. detalhe crítico de configuração
 
-Se BM25 está habilitado, o runtime exige:
+O orchestrator lê enable_fallbacks em intelligent_pipeline, mas o código força self.enable_fallbacks = False e apenas registra que fallback foi solicitado. Portanto, o comportamento real confirmado não é “fallback livre se o YAML pedir”. O comportamento real é mais duro: o pipeline moderno opera em fail-first, com quedas pontuais controladas apenas onde a implementação local já programou isso.
 
-- vector_store.id válido,
-- resolução do target físico BM25,
-- carregamento do snapshot de vocabulário da geração ativa.
+## 6. Query rewrite
 
-Se isso falhar, o sistema registra o motivo e pode lançar erro explícito. Isso é coerente com a filosofia de evitar corpus lexical invisivelmente quebrado.
+O QueryRewriter é construído com configuração consolidada de QueryRewriteConfig.from_yaml.
 
-### 7.2. Fusion
+Fluxo confirmado:
 
-O HybridFusion confirma suporte a:
+1. normaliza a pergunta;
+2. verifica se a feature está habilitada;
+3. verifica se há LLM;
+4. constrói prompt fixo de reescrita;
+5. chama o LLM com retry exponencial;
+6. espera resposta em JSON com rewritten_query e variations;
+7. sanitiza texto e variações;
+8. calcula similaridade com a pergunta original;
+9. só aplica a reescrita se a similaridade for suficiente.
 
-- linear,
-- RRF,
-- Weighted RRF,
-- interleaved,
-- score_normalized.
+Garantias relevantes:
 
-O resolvedor de configuração confirma pesos, k do RRF e opções gerais de deduplicação, final_top_k, threshold de similaridade e score mínimo.
+- preserva códigos, siglas e números por política do prompt;
+- pode devolver passthrough por disabled, llm_unavailable, parse_error, low_similarity e outros motivos explícitos.
 
-### 7.3. Reranking neural
+## 7. Query analysis
 
-O NeuralReranker usa cross-encoder, pode combinar neural_score com feedback_score e vision_score, e registra o score final no documento.
+O QueryAnalyzer.analyze extrai QueryFeatures.
 
-Isso coloca o projeto acima do retrieval ingênuo, porque existe uma etapa explícita de reordenação antes da geração.
+Dados confirmados no objeto:
 
-## 8. Cache semântico
+- query_type
+- data_type
+- domain
+- original_query
+- cleaned_query
+- complexity
+- confidence
+- entities
+- keywords
+- requires_filters
+- requires_temporal
+- requires_real_time
+- suggested_processors
+- detected_schema
+- intent
+- context_hints
+- technical_terms
+- expansion_metadata
 
-O SemanticQueryCache confirma:
+Técnicas observadas:
 
-- backend configurável entre redisearch, qdrant, azure_search e disabled,
-- threshold de distância,
-- TTL,
-- max_items,
-- controle explícito de enable/disable reason,
-- métricas de hit e miss.
+- regex para procedural, factual, conceptual, comparative e temporal;
+- score por indicadores de dados estruturados, texto e API;
+- detecção de domínio por vocabulário e auto_detection_keywords;
+- cálculo de complexidade e confiança;
+- detecção de content types disponíveis para favorecer JSON quando o acervo suporta isso.
 
-O orchestrator consulta o cache antes do retrieval em retrievers elegíveis e também tenta persistir o resultado depois.
+Implicação prática: o pipeline não escolhe a estratégia apenas por string matching trivial do usuário. Ele tenta formar uma fotografia semântica e operacional da pergunta.
 
-Na prática, isso significa:
+## 8. Adaptive routing
 
-- menos latência para consultas parecidas,
-- maior necessidade de observabilidade para não mascarar comportamento.
+O AdaptiveQueryRouter combina regras, indicadores e thresholds.
 
-## 9. Geração da resposta
+Pontos confirmados:
 
-### 9.1. Montagem do contexto
+- compila regras de rag_system.retriever.hybrid.adaptive_router.strategies quando existem;
+- suporta lógica padrão quando não há regras explícitas;
+- calcula características como has_exact_codes, has_technical_terms, has_structured_filters e has_conceptual_terms;
+- aplica thresholds finais vindos do YAML;
+- registra telemetria estruturada da decisão.
 
-O GenerationEngine:
+Regra mais importante do router:
 
-- resume presença multimodal,
-- monta context_text com histórico, memória persistente e documentos,
-- renderiza o prompt final,
-- chama o LLM com retry externo,
-- registra uso de tokens,
-- formata fontes para exibição.
+Se a estratégia inicial cair em semantic, mas a pergunta tiver códigos exatos ou sinais técnicos, o router sobrescreve a decisão para hybrid. Isso foi implementado explicitamente para proteger consultas técnicas contra um caminho vetorial puro que perderia match literal.
 
-### 9.2. Resultado final
+Outro ponto técnico relevante:
 
-O _assemble_final_result confirma que o payload final pode conter:
+O AdaptiveQueryRouter injeta um vector_store padrão local se a configuração estiver vazia, apenas para conseguir inicializar. Esse fallback existe no código lido e deve ser visto como proteção local do componente, não como contrato ideal de produto.
 
-- answer,
-- sources,
-- source_documents,
-- routing_decision,
-- pipeline_metrics,
-- query_analysis,
-- metadata,
-- sources_formatted,
-- token_usage,
-- retrieval_trace.
+## 9. Estratégias de retrieval confirmadas
 
-Isso é importante para suporte porque a resposta não sai sozinha; sai acompanhada de contexto operacional.
+## 9.1. Tradicional
 
-## 10. Configurações que mais mudam o comportamento
+Executa retrievers em ordem de preferência:
 
-### 10.1. rag_system.enabled
+- vector_search
+- semantic_search
+- default
 
-Controla se o runtime moderno de RAG pode ser montado.
+Depois disso ainda pode chamar FTS via maybe_enrich_with_fts.
 
-Impacto: sem isso, o assembly moderno não segue.
+## 9.2. Híbrida
 
-### 10.2. rag_system.retriever.vector_store
+Fluxo confirmado:
 
-Bloco mínimo do retriever moderno.
+1. decide se o hybrid está desligado, manual ou nativo;
+2. verifica se o vector store suporta hybrid nativo;
+3. enriquece a query com technical_terms quando houver;
+4. tenta native_hybrid_search com retry externo quando suportado;
+5. se não der, usa hybrid_search manual;
+6. depois pode enriquecer com FTS.
 
-Impacto: ausência ou estrutura inválida quebra a montagem do runtime moderno.
+## 9.3. Self-query
 
-### 10.3. rag_system.retriever.hybrid
+O RetrievalEngine primeiro tenta DomainSelfQueryResolver quando o domínio detectado pede busca estruturada. Se não resolver ou falhar, cai para um retriever self_query genérico. Se nenhum existir, volta para o tradicional.
 
-Controla pesos, estratégia de combinação e decisão adaptativa do hybrid.
+## 9.4. Multi-query
 
-Impacto: muda completamente a forma como denso e lexical são combinados.
+Se multi_query_retriever já estiver montado, ele é usado. Caso contrário, o engine ainda consegue construir um MultiQueryRetriever temporário sobre o base_retriever e o LLM. Se nenhum dos caminhos existir, volta ao tradicional.
 
-### 10.4. rag_system.retriever.fts
+O MultiQueryRetriever suporta:
 
-Controla o FTS complementar.
+- múltiplas estratégias de expansão;
+- execução paralela;
+- cache de expansão;
+- deduplicação de queries;
+- configuração em intelligent_pipeline.multi_query.
 
-Impacto: muda a capacidade de enriquecimento textual fora do vector store.
+## 9.5. JSON toolkit e Excel especializado
 
-### 10.5. rag_system.retriever.caching
+Há dois caminhos distintos.
 
-Controla cache semântico.
+- json_toolkit genérico, se houver retriever registrado;
+- json_specialized_rag_excel, quando a estratégia escolhida for especializada.
 
-Impacto: muda latência, custo e potencial de reaproveitamento.
+O detector de Excel considera:
 
-### 10.6. qa_system.query_rewrite
+- feature habilitada;
+- content types compatíveis encontrados no acervo;
+- número mínimo de palavras-chave na pergunta.
 
-Controla reescrita da pergunta.
+Quando detectado, o engine monta uma RoutingDecision própria com processor_type JSON_TOOLKIT e retriever_strategy json_specialized_rag_excel.
 
-Impacto: muda recuperabilidade antes do retrieval.
+## 9.6. Multimodalidade de consulta
 
-### 10.7. qa_system.reranker
+O retriever vetorial suporta um caminho multimodal quando a pergunta traz image_bytes ou quando a configuração de visão está ativa.
 
-Controla reranking neural.
+Fluxo confirmado no retriever:
 
-Impacto: muda a ordem final do contexto entregue ao LLM.
+- tenta gerar texto derivado da imagem quando habilitado;
+- pode compor pergunta textual com descrição de visão;
+- gera embedding de visão para a consulta;
+- roda busca de texto e busca de visão em paralelo;
+- mescla os dois conjuntos;
+- aplica rerank depois da fusão texto-visão.
 
-### 10.8. intelligent_pipeline.multi_query
+Isso não é um “retriever PDF”. É um recurso de query multimodal e ranking multimodal.
 
-Controla expansão por múltiplas consultas.
+## 10. Pós-retrieval
 
-Impacto: muda cobertura e custo do retrieval.
+## 10.1. Cache semântico
 
-## 11. Contratos, entradas e saídas
+O run_retriever_with_trace consulta cache antes de chamar o retriever real e grava cache depois da execução quando elegível.
 
-### 11.1. Entrada online
+Retrievers elegíveis confirmados:
 
-Entrada principal confirmada: pergunta entregue ao pipeline via router de RAG e QuestionService.
+- vector_search
+- semantic_search
+- hybrid_search
+- self_query
+- multi_query
 
-Invariantes observadas:
+Sinais registrados:
 
-- pergunta não pode estar vazia,
-- runtime moderno precisa estar disponível quando exigido,
-- security keys são validadas no boundary de QA,
-- top_k é resolvido de forma canônica.
+- semantic_cache:lookup
+- semantic_cache:store
+- hit, miss e motivo
 
-### 11.2. Entrada offline de corpus
+## 10.2. FTS
 
-Entrada principal confirmada: YAML de ingestão traduzido para IngestionRequest.
+O maybe_enrich_with_fts tem dois modos.
 
-Invariantes observadas:
+- augment: sempre tenta enriquecer;
+- fallback: só roda se não houver documentos suficientes ou se o maior score ficar abaixo do limiar configurado.
 
-- a requisição carrega tenant, vectorstore_id e contexto de execução,
-- o modo single_document reduz paralelismo e muda decisão de fanout,
-- clientes e processadores são escolhidos por tipo de conteúdo.
+O merge com FTS deduplica e limita o resultado pelo maior entre top_k do pipeline e top_k do próprio FTS.
 
-### 11.3. Saída do runtime de resposta
+## 10.3. Fusão
 
-Saída confirmada:
+Quando decision.requires_fusion é true, o orchestrator chama apply_fusion_processing. O motor HybridFusion suporta pelo menos:
 
-- resposta textual,
-- documentos e fontes usadas,
-- decisão de roteamento,
-- métricas e análise da query,
-- metadados adicionais de contexto e token usage.
+- linear
+- rrf
+- weighted_rrf
+- interleaved
+- score_normalized
 
-## 12. O que acontece em caso de sucesso
+O fluxo inclui estruturação dos resultados, deduplicação, execução do algoritmo e métricas de fusão.
 
-No caminho feliz:
+## 10.4. Rerank
 
-1. o corpus está consistente,
-2. a pergunta é analisada,
-3. a estratégia correta é escolhida,
-4. a evidência é recuperada,
-5. a ACL deixa passar só o que pode ser usado,
-6. o LLM recebe contexto relevante,
-7. a resposta volta com fontes e metadados.
+O rerank neural foi confirmado dentro do retriever vetorial multimodal e também na infraestrutura de retrievers.
 
-## 13. O que acontece em caso de erro
+Fluxo observado:
 
-### 13.1. Erros de contrato e configuração
+- consulta get_reranker_config;
+- se enabled=false, a etapa é ignorada;
+- tenta aplicar o modelo principal;
+- se falhar, ainda pode tentar fallback_model;
+- se tudo falhar, preserva a ordem anterior sem mascarar o que aconteceu.
 
-Exemplos confirmados no código lido:
+## 10.5. ACL e normalização
 
-- query vazia,
-- configuração obrigatória ausente do retriever moderno,
-- vectorstore_id vazio quando BM25 exige vocabulário ativo,
-- LLM indisponível na geração inteligente.
+Depois da recuperação, o orchestrator executa AccessControlEvaluator.filter_documents e normalize_documents.
 
-Resposta do sistema: falha explícita, com log e telemetria do passo afetado.
+Isso acontece antes da geração. Portanto, o conjunto que o LLM recebe já é o conjunto permitido.
 
-### 13.2. Falhas localizadas com fallback operacional
+## 11. Geração final
 
-Exemplos confirmados:
+O GenerationEngine.generate_intelligent_answer faz a fase final.
 
-- hybrid nativo pode falhar e cair para hybrid manual,
-- self-query pode falhar e cair para retrieval tradicional,
-- multi-query pode falhar e cair para retrieval tradicional,
-- processador JSON pode cair para o tradicional quando indisponível.
+Fluxo confirmado:
 
-Resposta do sistema: fallback localizado, nunca usado para esconder contrato estrutural ausente do runtime moderno.
+1. sumariza presença multimodal nos documentos;
+2. monta contexto textual com histórico, memória do usuário, memória relacionada e documentos;
+3. renderiza system prompt com contexto e pergunta;
+4. chama o LLM com run_with_external_retry;
+5. registra token usage via BillingCollector;
+6. devolve resposta e tempo de geração.
 
-## 14. Observabilidade e diagnóstico
+Quando não há LLM, a etapa falha explicitamente com ContentQAError.
 
-### 14.1. Onde começar a investigar
+## 12. Diagnósticos e telemetria
 
-Para problema de resposta ruim, a ordem mais útil é esta.
+O PipelineDiagnosticsBuilder monta dois grupos de saída muito importantes.
 
-1. Verificar routing_decision.
-2. Verificar retrieval_trace.
-3. Verificar query_analysis.
-4. Verificar ACL e quantidade de documentos negados.
-5. Verificar sources efetivamente usadas.
-6. Verificar pipeline_metrics e llm_generation_time.
+### 12.1. Diagnósticos de pipeline
 
-### 14.2. Como diferenciar causas
+Blocos confirmados:
 
-#### Erro de entrada
+- roteamento
+- analise_query
+- metricas_pipeline
+- expansao_query
+- bm25
+- processadores_dominio
+- resultado_retrieval
+- detecao_keywords
 
-Sintoma: pergunta rejeitada cedo.
+### 12.2. Retrieval metrics para log
 
-Evidência: validação no início de intelligent_retrieve ou no QAQuestionProcessor.
+Campos confirmados:
 
-#### Erro de configuração
+- retrieval_attempt
+- hybrid_retry_status
+- top_documents
 
-Sintoma: falha logo na montagem do runtime ou no carregamento do vocabulário BM25.
+Além disso, QuestionService e QuestionTelemetryRecorder anexam essas métricas a logs e metadata de execução.
 
-Evidência: logs de configuração obrigatória ausente e razões explícitas do BM25.
+## 13. Especificidades JSON, Excel e PDF
 
-#### Erro de retrieval
+## 13.1. JSON e Excel
 
-Sintoma: poucos documentos, documentos errados ou queda para fallback localizado.
+O Excel especializado tem comportamento operacional próprio.
 
-Evidência: retrieval_trace, logs do retriever e processor_type escolhido.
+- tenta coleta direta no Qdrant ou Azure Search para garantir completude;
+- cai para similarity_search apenas como modo aproximado;
+- se require_exhaustive_ingestion=true e a coleta não for exaustiva, levanta ExcelIngestionCompletenessError;
+- tenta resposta determinística antes do fallback generativo via JSON Agent;
+- carrega metadados sobre collection_mode e exhaustive no retorno.
 
-#### Erro de ACL
+No RetrievalEngine, esse erro de completude recebe tratamento diferenciado: ele é logado e reerguido sem virar resposta genérica bem-sucedida.
 
-Sintoma: retrieval encontra documentos, mas a resposta sai pobre ou vazia.
+## 13.2. PDF
 
-Evidência: allowed_count e denied_count no passo de access_control.
+No recorte de recuperação avançada, não foi confirmada uma estratégia de roteamento exclusiva para PDF. O que foi confirmado é:
 
-#### Erro de geração
+- o GenerationEngine reconhece metadados típicos de PDF ao formatar fontes;
+- documentos derivados de PDF podem participar das rotas tradicionais e híbridas;
+- o retriever vetorial suporta visão e query image, o que pode beneficiar cenários multimodais envolvendo conteúdo visual indexado.
 
-Sintoma: documentos existem, mas a resposta falha ou sai insuficiente.
+Conclusão técnica correta: PDF entra no runtime principalmente como conteúdo recuperável pelo pipeline geral, não como processador específico de retrieval confirmado neste slice.
 
-Evidência: logs da GenerationEngine, llm_generation_time e exceções de generate_intelligent_answer.
+## 14. O que acontece em caso de sucesso
 
-## 15. Troubleshooting
+No caminho feliz, o resultado final inclui pelo menos:
 
-### Sintoma: hybrid parece não usar sparse/lexical
+- answer
+- sources
+- source_documents
+- routing_decision
+- pipeline_metrics
+- query_analysis
+- metadata
 
-Causa provável: modo híbrido desligado, backend sem suporte nativo ou queda para caminho manual/tradicional.
+E, quando houver:
 
-Como confirmar: verificar rag_hybrid_search_mode, rag_native_hybrid_supported, rag_sparse_query_used e retrieval_trace.
+- sources_formatted
+- token_usage
+- retrieval_trace
+- access_control
+- pipeline_diagnostics
 
-### Sintoma: BM25 habilitado, mas sem efeito real
+O sucesso não é apenas geração de texto. É geração de texto apoiada por uma decisão de roteamento e por documentos coerentes com a ACL.
 
-Causa provável: vectorstore_id inválido, target físico não resolvido ou vocabulário ausente para a geração ativa.
+## 15. O que acontece em caso de erro
 
-Como confirmar: procurar bm25_vocabulary_loaded e bm25_vocabulary_reason nos logs.
+### 15.1. Erros explícitos confirmados
 
-### Sintoma: resposta veio sem documentos relevantes
+- ValueError para query vazia no orchestrator.
+- ContentQAError quando o pipeline moderno obrigatório não está disponível.
+- ContentQAError quando não existe retriever tradicional disponível.
+- ExcelIngestionCompletenessError para Excel especializado sem coleta exaustiva suficiente.
+- ContentQAError quando o LLM não existe na geração final.
 
-Causa provável: chunking ruim, corpus desatualizado, roteamento inadequado ou ACL restritiva.
+### 15.2. Timeout
 
-Como confirmar: cruzar retrieval_trace, query_analysis e access_control.
+Se intelligent_retrieve ultrapassa asyncio.timeout, o código executa pipeline de fallback interno do orchestrator e registra timeout_fallback.
 
-### Sintoma: query rewrite parece piorar a consulta
+### 15.3. Erros tratáveis do pipeline
 
-Causa provável: threshold de similaridade baixo demais ou política excessivamente expansiva.
+HANDLED_PIPELINE_ERRORS inclui, entre outros:
 
-Como confirmar: comparar original_query, rewritten_query, applied e similarity no resultado da reescrita.
+- ContentQAError
+- JSONRAGError
+- RAGEngineError
+- erros de vocabulário BM25
+- erros de Qdrant quando o backend está presente
 
-### Sintoma: cache entrega comportamento estranho
+Mesmo assim, a presença desse bloco não significa “fallback liberado sempre”. O próprio orchestrator força enable_fallbacks=False como estado efetivo, então a regra geral continua sendo falhar cedo quando a infraestrutura moderna não está íntegra.
 
-Causa provável: reuse de consulta semanticamente próxima com TTL ainda válido.
+## 16. Troubleshooting operacional
 
-Como confirmar: verificar semantic_cache_lookup hit ou miss e filtros aplicados.
+### 16.1. Router escolhe semântico quando a pergunta parece técnica
 
-## 16. Comparação técnica com estado da arte
+Causa provável: sinais técnicos fracos, baixa presença de códigos ou má configuração das regras/thresholds.
 
-Com base nas referências externas consultadas e no código lido, o projeto já implementa boa parte do que hoje caracteriza RAG avançado operacional.
+Como investigar:
 
-### 16.1. Alinhamentos fortes
+- query_analysis
+- routing_decision
+- adaptive_router decision_factors
 
-- query preprocessing antes do retrieval,
-- roteamento adaptativo,
-- retrieval híbrido com fusão formal,
-- reranking neural,
-- cache semântico,
-- chunking adaptado ao tipo de conteúdo,
-- versionamento operacional do corpus.
+### 16.2. Híbrido não melhora o resultado
 
-### 16.2. Alinhamentos parciais
+Causa provável: hybrid_search_mode desligado, retriever híbrido indisponível, suporte nativo ausente ou FTS desabilitado.
 
-- multimodalidade mais rica de consulta não confirmada no runtime online,
-- decomposição explícita de subperguntas não confirmada,
-- validação pós-resposta não confirmada.
+Como investigar:
 
-### 16.3. Lacunas não confirmadas no código lido
+- logs do hybrid mode;
+- available_retrievers;
+- retrieval_trace;
+- bloco bm25 nos diagnósticos.
 
-- índices hierárquicos summary-to-detail,
-- sample questions por chunk para alignment optimization,
-- pipeline explícito de golden dataset e avaliação contínua do RAG,
-- rescoring coarse-to-fine com representações vetoriais distintas no runtime online.
+### 16.3. Excel especializado nunca dispara
 
-## 17. Como colocar para funcionar
+Causa provável: feature desligada, content types não detectados ou palavras-chave insuficientes.
 
-O caminho de execução confirmado no código lido é o boundary HTTP de RAG acionando o QuestionService e a fachada de ingestão acionando o ContentIngestionOrchestrator.
+Como investigar:
 
-O que ficou confirmado:
+- json_specialized_rag_excel.enabled;
+- content_type_filter;
+- keyword_matches e min_keyword_matches nos logs do detector.
 
-- existe router de RAG,
-- existe serviço de pergunta reutilizável,
-- existe serviço de ingestão oficial,
-- o runtime depende do YAML moderno e de vector_store.id válido.
+### 16.4. Todos os documentos somem antes da resposta
 
-Caminho operacional completo por comando de terminal não foi confirmado neste documento a partir dos arquivos lidos.
+Causa provável: ACL bloqueando tudo.
 
-## 18. Explicação 101
+Como investigar:
 
-Pense no pipeline como duas máquinas que se encaixam.
+- resultado_retrieval.controle_acesso;
+- access_control no payload final.
 
-- A primeira máquina pega documentos, limpa, corta, etiqueta e organiza tudo em catálogos diferentes.
-- A segunda máquina recebe a pergunta, decide qual catálogo consultar e em qual ordem, pega só as partes mais úteis e então pede ao modelo para escrever a resposta.
+### 16.5. Resposta lenta
 
-Se qualquer uma das duas máquinas for mal configurada, a resposta final sofre.
+Causa provável: query rewrite com LLM, multi-query, hybrid nativo com retry, FTS augment, visão multimodal ou rerank neural.
 
-## 19. Checklist de entendimento
+Como investigar:
 
-- Entendi a diferença entre produção de corpus e inferência.
-- Entendi como o chunking muda por tipo de conteúdo.
-- Entendi por que BM25 e vetor coexistem.
-- Entendi como query rewrite e query analysis influenciam o retrieval.
-- Entendi quais estratégias de retrieval existem no código.
-- Entendi onde entram ACL, cache e reranking.
-- Entendi quais configurações mais alteram o comportamento.
-- Entendi como investigar falha por etapa.
+- pipeline_metrics;
+- retrieval_trace;
+- events de query_rewrite, retrieval, semantic_cache e rag:reranker.
+
+## 17. Comparação técnica com o padrão de mercado
+
+Comparado ao RAG ingênuo de mercado, o projeto adiciona praticamente todas as camadas intermediárias que se espera de um RAG avançado de inferência.
+
+- query preprocessing com rewrite;
+- query analysis;
+- query router;
+- retrieval especializado por estratégia;
+- post-retrieval com FTS, fusão, deduplicação e rerank;
+- ACL;
+- telemetria e diagnostics.
+
+Isso está alinhado com o que referências oficiais de RAG avançado descrevem como query preprocessing, query routing e post-retrieval processing.
+
+Ao mesmo tempo, o código lido não confirmou algumas peças como parte explícita do caminho online principal:
+
+- fact-check pós-geração dentro do mesmo pipeline;
+- compressor de prompt como etapa dedicada;
+- processador PDF exclusivo de retrieval.
+
+Portanto, o posicionamento técnico correto é: este runtime está acima do padrão simples de mercado e bem alinhado a um RAG avançado focado em recuperação, mas não deve ser descrito como suíte total de governança pós-resposta se o código não mostrar isso no fluxo online.
+
+## 18. Como operar e validar
+
+Para validar o comportamento do runtime de recuperação, o mais útil é inspecionar:
+
+- logs do QuestionService;
+- payload final com routing_decision, query_analysis, metadata e pipeline_metrics;
+- retrieval_trace;
+- pipeline_diagnostics e retrieval_metrics.
+
+Perguntas operacionais úteis:
+
+- a pergunta foi reescrita?
+- qual processador foi escolhido?
+- quantas tentativas de retrieval ocorreram?
+- houve cache hit?
+- o FTS entrou?
+- a ACL removeu quantos documentos?
+- a especialização Excel rodou ou não?
+
+## 19. Explicação 101
+
+Tecnicamente, esse pipeline funciona como um despachante inteligente antes do LLM.
+
+Ele olha a pergunta e decide qual tipo de busca combina mais com ela. Se a pergunta parece conversa aberta, usa um caminho mais semântico. Se parece pergunta técnica com código ou termo exato, puxa o lado lexical e híbrido. Se parece consulta tabular, tenta uma trilha mais estruturada. Depois filtra segurança e só então entrega contexto ao modelo.
+
+O ganho prático é que o LLM recebe um contexto melhor. O modelo não vira responsável por adivinhar o que deveria ter sido recuperado.
 
 ## 20. Evidências no código
 
-- src/api/routers/rag_router.py
-  - Motivo da leitura: boundary HTTP do RAG.
-  - Símbolo relevante: ask_question.
-  - Comportamento confirmado: delegação ao runtime de pergunta.
 - src/services/question_service.py
-  - Motivo da leitura: fachada da pergunta.
-  - Símbolo relevante: execute.
-  - Comportamento confirmado: inicialização do ContentQASystem, timeout, telemetria e enriquecimento de fontes.
+  - Motivo da leitura: fachada pública da consulta.
+  - Símbolo relevante: QuestionService.execute.
+  - Comportamento confirmado: timeout guard, extração de retrieval_metrics, telemetria, enriquecimento de fontes.
+
 - src/qa_layer/content_qa_system.py
-  - Motivo da leitura: montagem do sistema QA.
-  - Símbolo relevante: ask_question e inicialização.
-  - Comportamento confirmado: uso do QARuntimeAssembly e QASetupManager.
+  - Motivo da leitura: montagem do runtime de QA.
+  - Símbolo relevante: ContentQASystem.__init__.
+  - Comportamento confirmado: QARuntimeAssembly, validação do layout moderno, setup do pipeline inteligente.
+
 - src/qa_layer/qa_question_processor.py
-  - Motivo da leitura: boundary técnico da pergunta.
-  - Símbolo relevante: ask_question.
-  - Comportamento confirmado: validação, include_sources, security_keys e chamada do intelligent_orchestrator.
+  - Motivo da leitura: boundary da pergunta.
+  - Símbolo relevante: QAQuestionProcessor.ask_question.
+  - Comportamento confirmado: fail-fast do modo moderno, uso do intelligent_orchestrator, evidência e diagnostics.
+
 - src/qa_layer/rag_engine/intelligent_orchestrator.py
-  - Motivo da leitura: orquestração ponta a ponta da inferência.
-  - Símbolo relevante: intelligent_retrieve e método de montagem do resultado final.
-  - Comportamento confirmado: rewrite, routing, retrieval, ACL, geração e payload final.
+  - Motivo da leitura: fluxo principal do runtime avançado.
+  - Símbolo relevante: intelligent_retrieve,_execute_routing_decision, _assemble_final_result.
+  - Comportamento confirmado: rewrite, routing, retrieval, ACL, geração e retrieval_trace.
+
 - src/qa_layer/rag_engine/retrieval_engine.py
-  - Motivo da leitura: execução concreta de estratégias.
-  - Símbolo relevante: execute_hybrid_processor, execute_self_query_processor, execute_multi_query_processor.
-  - Comportamento confirmado: hybrid nativo/manual, self-query, multi-query e trace de retrieval.
+  - Motivo da leitura: execução das estratégias de recuperação.
+  - Símbolo relevante: execute_hybrid_processor, execute_self_query_processor, execute_multi_query_processor, execute_json_processor, maybe_enrich_with_fts, run_retriever_with_trace.
+  - Comportamento confirmado: híbrido nativo/manual, cache semântico, FTS, JSON/Excel especializado, trace de retrieval.
+
+- src/qa_layer/rag_engine/query_analyzer.py
+  - Motivo da leitura: análise semântica de perguntas.
+  - Símbolo relevante: QueryAnalyzer.analyze.
+  - Comportamento confirmado: classificação de tipo, domínio, data_type, entities, keywords e complexity.
+
+- src/qa_layer/rag_engine/adaptive_router.py
+  - Motivo da leitura: decisão de estratégia.
+  - Símbolo relevante: AdaptiveQueryRouter.analyze_and_route e _apply_default_routing_logic.
+  - Comportamento confirmado: prioridade para sinais técnicos e códigos exatos, thresholds modernos e fallback lógico.
+
 - src/qa_layer/rag_engine/generation_engine.py
-  - Motivo da leitura: geração final.
-  - Símbolo relevante: generate_intelligent_answer.
-  - Comportamento confirmado: montagem de contexto, chamada ao LLM e registro de token usage.
-- src/ingestion_layer/processors/txt_processor.py
-  - Motivo da leitura: chunking de texto simples.
-  - Símbolo relevante: _split_into_chunks.
-  - Comportamento confirmado: preferência por parágrafo e fallback para sentença.
-- src/ingestion_layer/processors/pdf_chunking_service.py
-  - Motivo da leitura: chunking avançado de PDF.
-  - Símbolo relevante: create_chunks.
-  - Comportamento confirmado: strategy loop, fallback e telemetria do chunking PDF.
-- src/ingestion_layer/document_persistence_manager.py
-  - Motivo da leitura: persistência e indexação do corpus.
-  - Símbolo relevante: prepare_for_ingestion e indexação de chunks.
-  - Comportamento confirmado: geração ativa, persistência de manifesto e sincronismo vetorial/BM25.
+  - Motivo da leitura: geração final com contexto e fontes.
+  - Símbolo relevante: GenerationEngine.generate_intelligent_answer.
+  - Comportamento confirmado: montagem de contexto, renderização de prompt, retry externo no LLM e token usage.
+
+- src/qa_layer/json_rag/specialized_rag_excel.py
+  - Motivo da leitura: caminho estruturado para consultas tabulares.
+  - Símbolo relevante: JSONSpecializedRAGExcel.ask_question e_collect_candidate_documents.
+  - Comportamento confirmado: coleta direta exaustiva quando possível, resposta determinística e erro de completude.
+
+- src/services/question/pipeline_diagnostics_builder.py
+  - Motivo da leitura: bloco diagnóstico da consulta.
+  - Símbolo relevante: build_diagnostics e extract_retrieval_metrics.
+  - Comportamento confirmado: resumo de roteamento, BM25, resultado_retrieval, ACL e hybrid_retry_status.

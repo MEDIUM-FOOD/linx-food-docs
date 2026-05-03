@@ -1,391 +1,458 @@
-# Manual conceitual, executivo, comercial e estratégico: Pipeline RAG completo
+# Manual conceitual, executivo, comercial e estratégico: Pipeline RAG de recuperação avançada
 
 ## 1. O que é esta feature
 
-O pipeline RAG desta plataforma é a capacidade que transforma acervo bruto em contexto consultável e, depois, transforma perguntas em respostas apoiadas por evidência. Ele não é apenas um chat com busca vetorial. O código lido mostra duas metades inseparáveis.
+Esta feature é o runtime de pergunta e resposta do RAG moderno da plataforma. Ela começa quando uma pergunta entra no sistema e termina quando o usuário recebe uma resposta gerada com base em evidências recuperadas, filtradas, priorizadas e formatadas. O foco aqui não é produzir corpus, indexar documentos ou explicar ingestão. O foco é o que o sistema faz depois que o acervo já está disponível para consulta.
 
-- A metade de produção de corpus, que extrai conteúdo, normaliza estrutura, cria chunks, preserva metadados, versiona a geração ativa e mantém os alvos vetorial e BM25 sincronizados.
-- A metade de inferência, que reescreve a pergunta quando necessário, analisa o tipo de consulta, escolhe a estratégia de retrieval mais adequada, combina sinais semânticos e lexicais, aplica controle de acesso e só então chama o LLM para redigir a resposta.
+Na prática, este módulo existe para evitar o padrão ingênuo de RAG em que a aplicação apenas pega a pergunta, faz uma busca vetorial simples e envia qualquer resultado para o LLM. O código real do projeto mostra um desenho bem mais disciplinado: a pergunta pode ser reescrita, analisada semanticamente, roteada para estratégias diferentes, enriquecida com busca lexical, passar por cache semântico, fusão, deduplicação, controle de acesso e só então chegar à geração final.
 
-Na prática, esta feature existe para impedir um erro comum em RAG corporativo: achar que “indexar tudo e fazer similarity search” basta. O runtime real deste projeto trata RAG como um sistema de decisão e não como um atalho de prompt.
+Em linguagem simples: esta feature é a inteligência de recuperação da plataforma. Ela decide como procurar, o que aproveitar, o que descartar e o que vale a pena entregar ao modelo para responder com mais precisão e mais rastreabilidade.
 
 ## 2. Que problema ela resolve
 
-Sem esse pipeline, a plataforma cairia em quatro problemas operacionais graves.
+Sem esse pipeline, a plataforma sofreria com problemas típicos de RAG corporativo.
 
-- Perguntas muito diferentes seriam tratadas pela mesma estratégia de busca, reduzindo precisão.
-- Conteúdo com códigos, siglas, nomes normativos, tabelas e termos exatos dependeria apenas de embeddings, o que degrada recuperação literal.
-- Mudanças de corpus poderiam deixar o índice vetorial e a base lexical fora de sincronia, criando respostas inconsistentes.
-- Quando uma resposta viesse ruim, o time não conseguiria separar erro de ingestão, erro de retrieval, erro de ACL, erro de configuração e erro de geração.
+- Perguntas com códigos, siglas, normas, nomes de colunas e termos exatos dependeriam só de embeddings, o que piora recuperação literal.
+- Perguntas estruturadas, como consultas sobre planilhas e dados tabulares, seriam tratadas como texto solto, desperdiçando estrutura.
+- Consultas complexas ou ambíguas não seriam adaptadas antes da busca, reduzindo a chance de encontrar a evidência correta.
+- O sistema não conseguiria diferenciar se uma resposta ruim veio de busca inadequada, ACL bloqueando documentos, cache, fusão mal calibrada ou geração final.
 
-O pipeline resolve isso separando produção de corpus, análise de pergunta, roteamento, retrieval, enriquecimento, fusão, geração e observabilidade. Em linguagem simples: ele organiza a consulta para que o modelo responda com base em evidência recuperada pelo caminho mais adequado.
+O pipeline resolve isso separando responsabilidades. Primeiro ele melhora a pergunta. Depois entende que tipo de pergunta recebeu. Em seguida escolhe a estratégia de recuperação mais adequada. Só depois disso ele aplica pós-processamento e chama o LLM.
 
-## 3. Visão executiva
+O efeito prático é direto: o sistema deixa de ser “chat sobre documentos” e passa a ser um mecanismo de recuperação orientado por decisão.
 
-Para liderança, esta feature importa porque converte RAG de experimento para capacidade operacional auditável. O ganho não é só qualidade de resposta. O ganho é previsibilidade diagnóstica.
+## 3. Escopo real deste manual
 
-- Se a resposta saiu ruim, a operação consegue investigar se houve falha de chunking, desatualização de corpus, decisão errada de retrieval, ausência de vocabulário BM25, ACL excessiva ou contexto insuficiente na geração.
-- Se o acervo muda, o sistema não depende de reindexação implícita e invisível. Há no código um conceito explícito de geração preparada, alvo físico de indexação e sincronismo entre componentes do corpus.
-- Se a pergunta usa linguagem imprecisa, o runtime tenta melhorar a recuperabilidade antes de buscar, em vez de delegar toda a inteligência ao LLM final.
+Este manual trata apenas da metade online do RAG, isto é, a parte de inferência e recuperação avançada.
 
-Isso reduz custo de suporte, reduz retrabalho técnico e melhora governança, porque o problema deixa de ser “o modelo errou” e passa a ser um fluxo investigável por etapa.
+Incluído neste escopo:
 
-## 4. Visão comercial
+- entrada da pergunta;
+- query rewrite;
+- análise de query;
+- roteamento adaptativo;
+- retrieval tradicional, híbrido, self-query e multi-query;
+- especialização para JSON e Excel quando confirmada no código;
+- cache semântico;
+- FTS;
+- fusão de resultados;
+- rerank;
+- ACL pós-retrieval;
+- geração final;
+- telemetria, diagnósticos e limites.
 
-Comercialmente, o valor suportado pelo código é claro: a plataforma não apenas conversa com documentos. Ela prepara o corpus, escolhe estratégia de busca por tipo de pergunta, combina sinais diferentes de recuperação e preserva rastreabilidade.
+Fora deste escopo:
 
-Isso responde dores reais de clientes que lidam com:
+- ingestão de documentos;
+- chunking;
+- OCR de PDF;
+- geração de embeddings na indexação;
+- versionamento do corpus;
+- ETL e indexação.
 
-- acervo técnico e regulatório,
-- códigos e siglas normativas,
-- documentos longos com estrutura desigual,
-- filtros implícitos por metadado,
-- necessidade de explicar por que uma resposta foi dada.
+Esses assuntos só aparecem aqui quando influenciam diretamente uma decisão do runtime de recuperação. Eles não são tratados como fluxo principal.
 
-O diferencial comercial não é prometer “IA que sabe tudo”. O diferencial real é prometer um RAG mais governado, mais auditável e mais adaptado a corpus corporativo. O que não deve ser prometido é infalibilidade. O código lido mostra guardrails, não onisciência.
+## 4. Visão executiva
 
-## 5. Visão estratégica
+Para liderança, esta feature importa porque reduz incerteza operacional. Em um RAG simples, quando a resposta sai ruim, quase tudo vira culpa genérica do modelo. Neste projeto, o caminho é mais investigável.
 
-Estrategicamente, o pipeline fortalece a plataforma em seis dimensões.
+- A pergunta pode ter sido reescrita ou preservada.
+- O router pode ter escolhido busca híbrida, semântica, estruturada ou multi-query.
+- O FTS pode ter enriquecido ou não o resultado.
+- A ACL pode ter removido os melhores documentos.
+- O cache semântico pode ter reaproveitado um resultado anterior.
+- O reranker pode ter reordenado o conjunto final.
 
-- Reforça a direção YAML-first, porque o runtime depende de contratos canônicos de configuração e falha cedo quando o mínimo obrigatório não existe.
-- Mantém baixo acoplamento, separando setup, análise, roteamento, retrieval, fusão, cache, ACL e geração.
-- Permite evolução incremental, porque novas estratégias entram como processadores e serviços especializados, não como ifs espalhados.
-- Preserva governança do corpus, porque indexação vetorial e BM25 aparecem como conjunto operacional sincronizado.
-- Prepara a plataforma para domínios especializados, combinando expansão lexical, self-query por domínio e vocabulário ativo do índice.
-- Deixa espaço para evolução futura em avaliação, otimização de retrieval e aprofundamento multimodal sem reescrever o pipeline inteiro.
+Isso é importante porque transforma um problema subjetivo de IA em um problema operacional analisável por etapa. O benefício executivo não é apenas “responder melhor”. O benefício é governar melhor custo, confiabilidade, segurança de acesso e diagnóstico.
 
-## 6. Conceitos necessários para entender
+## 5. Visão comercial
 
-### 6.1. Ingestão
+Comercialmente, a feature sustenta uma mensagem mais forte do que “temos chat com documentos”. O que o código suporta de fato é uma camada de recuperação avançada que adapta a estratégia de busca ao tipo de pergunta.
 
-Ingestão é o processo que transforma fontes brutas em material consultável. Não é só “salvar arquivo”. No código lido, envolve resolver fonte, escolher cliente, escolher processador, extrair conteúdo, criar chunks, padronizar metadados, persistir manifesto e indexar.
+Isso ajuda em dores comuns de clientes corporativos:
 
-### 6.2. Chunking
+- busca por normas, códigos e siglas que exigem match literal;
+- consultas tabulares sobre Excel e JSON já materializados no acervo;
+- necessidade de explicar por que certos documentos entraram ou foram bloqueados;
+- pressão por latência menor em perguntas repetidas;
+- necessidade de resposta com mais coerência quando a pergunta está mal formulada.
 
-Chunking é o corte do conteúdo em partes menores. Isso importa porque o LLM não lê o acervo inteiro. Ele lê um conjunto limitado de trechos recuperados. O projeto usa chunking dependente do tipo de conteúdo. Texto simples tenta respeitar parágrafos e só cai para sentenças quando necessário. PDF tem uma sequência de estratégias e fallback próprio.
+O diferencial vendável não é prometer onisciência. O diferencial suportado pelo código é dizer que a plataforma trata recuperação como engenharia séria, com múltiplas estratégias, trilha diagnóstica e controle de acesso aplicado depois da busca.
 
-### 6.3. Busca vetorial
+## 6. Visão estratégica
 
-Busca vetorial é a parte que encontra semelhança de significado. Ela funciona bem para perguntas conceituais e descrições abertas, mas sozinha pode falhar quando a resposta depende de código exato, sigla ou nomenclatura literal.
+Estrategicamente, essa feature fortalece a plataforma em seis frentes.
 
-### 6.4. BM25
+- Consolida a direção de runtime moderno obrigatório, sem fallback silencioso como contrato principal.
+- Reforça a separação entre recuperação e geração, o que melhora manutenção e diagnósticos.
+- Permite especialização por tipo de dado, especialmente para cenários tabulares.
+- Abre espaço para busca híbrida real, incluindo combinação lexical e semântica.
+- Mantém o sistema apto a operar com segurança em ambientes com ACL por documento.
+- Prepara o terreno para evolução futura em avaliação, otimização de router, multimodalidade e experimentos de ranking.
 
-BM25 é recuperação lexical clássica. O papel dele aqui é proteger o pipeline contra a cegueira literal da busca puramente semântica. Ele é especialmente valioso para termos técnicos, códigos e expressões exatas.
+Em termos de produto, isso move a plataforma de um RAG genérico para um RAG com capacidade de orquestração de recuperação.
 
-### 6.5. FTS
+## 7. Conceitos necessários para entender
 
-FTS é full-text search em banco relacional. No runtime lido, ele complementa a recuperação principal e pode enriquecer resultados em vez de substituir todo o pipeline.
+### 7.1. RAG ingênuo vs. RAG avançado
 
-### 6.6. Hybrid Search
+RAG ingênuo faz três coisas: embute a pergunta, busca chunks parecidos e manda o resultado para o LLM. RAG avançado adiciona preparação da query, roteamento, múltiplos retrievers, pós-processamento, segurança e avaliação. O runtime deste projeto está claramente mais próximo da segunda categoria.
 
-Hybrid Search é a combinação de múltiplos sinais de recuperação. Neste projeto, isso significa combinar denso, lexical e, quando aplicável, FTS. O código também separa hybrid manual de hybrid nativo do vector store.
+### 7.2. Query rewrite
 
-### 6.7. Fusion
+Query rewrite é a reescrita controlada da pergunta antes da busca. O objetivo não é mudar a intenção do usuário. O objetivo é melhorar a recuperabilidade, corrigindo ortografia, ampliando sinônimos e limpando ruído sem distorcer significado.
 
-Fusion é a etapa que combina resultados de múltiplos retrievers. Não é só juntar listas. É ordenar, deduplicar, pesar fontes e reduzir redundância.
+### 7.3. Query analysis
 
-### 6.8. Query rewrite
+Query analysis é a etapa que tenta entender o que a pergunta quer. O sistema classifica tipo da pergunta, tipo provável de dado, domínio, complexidade, entidades e palavras-chave. Isso importa porque a melhor busca para uma pergunta operacional não é necessariamente a melhor busca para uma pergunta conceitual.
 
-Query rewrite é a reescrita controlada da pergunta para melhorar recuperabilidade. O objetivo não é mudar a intenção do usuário, mas corrigir, expandir ou parafrasear de forma segura.
+### 7.4. Query router
 
-### 6.9. Multi-query
+O router é a peça que escolhe a estratégia de recuperação. Em vez de aplicar a mesma busca para tudo, ele decide entre caminhos como semântico, híbrido, self-query e outros processadores especializados.
 
-Multi-query é a geração de múltiplas formulações da mesma intenção para ampliar cobertura de retrieval quando uma única forma de perguntar não é suficiente.
+### 7.5. Busca semântica
 
-### 6.10. Self-query
+A busca semântica tenta encontrar documentos por proximidade de significado. Ela é forte para perguntas abertas e conceituais, mas pode falhar quando a pergunta depende muito de termos exatos.
 
-Self-query é a tentativa de transformar linguagem natural em filtros estruturados ou busca mais aderente a metadados. Isso é importante quando a resposta depende de atributos do documento e não só do texto livre.
+### 7.6. BM25 e FTS
 
-### 6.11. Cache semântico
+BM25 e FTS são mecanismos lexicais. Eles são especialmente úteis quando o usuário busca nomes exatos, códigos, normas, colunas, siglas ou frases importantes. No projeto, o léxico não substitui o vetor. Ele complementa a recuperação.
 
-Cache semântico reaproveita resultados de consultas semanticamente parecidas para reduzir latência e custo, sem depender de igualdade literal da pergunta.
+### 7.7. Busca híbrida
 
-### 6.12. ACL no retrieval
+Busca híbrida combina sinais diferentes, normalmente vetor e léxico. O código suporta tanto uma forma nativa, quando o vector store sabe fazer hybrid search sozinho, quanto uma forma manual, em que o sistema combina resultados e aplica fusão depois.
 
-ACL é o controle de acesso aplicado após a recuperação. O pipeline não considera a busca bem-sucedida só porque encontrou documentos relevantes; ainda precisa validar se o contexto atual pode usar aqueles documentos.
+### 7.8. Self-query
 
-## 7. Como a feature funciona por dentro
+Self-query é a tentativa de transformar a pergunta em uma busca mais estruturada, normalmente quando a consulta parece depender de filtros ou semântica de domínio.
 
-O fluxo completo tem duas histórias encadeadas.
+### 7.9. Multi-query
 
-Primeiro, o corpus é produzido. A plataforma resolve fontes, processa cada tipo de conteúdo com estratégia própria, cria chunks com metadados padronizados, persiste a geração ativa e indexa esse material em estruturas complementares. Isso forma a base consultável.
+Multi-query expande uma pergunta em várias formulações relacionadas para cobrir ângulos diferentes da mesma intenção. É útil quando a pergunta original é curta, ambígua ou pobre em vocabulário de recuperação.
 
-Depois, a inferência acontece. A pergunta entra pelo boundary de QA, passa por query rewrite quando habilitado, é analisada semanticamente, recebe uma decisão de roteamento, executa a estratégia de retrieval compatível, pode ser enriquecida por FTS, passa por ACL, e só então vai para geração com contexto formatado.
+### 7.10. Cache semântico
 
-O ponto conceitual mais importante é este: a plataforma não trata RAG como uma etapa única. Ela trata RAG como uma cadeia de decisões interdependentes. Isso melhora precisão, governança e diagnóstico, mas também aumenta a disciplina necessária na configuração.
+Cache semântico reaproveita resultados de consultas parecidas, não apenas idênticas. O ganho é reduzir latência e custo em perguntas recorrentes sem depender de igualdade literal de texto.
 
-## 8. Divisão em etapas ou submódulos
+### 7.11. Rerank
 
-### 8.1. Produção do corpus
+Rerank é reordenação pós-recuperação. Em vez de confiar apenas na ordem original dos retrievers, um modelo especializado pode reclassificar os documentos para aumentar a relevância dos itens que vão para o prompt final.
 
-Esta etapa existe para converter fontes heterogêneas em material indexável. Ela recebe documentos, conteúdos remotos e contexto operacional; escolhe clientes e processadores; cria chunks e metadados; persiste manifesto e documentos; prepara o índice para ingestão e indexa vetorial e lexicalmente.
+### 7.12. ACL pós-retrieval
 
-O valor dessa etapa é simples: sem corpus consistente, retrieval sofisticado só acelera erro.
+A busca pode recuperar documentos relevantes que o usuário não pode ver. Por isso o pipeline aplica controle de acesso depois da recuperação. Isso significa que “o sistema encontrou” não é o mesmo que “o sistema pode usar”.
 
-### 8.2. Governança da geração ativa
+## 8. Como a feature funciona por dentro
 
-Esta etapa existe para garantir que o conjunto operacional do corpus continue coerente. O código lido mostra conceitos de geração preparada, alvo físico vetorial e alvo físico BM25. Isso significa que o runtime não trata o índice como um saco de dados amorfo. Existe uma noção explícita de geração operacional ativa.
+O fluxo canônico começa em uma fachada de serviço que recebe a pergunta, resolve timeout, monta o sistema de QA e chama o pipeline moderno. A partir daí, o runtime segue uma ordem clara.
 
-O valor aqui é reduzir corrupção silenciosa do acervo consultável.
+1. A pergunta é validada.
+2. O sistema resolve preferências como fontes e contexto de acesso.
+3. O orchestrator inteligente reescreve a pergunta quando a política permite.
+4. A query é analisada semanticamente.
+5. O router decide a estratégia de recuperação.
+6. O retrieval é executado com o processador escolhido.
+7. O sistema pode aplicar cache, FTS, fusão, deduplicação e rerank.
+8. A ACL remove documentos proibidos.
+9. O LLM recebe contexto formatado e gera a resposta.
+10. O serviço enriquece o retorno com diagnósticos, telemetria e fontes.
 
-### 8.3. Reescrita e análise da pergunta
+O ponto importante é que a geração vem depois da recuperação. O modelo não é tratado como substituto do retriever. Ele é tratado como a camada final de redação sobre evidência.
 
-Esta etapa existe para melhorar a chance de recuperar a evidência certa. Primeiro a plataforma pode reescrever a consulta. Depois extrai tipo de pergunta, domínio, tipo de dado, entidades, palavras-chave e sinais técnicos.
+## 9. Divisão em etapas ou submódulos
 
-O valor aqui é impedir que a escolha do retriever seja feita no escuro.
+### 9.1. Fachada de pergunta
 
-### 8.4. Roteamento adaptativo
+Esta etapa recebe a pergunta, valida entrada, decodifica imagem em base64 quando existe, aplica timeout e registra telemetria operacional. O valor dela é proteger a interface pública e manter diagnósticos estáveis para API e outros chamadores.
 
-Esta etapa existe para escolher a melhor estratégia de busca. Ela transforma features da pergunta em decisão operacional: retrieval tradicional, hybrid, multi-query, self-query ou processamento especializado.
+### 9.2. Montagem do runtime de QA
 
-O valor aqui é não tratar toda pergunta com o mesmo martelo.
+Aqui o sistema monta ou reaproveita o pipeline de QA a partir do cache global. Essa etapa garante que a recuperação use o runtime moderno configurado, incluindo LLM, embeddings, vector store, memória e pipeline inteligente.
 
-### 8.5. Retrieval especializado
+### 9.3. Governança do modo moderno
 
-Esta etapa existe para efetivamente recuperar evidência. Dependendo da pergunta, o pipeline pode privilegiar vetor, lexical, híbrido, expansão múltipla de query ou filtros estruturados.
+O código força um comportamento importante: quando o modo moderno está ativo, ausência do orchestrator inteligente é falha, não caminho alternativo silencioso. Isso reforça o caráter fail-fast do pipeline.
 
-O valor aqui é casar a estratégia com o tipo de evidência necessária.
+### 9.4. Reescrita da consulta
 
-### 8.6. Pós-retrieval
+Se habilitada, a pergunta passa por um reescritor que corrige, parafraseia e expande de forma controlada. Se a similaridade entre original e reescrita cair abaixo do limiar configurado, a reescrita é descartada.
 
-Esta etapa existe para melhorar qualidade antes da geração. Ela inclui deduplicação, fusão, eventual enriquecimento via FTS, aplicação de ACL e preparação de fontes.
+### 9.5. Análise e roteamento
 
-O valor aqui é reduzir ruído e melhorar a utilidade do contexto final.
+O analisador identifica sinais como domínio, filtros, entidades, tipo de dado e complexidade. O router usa esses sinais para escolher estratégia e fallback lógico. Há uma regra especialmente relevante: consultas com sinais técnicos ou códigos exatos são empurradas para busca híbrida com prioridade, mesmo quando a rota inicial poderia parecer puramente semântica.
 
-### 8.7. Geração da resposta
+### 9.6. Recuperação especializada
 
-Esta etapa existe para transformar documentos recuperados e contexto do usuário em resposta legível, com rastreabilidade de fontes e telemetria de execução.
+Esta é a etapa que efetivamente busca documentos. O runtime suporta múltiplos caminhos: tradicional, híbrido, self-query, multi-query e JSON/Excel especializado.
 
-O valor aqui é fazer o LLM responder apoiado por contexto e não por improviso.
+### 9.7. Pós-retrieval
 
-## 9. Pipeline principal de ponta a ponta
+Depois de recuperar documentos, o sistema ainda pode fundir rankings, deduplicar chunks, acionar FTS, aplicar cache, reordenar resultados e filtrar por ACL.
+
+### 9.8. Geração final
+
+Só então a resposta é gerada com LLM. A geração recebe contexto formatado, histórico recente quando houver, memória do usuário quando houver e uma seleção limitada de documentos e fontes.
+
+### 9.9. Diagnóstico e observabilidade
+
+Ao final, o payload carrega métricas, decisão de roteamento, traço de retrieval, status de hybrid retry quando presente, estatísticas BM25 e resumo de controle de acesso. Isso faz parte da feature, não é detalhe cosmético.
+
+## 10. Pipeline principal
 
 ```mermaid
 flowchart TD
-    A[Fontes e documentos] --> B[Extracao e limpeza]
-    B --> C[Chunking por tipo de conteudo]
-    C --> D[Metadados canonicos]
-    D --> E[Persistencia e geracao ativa]
-    E --> F[Indexacao vetorial e BM25]
-    G[Pergunta do usuario] --> H[Query rewrite]
-    H --> I[Query analysis]
-    I --> J[Routing decision]
-    J --> K[Retrieval especializado]
-    F --> K
-    K --> L[Fusao, FTS e deduplicacao]
-    L --> M[ACL]
-    M --> N[Geracao com LLM]
-    N --> O[Resposta com fontes e metricas]
+    A[Pergunta] --> B[QuestionService]
+    B --> C[ContentQASystem]
+    C --> D[QAQuestionProcessor]
+    D --> E[IntelligentRAGOrchestrator]
+    E --> F[Query Rewrite]
+    F --> G[Query Analyzer]
+    G --> H[Adaptive Router]
+    H --> I[Retrieval Tradicional]
+    H --> J[Retrieval Híbrido]
+    H --> K[Self-Query]
+    H --> L[Multi-Query]
+    H --> M[JSON ou Excel Especializado]
+    I --> N[FTS, Cache, Fusão, Deduplicação]
+    J --> N
+    K --> N
+    L --> N
+    M --> N
+    N --> O[ACL Pós-Retrieval]
+    O --> P[Geração com LLM]
+    P --> Q[Resposta, Fontes e Diagnósticos]
 ```
 
-O diagrama mostra a lógica macro do sistema. A parte superior produz o corpus. A parte inferior consulta esse corpus. O ponto de interseção é o retrieval, que depende da qualidade da ingestão e da decisão de busca.
+Esse diagrama mostra o ponto central do desenho: a plataforma não enxerga retrieval como uma única chamada. Ela enxerga retrieval como uma pequena orquestração de decisão e refinamento.
 
-## 10. Decisões técnicas e trade-offs
+## 11. Especificidades para JSON, Excel e PDF
 
-### 10.1. Separar corpus e inferência
+### 11.1. JSON e Excel
 
-Ganho: isola produção de acervo da consulta online.
+O código confirma uma trilha especializada para dados estruturados, especialmente Excel materializado como JSON consultável. Essa trilha não é só um rótulo. Ela tem detector próprio, usa content types disponíveis no vector store e pode acionar um componente chamado JSONSpecializedRAGExcel.
 
-Custo: exige disciplina de versionamento e sincronismo.
+Há uma característica importante aqui: quando a consulta especializada de Excel detecta problema de completude da ingestão tabular, ela não mascara isso como simples fallback feliz. O código aborta explicitamente com erro de completude. Isso é coerente com a visão do projeto de não esconder erro estrutural em consulta supostamente confiável.
 
-Impacto prático: respostas ruins podem nascer de ingestão ruim, mesmo com retrieval forte.
+Também existe um caminho determinístico para perguntas tabulares antes do fallback generativo via JSON Agent. Na prática, isso significa que consultas estruturadas podem ser resolvidas com menos improviso do que uma busca textual comum.
 
-### 10.2. Manter BM25 junto do vetor
+### 11.2. PDF
 
-Ganho: melhora perguntas com termos exatos.
+O que foi confirmado no código lido não é um retriever específico para PDF. O que foi confirmado é outra coisa.
 
-Custo: exige manutenção de um segundo sinal de retrieval e seu vocabulário.
+- o runtime de geração e formatação reconhece metadados típicos de PDF;
+- o pipeline de recuperação suporta busca multimodal por visão quando a pergunta traz imagem e o backend oferece esse recurso;
+- documentos derivados de PDF podem participar normalmente das estratégias semânticas, híbridas e multimodais.
 
-Impacto prático: evita perder códigos, siglas e normas por dependência excessiva da semântica.
+Portanto, a conclusão correta é esta: não foi confirmado um “processador PDF” dedicado do lado da recuperação avançada, mas o acervo derivado de PDF pode ser usado pelo pipeline geral e, quando há vetores visuais e consulta multimodal, pode se beneficiar de busca com sinal de visão.
 
-### 10.3. Roteamento adaptativo
+## 12. Comparação com o pipeline padrão de mercado
 
-Ganho: escolhe estratégia por tipo de pergunta.
+Comparando com o padrão de mercado mais simples, o projeto está acima do RAG ingênuo em vários pontos.
 
-Custo: aumenta complexidade do runtime e superfície de configuração.
+- Tem query preprocessing real, não apenas embedding da pergunta original.
+- Tem query router, em vez de uma única estratégia fixa.
+- Tem busca híbrida explícita, com forma nativa e manual.
+- Tem FTS como enriquecimento ou fallback lexical.
+- Tem cache semântico na camada de retrieval.
+- Tem especialização para dados estruturados JSON e Excel.
+- Tem ACL pós-retrieval.
+- Tem telemetria e diagnóstico de pipeline.
 
-Impacto prático: melhora precisão, mas exige boa observabilidade para diagnóstico.
+Comparando com um pipeline avançado de mercado, o desenho local também mostra maturidade em aspectos como query rewriting, subestratégias de retrieval, post-retrieval processing e trilha diagnóstica, que são práticas alinhadas ao que referências oficiais de RAG avançado descrevem para query preprocessing, query routing e post-retrieval processing.
 
-### 10.4. Fail-first em vez de fallback invisível
+Ao mesmo tempo, o código lido não confirmou alguns elementos como parte obrigatória do caminho online principal.
 
-Ganho: impede mascarar configuração ruim ou pipeline quebrado.
+- Não foi confirmado um fact-check pós-geração dentro do mesmo orquestrador online.
+- Não foi confirmado um retriever PDF dedicado separado do fluxo geral.
+- Não foi confirmado um compressor de prompt explícito como etapa autônoma do pipeline moderno.
 
-Custo: o sistema falha mais cedo quando o contrato mínimo não está atendido.
+Isso não torna o desenho fraco. Apenas significa que a comparação correta é com um RAG avançado focado em recuperação e montagem de contexto, não com uma suíte completa de governança pós-resposta dentro do mesmo fluxo.
 
-Impacto prático: mais dor no setup, menos erro silencioso em produção.
+## 13. O que acontece em caso de sucesso
 
-### 10.5. Cache semântico
+No caminho feliz, o usuário envia a pergunta, o runtime escolhe a estratégia correta, recupera documentos úteis, remove o que a ACL bloqueia e entrega uma resposta com fontes, métricas e diagnósticos suficientes para auditoria posterior.
 
-Ganho: reduz latência e custo em consultas parecidas.
+O sinal de sucesso não é só haver texto na resposta. O sinal de sucesso operacional é haver uma cadeia coerente entre:
 
-Custo: exige gestão de TTL, backend e risco de mascarar mudanças do corpus se a política for mal calibrada.
+- decisão de roteamento;
+- documentos recuperados;
+- documentos permitidos;
+- estratégia registrada;
+- resposta compatível com o contexto.
 
-Impacto prático: acelera uso repetitivo, mas precisa ser observável.
+## 14. O que acontece em caso de erro
 
-## 11. Comparação com estado da arte
+Os principais erros confirmados no código lido são estes.
 
-Esta comparação usa o código lido como fonte de verdade interna e referências externas apenas como padrão de mercado para RAG avançado.
+- Pergunta vazia: falha cedo.
+- Pipeline moderno indisponível: falha fechada no QAQuestionProcessor.
+- Reescrita sem LLM ou com parse ruim: a pergunta volta para o original.
+- Retriever ausente para a estratégia escolhida: o runtime tenta fallback dentro do processador quando isso está implementado.
+- Falha de completude no Excel especializado: aborta sem tratar como sucesso disfarçado.
+- Falha de retrieval ou timeout: pode cair em pipeline de fallback em alguns pontos internos do orchestrator, mas o contrato principal do modo moderno continua sendo fail-fast quando o componente obrigatório não existe.
 
-### 11.1. Onde o projeto já está alinhado ao estado da arte
+O mais importante aqui é a filosofia geral: o projeto evita esconder indisponibilidade estrutural sob uma resposta aparentemente normal.
 
-- Chunking dependente de estrutura: o projeto já diferencia estratégia por tipo de conteúdo e, no PDF, percorre múltiplas estratégias ordenadas antes de cair em fallback. Isso está alinhado à recomendação de chunking por seção, parágrafo e sentença descrita em referências modernas de RAG avançado.
-- Versionamento e atualização de corpus: a noção de geração preparada e alvo físico ativo aproxima o projeto de práticas de versioning e update strategy recomendadas para RAG corporativo.
-- Query preprocessing: o runtime tem query rewrite e query analysis antes do retrieval, o que está alinhado à literatura moderna de query preprocessing.
-- Query router: há um roteador adaptativo que decide estratégia de retrieval com base em features da pergunta.
-- Hybrid retrieval e fusão: o código suporta hybrid manual, hybrid nativo, Weighted RRF, linear fusion e deduplicação. Isso está alinhado ao padrão moderno de combinar denso e esparso, inclusive com pesos explícitos.
-- Multi-query e self-query: o pipeline já implementa expansão por múltiplas consultas e recuperação com filtros estruturados.
-- Reranking: existe reranker neural baseado em cross-encoder, um padrão consolidado de pós-retrieval moderno.
-- Cache semântico: existe camada explícita para reaproveitamento semântico com múltiplos backends.
+## 15. Observabilidade e diagnóstico
 
-### 11.2. Onde o projeto parece parcialmente alinhado
+O pipeline foi desenhado para deixar rastros úteis.
 
-- Multimodalidade no corpus: a ingestão PDF mostra OCR, extração visual e chunking rico, mas o slice lido não confirma um retrieval multimodal de ponta a ponta tão sofisticado quanto arquiteturas de multi-vector ou late interaction.
-- Query decomposition: multi-query existe, mas uma decomposição explícita de perguntas complexas em subperguntas independentes, como em pipelines de subquery orchestration, não ficou confirmada no código lido.
-- Pós-completion validation: não ficou confirmado no slice lido um passo formal de fact-checking da resposta final após geração.
+- O QuestionService extrai retrieval_metrics para log.
+- O PipelineDiagnosticsBuilder resume BM25, métodos de retrieval, resultado do retrieval e efeito da ACL.
+- O orchestrator anexa retrieval_trace com cada tentativa relevante.
+- O cache semântico registra hit, miss e motivo.
+- O FTS registra quando foi ignorado, acionado ou finalizado.
+- O JSON/Excel especializado registra detector, modo de coleta e falhas de completude.
 
-### 11.3. Onde o estado da arte vai além do que foi confirmado no código
+Na prática, isso permite responder perguntas operacionais como:
 
-- Índices hierárquicos de summary-to-detail não foram confirmados no código lido.
-- Geração de sample questions por chunk para alignment optimization não foi confirmada.
-- Rescoring em múltiplos estágios com representações diferentes, como coarse-to-fine vector rescoring, não foi confirmado.
-- Pipeline explícito de golden dataset, avaliação automatizada e red-team do RAG não foi confirmado nos módulos lidos.
+- a pergunta foi reescrita ou não;
+- o router escolheu híbrido, semântico ou estruturado;
+- houve cache hit;
+- o FTS entrou como augment ou fallback;
+- a ACL removeu todos os documentos;
+- a especialização Excel foi acionada ou descartada.
 
-### 11.4. O que isso significa na prática
+## 16. Impacto técnico
 
-O projeto já está acima do RAG ingênuo e incorpora várias técnicas que hoje caracterizam RAG avançado de produção. Ao mesmo tempo, ele ainda pode evoluir em avaliação sistemática, decomposição complexa de perguntas e arquiteturas de re-ranking multiestágio mais profundas.
+Tecnicamente, a feature reduz acoplamento entre busca e geração, encapsula complexidade de recuperação em componentes separados, reforça o modelo de fail-fast do runtime moderno e melhora observabilidade.
 
-## 12. O que acontece em caso de sucesso
+Também cria um ponto forte de evolução: novas estratégias podem ser adicionadas como retrievers, routers, fusão ou especializações sem transformar a camada pública em uma coleção de ifs frágeis.
 
-No caminho feliz, a plataforma consegue:
+## 17. Impacto executivo
 
-- manter o corpus operacional sincronizado,
-- encontrar evidência por estratégia adequada,
-- aplicar restrição de acesso,
-- montar contexto útil para o LLM,
-- devolver resposta com fontes e métricas.
+Executivamente, a feature reduz risco de respostas erradas sem explicação, diminui custo de suporte em debugging de RAG e aumenta previsibilidade operacional. Ela ajuda liderança a tratar qualidade de resposta como capacidade governável, não como aposta cega no modelo.
 
-Para o usuário, isso aparece como resposta mais consistente. Para a operação, aparece como retrieval trace, metadados, tempos de execução e capacidade de explicar o caminho da resposta.
+## 18. Impacto comercial
 
-## 13. O que acontece em caso de erro
+Comercialmente, a feature melhora o discurso de valor para clientes que têm acervos técnicos, regulatórios ou tabulares. Ela sustenta uma narrativa de precisão, governança e adequação a conteúdo corporativo, sem depender de promessas exageradas sobre “IA que entende tudo”.
 
-Os principais erros confirmados no código lido seguem a filosofia fail-first.
+## 19. Impacto estratégico
 
-- Configuração obrigatória ausente: o runtime não tenta adivinhar comportamento.
-- BM25 habilitado sem alvo ou vocabulário resolvível: o pipeline registra e falha explicitamente.
-- Strategy ou retriever indisponível: o motor pode cair para caminho tradicional em alguns pontos específicos, mas não mascara ausência estrutural do runtime moderno.
-- LLM indisponível na geração: a resposta inteligente falha explicitamente.
+Estrategicamente, esta é uma das peças que mais fortalecem a plataforma como produto de IA corporativa. Ela conecta qualidade de busca, segurança, especialização por dado e observabilidade, e deixa a plataforma mais preparada para múltiplos domínios, multimodalidade e evolução contínua do runtime de agentes e RAG.
 
-Em termos simples: o projeto aceita fallback localizado em execução, mas evita fallback implícito para esconder contrato quebrado.
+## 20. Exemplos práticos guiados
 
-## 14. Observabilidade e diagnóstico
+### 20.1. Pergunta conceitual com recuperação semântica
 
-O pipeline foi desenhado para investigação por etapa. O código lido confirma:
+Cenário: o usuário pede explicação sobre um conceito técnico sem citar norma nem código.
 
-- logs por passo de pipeline,
-- trace de retrieval,
-- telemetria da decisão de roteamento,
-- métricas de cache semântico,
-- métricas do fusion engine,
-- metadados de contexto aplicado,
-- tempos de geração via LLM.
+O pipeline tende a manter a pergunta no caminho semântico. O router entende que não há sinal forte de busca literal. O resultado esperado é recuperação vetorial tradicional, possível enriquecimento FTS se configurado e resposta final com fontes.
 
-Na prática, isso permite responder perguntas como:
+### 20.2. Pergunta com código normativo ou termo exato
 
-- a pergunta foi reescrita ou não?
-- qual estratégia foi escolhida?
-- houve hybrid nativo ou manual?
-- houve hit de cache?
-- quantos documentos foram cortados por ACL?
-- quais fontes foram efetivamente usadas?
+Cenário: o usuário cita uma norma, um código ou um identificador técnico.
 
-## 15. Impacto técnico
+O comportamento observado no router é favorecer busca híbrida. A razão prática é simples: esse tipo de pergunta pede match lexical forte e contexto semântico ao mesmo tempo.
 
-Tecnicamente, esta feature reduz acoplamento entre ingestão, retrieval e geração; reforça a separação entre corpus e inferência; melhora rastreabilidade; e protege o domínio contra a simplificação perigosa de “um retriever para tudo”.
+### 20.3. Pergunta sobre planilha
 
-## 16. Impacto executivo
+Cenário: o usuário pergunta sobre colunas, linhas, abas ou tabela de Excel já disponível no acervo.
 
-Executivamente, reduz risco operacional, melhora previsibilidade de suporte e permite priorizar evolução com base em evidência de pipeline, não em impressão subjetiva sobre o modelo.
+O detector pode acionar o caminho JSONSpecializedRAGExcel se houver conteúdo compatível e palavras-chave suficientes. Se a trilha especializada não puder garantir completude, o sistema pode abortar com erro explícito em vez de fingir precisão.
 
-## 17. Impacto comercial
+### 20.4. Pergunta repetida ou muito parecida
 
-Comercialmente, sustenta uma narrativa de RAG corporativo governado, útil para clientes que exigem precisão, literalidade e capacidade de auditoria.
+Cenário: a mesma pergunta ou uma variação semântica reaparece.
 
-## 18. Impacto estratégico
+Se o cache semântico estiver ativo e o retriever for elegível, o pipeline pode retornar diretamente documentos já aproveitados antes, reduzindo latência e custo.
 
-Estrategicamente, fortalece a plataforma como base de conhecimento, analytics e agentes, porque prepara o terreno para múltiplos domínios e múltiplas estratégias de retrieval sob o mesmo runtime governado.
+## 21. Explicação 101
 
-## 19. Exemplos práticos guiados
+Pense neste pipeline como um bibliotecário corporativo muito disciplinado.
 
-### 19.1. Pergunta conceitual ampla
+- Primeiro ele melhora a pergunta para evitar procurar do jeito errado.
+- Depois ele decide qual catálogo consultar.
+- Em seguida ele mistura busca por significado com busca por termo exato quando precisa.
+- Se a pergunta for sobre planilha, ele tenta usar uma lógica mais apropriada para tabela.
+- Depois ele remove documentos que o usuário não pode ver.
+- Só no fim ele pede para o redator, que é o LLM, escrever a resposta.
 
-Cenário: o usuário pergunta por um conceito técnico sem citar um código exato.
+Isso é melhor do que mandar a pergunta direto para o redator porque o redator sozinho não sabe procurar tão bem nem sabe, por conta própria, o que pode ou não pode ser mostrado.
 
-Processamento esperado: query rewrite opcional, query analysis identificando caráter conceitual, retrieval tradicional ou híbrido, reranking e geração.
+## 22. Limites e pegadinhas
 
-Impacto prático: a busca semântica tende a liderar.
+- Busca híbrida melhora recuperação, mas não corrige corpus ruim.
+- Reescrita de query ajuda, mas pode ser descartada se fugir demais da pergunta original.
+- Cache semântico reduz custo, mas pode confundir diagnóstico se a equipe esquecer que houve reaproveitamento.
+- Excel especializado não deve mascarar incompletude estrutural.
+- ACL pode fazer uma boa recuperação parecer ruim porque os melhores documentos podem ter sido bloqueados.
+- Não foi confirmado um processador PDF dedicado no lado de retrieval. Não se deve prometer isso como feature específica sem ressalva.
+- Ter resposta com fontes não significa automaticamente que a resposta está perfeita; significa que houve evidência usada no caminho de geração.
 
-### 19.2. Pergunta com código normativo
+## 23. Troubleshooting
 
-Cenário: o usuário cita norma, sigla ou identificador literal.
+### Sintoma: resposta vazia ou sem documentos
 
-Processamento esperado: query analysis identifica sinais técnicos, hybrid query pode ser enriquecida com technical_terms, BM25 ganha relevância e fusion combina literalidade com semântica.
+Causa provável: estratégia de retrieval inadequada, query pobre, FTS não acionado ou ACL removendo tudo.
 
-Impacto prático: o pipeline reduz o risco de perder documento certo por depender apenas de embeddings.
+Como confirmar: verificar resultado_retrieval, bm25, retrieval_trace e controle_acesso nos diagnósticos.
 
-### 19.3. Pergunta com filtro implícito
+### Sintoma: pergunta sobre Excel retorna erro explícito
 
-Cenário: a resposta depende de atributos estruturados do documento.
+Causa provável: falha de completude da ingestão tabular detectada pelo especializado.
 
-Processamento esperado: self-query por domínio ou estratégia compatível com filtros estruturados.
+Como confirmar: verificar logs e metadados do JSONSpecializedRAGExcel, especialmente collection_mode e exhaustive.
 
-Impacto prático: a plataforma tenta recuperar não só pelo texto, mas também pela estrutura do acervo.
+### Sintoma: latência irregular
 
-## 20. Explicação 101
+Causa provável: ausência de cache hit, uso de multi-query, rerank, busca híbrida nativa com retry ou FTS acionado.
 
-Imagine uma biblioteca corporativa em que os livros foram cortados em partes úteis, etiquetados e indexados de dois jeitos: por significado e por palavras exatas. Quando alguém faz uma pergunta, a plataforma primeiro tenta entender que tipo de pergunta é. Depois escolhe qual combinação de catálogo usar para achar as páginas certas. Só quando essas páginas foram escolhidas ela pede ao modelo para escrever a resposta. O valor do sistema está menos em “ter um modelo” e mais em “saber encontrar a evidência certa do jeito certo”.
+Como confirmar: verificar retrieval_trace, hybrid_retry_status, métricas de pipeline e telemetria do cache.
 
-## 21. Limites e pegadinhas
+### Sintoma: documentos certos foram encontrados, mas a resposta continua fraca
 
-- Busca vetorial não substitui recuperação literal.
-- BM25 forte não corrige chunking ruim.
-- Resposta ruim pode nascer de corpus ruim, não de prompt ruim.
-- Cache acelera, mas pode esconder mudanças recentes se mal governado.
-- Hybrid melhora cobertura, mas aumenta complexidade diagnóstica.
-- Query rewrite ajuda a recuperar melhor, mas não pode mudar intenção do usuário.
-- Documento indexado não significa documento realmente recuperável para toda pergunta.
+Causa provável: ordem dos documentos, limite de contexto, geração final ou falta de compressão/curadoria adicional do prompt.
 
-## 22. Checklist de entendimento
+Como confirmar: comparar source_documents, sources e resposta final; inspecionar se os melhores documentos ficaram no contexto final.
 
-- Entendi que o pipeline tem metade de corpus e metade de inferência.
-- Entendi por que chunking e metadados são tão importantes quanto embeddings.
-- Entendi por que BM25 continua relevante.
-- Entendi por que existe query analysis antes do retrieval.
-- Entendi por que o sistema roteia a pergunta.
-- Entendi por que hybrid search não é só “somar resultados”.
-- Entendi o papel de cache, ACL e geração final.
-- Entendi onde o projeto já acompanha o estado da arte.
-- Entendi onde ainda há espaço real de evolução.
+## 24. Checklist de entendimento
 
-## 23. Evidências no código
+- Entendi que este manual cobre só recuperação avançada, não ingestão.
+- Entendi como a pergunta entra no runtime.
+- Entendi o papel de query rewrite e query analysis.
+- Entendi por que o router escolhe estratégias diferentes.
+- Entendi a diferença entre busca semântica, híbrida, multi-query e self-query.
+- Entendi a especialização para JSON e Excel.
+- Entendi o papel de FTS, cache semântico, fusão e rerank.
+- Entendi o papel da ACL pós-retrieval.
+- Entendi os limites do tratamento de PDF no lado de recuperação.
+- Entendi como diagnosticar problemas no pipeline.
+- Entendi o valor executivo, comercial e estratégico da feature.
 
-- src/services/ingestion_service.py
-  - Motivo da leitura: fachada oficial da ingestão e ponto de entrada do corpus.
-  - Símbolo relevante: IngestionService.
-  - Comportamento confirmado: preparação da requisição, fanout opcional e delegação ao orquestrador.
-- src/ingestion_layer/document_persistence_manager.py
-  - Motivo da leitura: governança da geração ativa e indexação.
-  - Símbolo relevante: DocumentPersistenceManager.
-  - Comportamento confirmado: persistência de manifesto, sincronismo vetorial e BM25, alvos físicos e prepared generation.
+## 25. Evidências no código
+
+- src/services/question_service.py
+  - Motivo da leitura: fachada pública de consulta RAG.
+  - Símbolo relevante: QuestionService.execute.
+  - Comportamento confirmado: timeout, chamada ao ContentQASystem, extração de retrieval_metrics e telemetria.
+
+- src/qa_layer/qa_question_processor.py
+  - Motivo da leitura: boundary do fluxo pergunta-resposta.
+  - Símbolo relevante: QAQuestionProcessor.ask_question.
+  - Comportamento confirmado: falha fechada no modo moderno e chamada do orchestrator inteligente.
+
 - src/qa_layer/rag_engine/intelligent_orchestrator.py
-  - Motivo da leitura: orquestração do runtime moderno.
-  - Símbolo relevante: intelligent_retrieve.
-  - Comportamento confirmado: query rewrite, roteamento, retrieval, ACL, geração e telemetria.
+  - Motivo da leitura: coração do pipeline moderno.
+  - Símbolo relevante: IntelligentRAGOrchestrator.intelligent_retrieve.
+  - Comportamento confirmado: query rewrite, routing, execução da estratégia, ACL, geração final, retrieval_trace.
+
 - src/qa_layer/rag_engine/retrieval_engine.py
   - Motivo da leitura: execução das estratégias de retrieval.
-  - Símbolo relevante: execute_hybrid_processor, execute_self_query_processor, execute_multi_query_processor.
-  - Comportamento confirmado: hybrid nativo/manual, self-query, multi-query e fallback localizado.
-- src/qa_layer/rag_engine/generation_engine.py
-  - Motivo da leitura: geração final da resposta.
-  - Símbolo relevante: generate_intelligent_answer.
-  - Comportamento confirmado: montagem de contexto, chamada ao LLM e formatação de fontes.
+  - Símbolo relevante: execute_hybrid_processor, execute_self_query_processor, execute_multi_query_processor, execute_json_processor, maybe_enrich_with_fts.
+  - Comportamento confirmado: híbrido nativo/manual, self-query, multi-query, FTS, cache semântico, JSON/Excel especializado.
+
+- src/qa_layer/rag_engine/query_analyzer.py
+  - Motivo da leitura: análise semântica da pergunta.
+  - Símbolo relevante: QueryAnalyzer.analyze.
+  - Comportamento confirmado: classificação de query, data_type, domain, keywords, complexity e hints.
+
+- src/qa_layer/rag_engine/adaptive_router.py
+  - Motivo da leitura: decisão adaptativa de estratégia.
+  - Símbolo relevante: AdaptiveQueryRouter.analyze_and_route.
+  - Comportamento confirmado: regras, thresholds e prioridade para sinais técnicos e códigos exatos.
+
+- src/qa_layer/json_rag/specialized_rag_excel.py
+  - Motivo da leitura: especialização tabular confirmada no runtime.
+  - Símbolo relevante: JSONSpecializedRAGExcel.ask_question.
+  - Comportamento confirmado: coleta exaustiva direta quando possível, caminho determinístico e erro explícito de completude.
