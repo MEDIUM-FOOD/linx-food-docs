@@ -357,7 +357,7 @@ O sistema não confirmou um endpoint administrativo para criar a solicitação b
 
 O contrato de notificação HIL assíncrona confirma canais declarativos whatsapp e email. A bridge de decisão por canal é mais genérica, mas isso não significa que toda combinação de canal já esteja oficialmente suportada no contrato async_approval.
 
-O slice AG-UI local confirma renderização de interrupções e uso de painel HIL compartilhado, mas não prova por si só uma superfície pública dedicada de continuação HIL inteiramente encapsulada no próprio endpoint AG-UI. A interface visual é genérica; o acoplamento final da decisão ainda depende de quem pluga o callback de continuação.
+O slice AG-UI local confirma renderização de interrupções, uso de painel HIL compartilhado e continuação encapsulada no próprio POST /ag-ui/runs para agent e deepagent. O limite atual não é ausência de superfície pública, e sim cobertura parcial por runtime: workflow ainda não suporta resume AG-UI nesse boundary.
 
 O runtime atual falha fechado para workflow waiting_hil em background.
 

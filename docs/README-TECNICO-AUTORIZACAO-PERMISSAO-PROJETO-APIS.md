@@ -357,7 +357,7 @@ O código lido registra logs explícitos em pontos importantes:
 
 ## 18. Lacunas reais encontradas
 
-1. docs/README.md e docs/README-SISTEMA-AUTENTICACAO.md apontavam para README-AUTORIZACAO.md, mas esse arquivo não foi encontrado no workspace lido.
+1. docs/README-INDICE.MD e docs/README-SISTEMA-AUTENTICACAO.md apontavam para README-AUTORIZACAO.md, mas esse arquivo não foi encontrado no workspace lido.
 2. O catálogo de permissões é publicado para a UI, mas não encontrei no código lido um endpoint consolidado que exponha, no mesmo payload, o mapeamento completo rota -> permission -> mode vindo de EndpointPermissionRegistry.
 3. A precedência canônica enumera SUPERADMIN, mas não foi confirmada no slice lido uma trilha HTTP específica de superadmin humano separada da composição role base mais allow menos deny.
 

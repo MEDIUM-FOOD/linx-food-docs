@@ -1,6 +1,6 @@
 # Manual tecnico e operacional: telemetria de interacoes do agente
 
-> Navegacao rapida: volte ao [README principal](../README.md) para o indice geral, use [README.md](./README.md) para escolher a trilha por pergunta real, leia [README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md](./README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md) para valor e limites da feature, complemente com [README-SERVICE-API.md](./README-SERVICE-API.md) para o boundary HTTP e [README-LOGGING.md](./README-LOGGING.md) para a investigacao por correlation_id.
+> Navegacao rapida: volte ao [README principal](../README.md) para o indice geral, use [README-INDICE.MD](./README-INDICE.MD) para escolher a trilha por pergunta real, leia [README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md](./README-CONCEITUAL-TELEMETRIA-INTERACOES-AGENTE.md) para valor e limites da feature, complemente com [README-SERVICE-API.md](./README-SERVICE-API.md) para o boundary HTTP e [README-LOGGING.md](./README-LOGGING.md) para a investigacao por correlation_id.
 
 ## 1. O que e esta feature
 

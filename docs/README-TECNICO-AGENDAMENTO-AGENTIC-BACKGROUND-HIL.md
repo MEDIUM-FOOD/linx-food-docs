@@ -44,7 +44,7 @@ O segundo é a decisão assíncrona por /agent/hil/decisions ou por canal interc
 
 ### 2.6. Generative UI como superfície de comunicação
 
-No slice lido, a Generative UI não substitui scheduler, run ou serviço de decisão. Ela funciona como superfície de apresentação e coleta de decisão. O backend AG-UI emite interrupções no stream, o sidecar compartilhado adapta essas interrupções ao contrato do painel HIL e um callback pluggável decide como enviar approve, edit ou reject para o backend oficial.
+No slice lido, a Generative UI não substitui scheduler, run nem o domínio oficial de decisão. Ela funciona como superfície de apresentação, coleta de decisão e, para agent e deepagent, continuação encapsulada no próprio `/ag-ui/runs`. O backend AG-UI emite interrupções no stream, o sidecar compartilhado adapta essas interrupções ao contrato do painel HIL e pode tanto disparar callback pluggável quanto reenviar `resume` ao boundary AG-UI quando a integração usa o fluxo nativo.
 
 ## 3. Contrato de criação da solicitação
 
@@ -326,7 +326,7 @@ O sidecar AG-UI compartilhado faz três coisas importantes para HIL.
 
 1. consome o stream do endpoint AG-UI e mantém snapshot local de run, mensagens, tools, estado e interrupts;
 2. adapta cada interrupt AG-UI para um contrato de revisão comum com message, allowedDecisions, actionRequests, threadId, correlationId e mode;
-3. monta o HilReviewPanel compartilhado e dispara onInterruptDecision com o interrupt original e a decisão escolhida.
+3. monta o HilReviewPanel compartilhado e, quando a integração não injeta callback externo, consegue postar o resume no próprio POST /ag-ui/runs para agent e deepagent.
 
 Isso prova que a Generative UI local foi desenhada como camada reutilizável de apresentação, não como lógica proprietária do runtime HIL.
 
@@ -336,7 +336,7 @@ O mesmo componente visual de revisão humana também é montado no webchat clás
 
 ## 8.3. Limite atual da superfície AG-UI
 
-O slice AG-UI lido confirma emissão de interrupções, renderização de painel e callback de decisão, mas não confirma sozinho uma rota pública dedicada de continuação HIL encapsulada na própria superfície AG-UI. Em outras palavras: a UI compartilhada está pronta para revisar; o envio efetivo da decisão ainda depende do integrador plugar o callback no boundary oficial de continuação ou decisão.
+O slice AG-UI lido confirma emissão de interrupções, renderização de painel e continuação encapsulada na própria superfície para agent e deepagent, porque o sidecar consegue montar `resume` e reenviar a decisão ao mesmo `/ag-ui/runs`. O limite atual está na cobertura por runtime: workflow ainda não suporta resume AG-UI nesse boundary e outras superfícies, como webchat, continuam dependendo do callback pluggável para conversar com o boundary oficial.
 
 ## 9. Configurações que mudam o comportamento
 
@@ -370,8 +370,9 @@ O slice AG-UI lido confirma emissão de interrupções, renderização de painel
 ### 9.4. Generative UI compartilhada
 
 - POST /ag-ui/runs é a superfície de streaming AG-UI confirmada no projeto.
+- GET /ag-ui/capabilities e replay por run/thread também já existem no boundary AG-UI atual.
 - AgUiRunOrchestrator resolve execution_kind por adapter registrado, não por domínio hardcoded do scheduler.
-- ag-ui-sidecar-chat adapta interrupts ao HilReviewPanel compartilhado via callback onInterruptDecision.
+- ag-ui-sidecar-chat adapta interrupts ao HilReviewPanel compartilhado e consegue retomar agent/deepagent no próprio `/ag-ui/runs` quando não recebe callback externo.
 - HilReviewPanel também é usado fora do AG-UI, por exemplo no webchat, o que reforça reuso e agnosticismo.
 
 ## 10. O que acontece em sucesso
@@ -486,7 +487,7 @@ As notificações por canal suportam approve e reject, não edit.
 
 O endpoint /agent/hil/decisions trata a decisão como canal email no slice lido.
 
-O AG-UI local prova uma superfície genérica de eventos e revisão visual, mas não substitui o boundary oficial de continuação HIL.
+O AG-UI local já substitui esse boundary de continuação para agent e deepagent no seu próprio slice, mas ainda não para todos os runtimes nem para todas as superfícies visuais do produto.
 
 Existe coexistência entre superfícies históricas de schedule no schema agent_background e a agenda canônica atual no schema scheduler.
 
@@ -617,7 +618,7 @@ O diagrama destaca que a agenda canônica, o ledger background e o HIL durável 
 - app/ui/static/js/shared/ag-ui-sidecar-chat.js
   - Motivo da leitura: confirmar como a Generative UI consome interrupções HIL.
   - Símbolo relevante: adaptInterruptToReviewContract, renderInterrupts, createAgUiSidecarChat.
-  - Comportamento confirmado: interrupts AG-UI são adaptados ao contrato comum do painel HIL e a decisão sai por callback pluggável.
+  - Comportamento confirmado: interrupts AG-UI são adaptados ao contrato comum do painel HIL e a decisão pode sair por callback pluggável ou por `resume` nativo no próprio `/ag-ui/runs`, conforme a superfície usada.
 
 - app/ui/static/js/shared/hil-review-panel.js
   - Motivo da leitura: confirmar o componente comum de revisão humana.
